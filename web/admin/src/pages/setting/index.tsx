@@ -9,21 +9,15 @@ import {
 import { useAppSelector } from '@/store';
 import { Box, Tab, Tabs } from '@mui/material';
 import { useEffect, useState } from 'react';
-import CardAI from './component/CardAI';
 import CardFeedback from './component/CardFeedback';
-import CardKB from './component/CardKB';
 import CardRobot from './component/CardRobot';
-import CardSecurity from './component/CardSecurity';
 import CardWeb from './component/CardWeb';
 import CardMCP from './component/CardMCP';
 
 const SettingTabs: { label: string; id: string }[] = [
   { label: '门户网站', id: 'portal-website' },
   { label: 'AI 机器人', id: 'robot' },
-  { label: '问答设置', id: 'ai-setting' },
   { label: '反馈设置', id: 'feedback' },
-  { label: '安全设置', id: 'security' },
-  { label: '访问控制', id: 'backend-info' },
   { label: 'MCP 设置', id: 'mcp' },
 ];
 
@@ -110,11 +104,6 @@ const Setting = () => {
           overflow: 'auto',
         }}
       >
-        {activeTab === 'backend-info' && <CardKB />}
-        {activeTab === 'ai-setting' && <CardAI kb={kb} />}
-        {activeTab === 'security' && (
-          <CardSecurity data={info} kb={kb} refresh={getInfo} />
-        )}
         {activeTab === 'feedback' && <CardFeedback kb={kb} />}
         {activeTab === 'robot' && <CardRobot kb={kb} url={url} />}
         {activeTab === 'portal-website' && <CardWeb kb={kb} refresh={getKb} />}

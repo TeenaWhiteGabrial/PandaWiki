@@ -1,0 +1,269 @@
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    container_name: ${PROJECT_NAME}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - '${POSTGRES_PORT}:5432'
+    volumes:
+      - pandawiki_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: ${REDIS_IMAGE}
+    container_name: ${PROJECT_NAME}-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT}:6379'
+    volumes:
+      - pandawiki_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nats:
+    image: ${NATS_IMAGE}
+    container_name: ${PROJECT_NAME}-nats
+    restart: unless-stopped
+    command:
+      - --jetstream
+      - --store_dir
+      - /data
+    ports:
+      - '${NATS_PORT}:4222'
+      - '${NATS_MONITOR_PORT}:8222'
+    volumes:
+      - pandawiki_nats:/data
+
+  minio:
+    image: ${MINIO_IMAGE}
+    container_name: ${PROJECT_NAME}-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - '${MINIO_PORT}:9000'
+      - '${MINIO_CONSOLE_PORT}:9001'
+    volumes:
+      - pandawiki_minio:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O - http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1 || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: ${QDRANT_IMAGE}
+    container_name: ${PROJECT_NAME}-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+    ports:
+      - '${QDRANT_PORT}:6333'
+    volumes:
+      - pandawiki_qdrant:/qdrant/storage
+
+  crawler:
+    image: ${CRAWLER_IMAGE}
+    container_name: ${PROJECT_NAME}-crawler
+    restart: unless-stopped
+    init: true
+    environment:
+      GLOG_GLOBAL_LEVEL: info
+      NAMESPACE: anydoc
+      MQ_NATS_URL: nats://${PROJECT_NAME}-nats:4222
+      OSS_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      OSS_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OSS_MINIO_ENDPOINT: ${PROJECT_NAME}-minio:9000
+    ports:
+      - '${CRAWLER_PORT}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      minio:
+        condition: service_healthy
+
+  raglite:
+    image: ${RAGLITE_IMAGE}
+    container_name: ${PROJECT_NAME}-raglite
+    restart: unless-stopped
+    environment:
+      GIN_MODE: release
+      API_KEY: ${RAGLITE_API_KEY}
+      DATABASE_POSTGRESQL_HOST: ${PROJECT_NAME}-postgres
+      DATABASE_POSTGRESQL_USER: ${POSTGRES_USER}
+      DATABASE_POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_POSTGRESQL_DATABASE: ${POSTGRES_DB}
+      DATABASE_QDRANT_HOST: ${PROJECT_NAME}-qdrant
+      DATABASE_QDRANT_API_KEY: ${QDRANT_API_KEY}
+      STORAGE_MINIO_ENDPOINT: ${PROJECT_NAME}-minio:9000
+      STORAGE_MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      STORAGE_MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      NATS_URL: nats://${PROJECT_NAME}-nats:4222
+      EMBEDDER_RPM: 800
+      LLM_RPM: 50
+    ports:
+      - '${RAGLITE_PORT}:5050'
+    volumes:
+      - pandawiki_raglite:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.api
+      args:
+        VERSION: local
+    container_name: ${PROJECT_NAME}-api
+    restart: unless-stopped
+    environment:
+      ENV: production
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      PG_DSN: host=${PROJECT_NAME}-postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable TimeZone=Asia/Shanghai
+      MQ_NATS_SERVER: nats://${PROJECT_NAME}-nats:4222
+      REDIS_ADDR: ${PROJECT_NAME}-redis:6379
+      S3_ENDPOINT: ${PROJECT_NAME}-minio:9000
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      RAG_CT_RAG_BASE_URL: http://${PROJECT_NAME}-raglite:5050
+      SENTRY_ENABLED: ${SENTRY_ENABLED}
+      LOG_LEVEL: ${LOG_LEVEL}
+      CADDY_API: ''
+      FILE_BASE_URL: http://${SERVER_IP}:${API_PORT}/static-file
+      ANYDOC_BASE_URL: http://${PROJECT_NAME}-crawler:8080
+    ports:
+      - '${API_PORT}:8000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      raglite:
+        condition: service_started
+      crawler:
+        condition: service_started
+
+  consumer:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.consumer
+    container_name: ${PROJECT_NAME}-consumer
+    restart: unless-stopped
+    environment:
+      ENV: production
+      PG_DSN: host=${PROJECT_NAME}-postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable TimeZone=Asia/Shanghai
+      MQ_NATS_SERVER: nats://${PROJECT_NAME}-nats:4222
+      REDIS_ADDR: ${PROJECT_NAME}-redis:6379
+      S3_ENDPOINT: ${PROJECT_NAME}-minio:9000
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      RAG_CT_RAG_BASE_URL: http://${PROJECT_NAME}-raglite:5050
+      SENTRY_ENABLED: ${SENTRY_ENABLED}
+      LOG_LEVEL: ${LOG_LEVEL}
+      FILE_BASE_URL: http://${SERVER_IP}:${API_PORT}/static-file
+      ANYDOC_BASE_URL: http://${PROJECT_NAME}-crawler:8080
+    depends_on:
+      api:
+        condition: service_started
+
+  admin-build:
+    image: node:22-alpine
+    container_name: ${PROJECT_NAME}-admin-build
+    working_dir: /workspace/web
+    environment:
+      TARGET: http://${SERVER_IP}:${API_PORT}
+      STATIC_FILE_TARGET: http://${SERVER_IP}:${MINIO_PORT}
+      SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
+      CI: 'true'
+    command: >
+      sh -lc "
+      corepack enable &&
+      pnpm install --frozen-lockfile=false &&
+      pnpm --filter panda-wiki-admin build
+      "
+    volumes:
+      - ../../:/workspace
+      - pandawiki_pnpm_store:/root/.local/share/pnpm/store
+    restart: 'no'
+
+  app-build:
+    image: node:22-alpine
+    container_name: ${PROJECT_NAME}-app-build
+    working_dir: /workspace/web
+    environment:
+      TARGET: http://${SERVER_IP}:${API_PORT}
+      STATIC_FILE_TARGET: http://${SERVER_IP}:${MINIO_PORT}
+      SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
+      DEV_KB_ID: ''
+      CI: 'true'
+    command: >
+      sh -lc "
+      corepack enable &&
+      pnpm install --frozen-lockfile=false &&
+      pnpm --filter panda-wiki-app build
+      "
+    volumes:
+      - ../../:/workspace
+      - pandawiki_pnpm_store:/root/.local/share/pnpm/store
+    restart: 'no'
+
+  admin:
+    build:
+      context: ../../web/admin
+      dockerfile: Dockerfile
+    container_name: ${PROJECT_NAME}-admin
+    restart: unless-stopped
+    ports:
+      - '${ADMIN_PORT}:8080'
+    depends_on:
+      admin-build:
+        condition: service_completed_successfully
+
+  app:
+    build:
+      context: ../../web/app
+      dockerfile: Dockerfile
+    container_name: ${PROJECT_NAME}-app
+    restart: unless-stopped
+    environment:
+      PORT: 3010
+      HOSTNAME: 0.0.0.0
+    ports:
+      - '${APP_PORT}:3010'
+    depends_on:
+      app-build:
+        condition: service_completed_successfully
+
+volumes:
+  pandawiki_postgres:
+  pandawiki_redis:
+  pandawiki_nats:
+  pandawiki_minio:
+  pandawiki_qdrant:
+  pandawiki_raglite:
+  pandawiki_pnpm_store:

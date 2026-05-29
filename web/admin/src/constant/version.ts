@@ -23,28 +23,28 @@ export const ENTERPRISE_VERSION_PERMISSION = [
 export const VersionInfoMap = {
   [ConstsLicenseEdition.LicenseEditionFree]: {
     permission: ConstsLicenseEdition.LicenseEditionFree,
-    label: '开源版',
+    label: '基础配置',
     image: freeVersion,
     bgColor: '#8E9DAC',
     nextVersion: ConstsLicenseEdition.LicenseEditionProfession,
   },
   [ConstsLicenseEdition.LicenseEditionProfession]: {
     permission: ConstsLicenseEdition.LicenseEditionProfession,
-    label: '专业版',
+    label: '增强配置',
     image: proVersion,
     bgColor: '#0933BA',
     nextVersion: ConstsLicenseEdition.LicenseEditionBusiness,
   },
   [ConstsLicenseEdition.LicenseEditionBusiness]: {
     permission: ConstsLicenseEdition.LicenseEditionBusiness,
-    label: '商业版',
+    label: '扩展配置',
     image: businessVersion,
     bgColor: '#382A79',
     nextVersion: ConstsLicenseEdition.LicenseEditionEnterprise,
   },
   [ConstsLicenseEdition.LicenseEditionEnterprise]: {
     permission: ConstsLicenseEdition.LicenseEditionEnterprise,
-    label: '企业版',
+    label: '完整配置',
     image: enterpriseVersion,
     bgColor: '#21222D',
     nextVersion: undefined,
@@ -127,7 +127,7 @@ export interface VersionInfo {
  */
 export const VERSION_INFO: Record<ConstsLicenseEdition, VersionInfo> = {
   [ConstsLicenseEdition.LicenseEditionFree]: {
-    label: '开源版',
+    label: '基础配置',
     features: {
       wikiCount: 1,
       docCountPerWiki: 300,
@@ -155,7 +155,7 @@ export const VERSION_INFO: Record<ConstsLicenseEdition, VersionInfo> = {
     },
   },
   [ConstsLicenseEdition.LicenseEditionProfession]: {
-    label: '专业版',
+    label: '增强配置',
     features: {
       wikiCount: 10,
       docCountPerWiki: 10000,
@@ -183,7 +183,7 @@ export const VERSION_INFO: Record<ConstsLicenseEdition, VersionInfo> = {
     },
   },
   [ConstsLicenseEdition.LicenseEditionBusiness]: {
-    label: '商业版',
+    label: '扩展配置',
     features: {
       wikiCount: 20,
       docCountPerWiki: 10000,
@@ -211,7 +211,7 @@ export const VERSION_INFO: Record<ConstsLicenseEdition, VersionInfo> = {
     },
   },
   [ConstsLicenseEdition.LicenseEditionEnterprise]: {
-    label: '企业版',
+    label: '完整配置',
     features: {
       wikiCount: Infinity,
       docCountPerWiki: Infinity,

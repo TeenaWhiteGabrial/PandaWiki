@@ -1,7 +1,7 @@
 import { VersionInfoMap } from '@/constant/version';
 import { useVersionInfo } from '@/hooks';
 import { ConstsLicenseEdition } from '@/request/types';
-import { styled, SxProps, Tooltip } from '@mui/material';
+import { Box, styled, SxProps } from '@mui/material';
 import React from 'react';
 
 const StyledMaskWrapper = styled('div')(({ theme }) => ({
@@ -66,21 +66,13 @@ const VersionMask = ({
   const versionInfo = useVersionInfo();
   const hasPermission = permission.includes(versionInfo.permission);
   if (hasPermission) return children;
-  const nextVersionInfo = VersionInfoMap[permission[0]];
 
   return (
     <StyledMaskWrapper sx={wrapperSx}>
       {children}
       <StyledMask sx={sx}>
         <StyledMaskContent>
-          <StyledMaskVersion sx={{ backgroundColor: nextVersionInfo.bgColor }}>
-            <img
-              src={nextVersionInfo.image}
-              style={{ width: 12, objectFit: 'contain', marginTop: 1 }}
-              alt={nextVersionInfo.label}
-            />
-            {nextVersionInfo?.label}可用
-          </StyledMaskVersion>
+          <StyledMaskVersion>当前环境未启用</StyledMaskVersion>
         </StyledMaskContent>
       </StyledMask>
     </StyledMaskWrapper>
@@ -104,9 +96,8 @@ export const VersionCanUse = ({
   const versionInfo = useVersionInfo();
   const hasPermission = permission.includes(versionInfo.permission);
   if (hasPermission) return null;
-  const nextVersionInfo = VersionInfoMap[permission[0]];
   return (
-    <StyledMaskContent
+    <Box
       sx={{
         width: 'auto',
         ml: mode === 'icon' ? 0.5 : 1,
@@ -120,24 +111,11 @@ export const VersionCanUse = ({
       }}
     >
       {mode === 'icon' ? (
-        <Tooltip title={nextVersionInfo.label + '可用'} placement='top' arrow>
-          <img
-            src={nextVersionInfo.image}
-            style={{ width: 14, objectFit: 'contain' }}
-            alt={nextVersionInfo.label}
-          />
-        </Tooltip>
+        '未启用'
       ) : (
-        <StyledMaskVersion sx={{ backgroundColor: nextVersionInfo.bgColor }}>
-          <img
-            src={nextVersionInfo.image}
-            style={{ width: 12, objectFit: 'contain', marginTop: 1 }}
-            alt={nextVersionInfo.label}
-          />
-          {nextVersionInfo?.label}可用
-        </StyledMaskVersion>
+        <StyledMaskVersion>当前环境未启用</StyledMaskVersion>
       )}
-    </StyledMaskContent>
+    </Box>
   );
 };
 

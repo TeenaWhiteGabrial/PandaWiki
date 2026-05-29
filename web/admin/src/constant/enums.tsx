@@ -8,7 +8,6 @@ import {
   IconQiyeweixinkefu,
   IconADiscordjiqiren,
   IconWeixingongzhonghaoDaiyanse,
-  IconBaizhiyunlogo,
   IconZhipuqingyan,
   IconDeepseek,
   IconTengxunhunyuan,
@@ -141,32 +140,32 @@ export const PageType = {
 
 export const VersionMap = {
   free: {
-    label: '免费版',
+    label: '基础配置',
     offlineFileSize: 5,
   },
   contributor: {
-    label: '社区贡献者版',
+    label: '扩展配置',
     offlineFileSize: 10,
   },
   pro: {
-    label: '专业版',
+    label: '增强配置',
     offlineFileSize: 20,
   },
   business: {
-    label: '商业版',
+    label: '高级配置',
     offlineFileSize: 20,
   },
   enterprise: {
-    label: '旗舰版',
+    label: '完整配置',
     offlineFileSize: 20,
   },
 };
 
 export const ModelProvider = {
-  BaiZhiCloud: {
-    label: 'BaiZhiCloud',
-    cn: '百智云',
-    icon: IconBaizhiyunlogo,
+  CompatiblePlatform: {
+    label: 'CompatibleCloud',
+    cn: '兼容平台',
+    icon: IconChatgpt,
     urlWrite: false,
     secretRequired: true,
     customHeader: false,
@@ -174,8 +173,8 @@ export const ModelProvider = {
     code: true,
     embedding: true,
     rerank: true,
-    modelDocumentUrl: 'https://model-square.app.baizhi.cloud/token',
-    defaultBaseUrl: 'https://model-square.app.baizhi.cloud/v1',
+    modelDocumentUrl: '',
+    defaultBaseUrl: '',
   },
   ZhiPu: {
     label: 'ZhiPu',

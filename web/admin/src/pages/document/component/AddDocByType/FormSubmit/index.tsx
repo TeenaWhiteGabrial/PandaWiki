@@ -1,6 +1,6 @@
 import { ConstsCrawlerSource, postApiV1CrawlerParse } from '@/request';
 import { message } from '@ctzhian/ui';
-import { Button, Stack } from '@mui/material';
+import { Box, Button, Stack } from '@mui/material';
 import { useCallback, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ListDataItem } from '..';
@@ -211,20 +211,7 @@ const FormSubmit = ({
         justifyContent='space-between'
         sx={{ mt: 2 }}
       >
-        {TYPE_CONFIG[type].usage && (
-          <Button
-            component='a'
-            href={TYPE_CONFIG[type].usage}
-            target='_blank'
-            sx={{
-              fontSize: 14,
-              fontWeight: 'normal',
-              color: 'primary.main',
-            }}
-          >
-            使用方法
-          </Button>
-        )}
+        <Box />
         <Button
           variant='contained'
           loading={loading}

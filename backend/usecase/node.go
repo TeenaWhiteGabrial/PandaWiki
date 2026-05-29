@@ -767,9 +767,6 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 	}
 
 	for _, nodeRelease := range nodeReleases {
-		if nodeRelease.DocID == "" {
-			continue
-		}
 		if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, []*domain.NodeReleaseVectorRequest{
 			{
 				KBID:          nodeRelease.KBID,

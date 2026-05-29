@@ -2,7 +2,6 @@ import ErrorComponent from '@/components/error';
 import StoreProvider from '@/provider';
 import { ThemeStoreProvider } from '@/provider/themeStore';
 import { getShareV1AppWebInfo } from '@/request/ShareApp';
-import { getShareProV1AuthInfo } from '@/request/pro/ShareAuth';
 import Script from 'next/script';
 import { Box } from '@mui/material';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter';
@@ -44,14 +43,14 @@ export async function generateMetadata(): Promise<Metadata> {
   const icon = getImagePath(kbDetail?.settings?.icon || '', basePath);
   return {
     metadataBase: new URL(process.env.TARGET || ''),
-    title: kbDetail?.settings?.title || 'Panda-Wiki',
+    title: kbDetail?.settings?.title || '知识库',
     description: kbDetail?.settings?.desc || '',
     keywords: kbDetail?.settings?.keyword || '',
     icons: {
       icon: icon || `${basePath}/favicon.png`,
     },
     openGraph: {
-      title: kbDetail?.settings?.title || 'Panda-Wiki',
+      title: kbDetail?.settings?.title || '知识库',
       description: kbDetail?.settings?.desc || '',
       images: icon ? [icon] : [],
     },
@@ -72,21 +71,14 @@ const Layout = async ({
 
   let error: any = null;
 
-  const [kbDetailResolve, authInfoResolve] = await Promise.allSettled([
-    getShareV1AppWebInfo(),
-    getShareProV1AuthInfo({}),
-  ]);
-
-  const authInfo: any =
-    authInfoResolve.status === 'fulfilled' ? authInfoResolve.value : undefined;
+  const kbDetailResolve = await getShareV1AppWebInfo()
+    .then(value => ({ status: 'fulfilled', value }) as const)
+    .catch(reason => ({ status: 'rejected', reason }) as const);
   const kbDetail: any =
     kbDetailResolve.status === 'fulfilled' ? kbDetailResolve.value : undefined;
 
-  if (
-    authInfoResolve.status === 'rejected' &&
-    authInfoResolve.reason.code === 403
-  ) {
-    error = authInfoResolve.reason;
+  if (kbDetailResolve.status === 'rejected') {
+    error = kbDetailResolve.reason;
   }
 
   const { isMobile } = getSelectorsByUserAgent(userAgent || '') || {
@@ -112,7 +104,6 @@ const Layout = async ({
               kbDetail={kbDetail}
               themeMode={themeMode || 'light'}
               mobile={isMobile}
-              authInfo={authInfo}
             >
               <Box
                 sx={{

@@ -5,7 +5,6 @@ import {
 } from '@/request/types';
 import { Box } from '@mui/material';
 import { useEffect, useState } from 'react';
-import CardAuth from './CardAuth';
 import CardBasicInfo from './CardBasicInfo';
 import CardCatalog from './CardCatalog';
 import CardCustom from './CardCustom';
@@ -90,7 +89,6 @@ const CardWeb = ({ kb, refresh }: CardWebProps) => {
           });
         }}
       />
-      <CardAuth kb={kb} refresh={refresh} />
       <CardCatalog
         id={info.id}
         data={info}

@@ -3,19 +3,19 @@ import { useEffect, useRef, useState } from 'react';
 
 export function useBindCaptcha(
   id: string,
-  {
-    init = false,
-    businessId = '0195ea3c-ab47-73f3-9f8e-e72b8fd7f089',
-  }: { init: boolean; businessId?: string },
+  { init = false, businessId = '' }: { init: boolean; businessId?: string },
 ) {
   const captcha = useRef<any>({});
   const resolveRef = useRef<any>(null);
   const [load, setLoad] = useState(false);
   const [token, setToken] = useState<string>();
+  const captchaScriptUrl = import.meta.env.VITE_CAPTCHA_SCRIPT_URL || '';
+  const captchaBusinessId =
+    import.meta.env.VITE_CAPTCHA_BUSINESS_ID || businessId;
 
   const initCaptcha = () => {
     captcha.current = new (window as any).SCaptcha({
-      businessid: businessId,
+      businessid: captchaBusinessId,
       action: 'pow',
       position: 'mask',
     });
@@ -43,9 +43,16 @@ export function useBindCaptcha(
   };
 
   const loadCaptcha = () => {
+    if (!captchaScriptUrl) {
+      message.warning('当前环境未配置验证码服务');
+      return;
+    }
+    if (document.querySelector(`script[src="${captchaScriptUrl}"]`)) {
+      setLoad(true);
+      return;
+    }
     const script = document.createElement('script');
-    script.src =
-      'https://0195ea3c-ab47-73f3-9f8e-e72b8fd7f089.safepoint.s-captcha-r1.com/v1/static/web.js';
+    script.src = captchaScriptUrl;
     document.body.appendChild(script);
     script.onload = () => {
       setLoad(true);

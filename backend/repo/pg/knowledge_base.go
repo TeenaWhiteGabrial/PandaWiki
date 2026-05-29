@@ -10,6 +10,8 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -58,6 +60,13 @@ func (r *KnowledgeBaseRepository) SyncKBAccessSettingsToCaddy(ctx context.Contex
 	if len(kbList) == 0 {
 		return nil
 	}
+	if _, err := os.Stat(r.config.CaddyAPI); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			r.logger.Warn("skip syncing kb access settings to caddy because socket not found", "socket", r.config.CaddyAPI)
+			return nil
+		}
+		return fmt.Errorf("failed to stat caddy socket: %w", err)
+	}
 	firstKB := kbList[0]
 	firstHost := ""
 	if len(firstKB.AccessSettings.Hosts) > 0 {
@@ -100,8 +109,17 @@ func (r *KnowledgeBaseRepository) SyncKBAccessSettingsToCaddy(ctx context.Contex
 		subnetPrefix = "169.254.15"
 	}
 	api := fmt.Sprintf("%s.2:8000", subnetPrefix)
+	if value := os.Getenv("CADDY_API_UPSTREAM"); value != "" {
+		api = value
+	}
 	app := fmt.Sprintf("%s.112:3010", subnetPrefix)
+	if value := os.Getenv("CADDY_APP_UPSTREAM"); value != "" {
+		app = value
+	}
 	staticFile := fmt.Sprintf("%s.12:9000", subnetPrefix) // minio
+	if value := os.Getenv("CADDY_STATIC_FILE_UPSTREAM"); value != "" {
+		staticFile = value
+	}
 	servers := make(map[string]any, 0)
 	for port, hostKBMap := range portHostKBMap {
 		trustProxies := make([]string, 0)
@@ -313,16 +331,19 @@ func (r *KnowledgeBaseRepository) SyncKBAccessSettingsToCaddy(ctx context.Contex
 		"apps": apps,
 	}
 	newBody, _ := json.Marshal(config)
-	tr := &http.Transport{
-		DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-			return net.Dial("unix", socketPath)
-		},
+	client := &http.Client{Timeout: 5 * time.Second}
+	requestURL := "http://unix/load"
+	if strings.HasPrefix(socketPath, "http://") || strings.HasPrefix(socketPath, "https://") {
+		requestURL = strings.TrimRight(socketPath, "/") + "/load"
+	} else {
+		tr := &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", socketPath)
+			},
+		}
+		client.Transport = tr
 	}
-	client := &http.Client{
-		Transport: tr,
-		Timeout:   5 * time.Second,
-	}
-	req, err := http.NewRequest("POST", "http://unix/load", bytes.NewBuffer(newBody))
+	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer(newBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

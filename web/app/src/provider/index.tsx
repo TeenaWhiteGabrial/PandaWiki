@@ -13,7 +13,6 @@ import {
   SetStateAction,
 } from 'react';
 import { useParams } from 'next/navigation';
-import { GithubComChaitinPandaWikiProApiShareV1AuthInfoResp } from '@/request/pro/types';
 import {
   filterEmptyFolders,
   convertToTree,
@@ -23,7 +22,7 @@ import {
 } from '@/utils/tree';
 
 interface StoreContextType {
-  authInfo?: GithubComChaitinPandaWikiProApiShareV1AuthInfoResp;
+  authInfo?: Record<string, unknown>;
   widget?: WidgetInfo;
   kbDetail?: KBDetail;
   catalogShow?: boolean;
@@ -77,7 +76,7 @@ export default function StoreProvider({
     navDataMap: initialNavDataMap = context.navDataMap || {},
   } = props;
 
-  const NAV_ID_STORAGE_KEY = 'panda-wiki-selected-nav-id';
+  const NAV_ID_STORAGE_KEY = 'kb-selected-nav-id';
 
   // 使用 props 传入的 defaultNavId，避免 SSR 与 CSR 不一致导致 Hydration 错误
   const initialNavId = initialSelectedNavId;

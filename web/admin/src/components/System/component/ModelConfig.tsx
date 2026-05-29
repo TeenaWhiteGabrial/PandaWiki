@@ -645,15 +645,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                             />
                           </Stack>
                           <Box sx={{ color: 'error.main', fontSize: 12 }}>
-                            未配置无法使用，如果没有可用模型，可参考&nbsp;
-                            <Box
-                              component={'a'}
-                              sx={{ color: 'primary.main', cursor: 'pointer' }}
-                              href='https://pandawiki.docs.baizhi.cloud/node/01973ffe-e1bc-7165-9a71-e7aa461c05ea'
-                              target='_blank'
-                            >
-                              文档
-                            </Box>
+                            未配置无法使用，请先完成当前类型的模型配置。
                           </Box>
                         </>
                       )}
@@ -857,15 +849,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                             />
                           </Stack>
                           <Box sx={{ color: 'error.main', fontSize: 12 }}>
-                            未配置无法使用，如果没有可用模型，可参考&nbsp;
-                            <Box
-                              component={'a'}
-                              sx={{ color: 'primary.main', cursor: 'pointer' }}
-                              href='https://pandawiki.docs.baizhi.cloud/node/01973ffe-e1bc-7165-9a71-e7aa461c05ea'
-                              target='_blank'
-                            >
-                              文档
-                            </Box>
+                            未配置无法使用，请先完成当前类型的模型配置。
                           </Box>
                         </>
                       )}
@@ -1064,15 +1048,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                             />
                           </Stack>
                           <Box sx={{ color: 'error.main', fontSize: 12 }}>
-                            未配置无法使用，如果没有可用模型，可参考&nbsp;
-                            <Box
-                              component={'a'}
-                              sx={{ color: 'primary.main', cursor: 'pointer' }}
-                              href='https://pandawiki.docs.baizhi.cloud/node/01973ffe-e1bc-7165-9a71-e7aa461c05ea'
-                              target='_blank'
-                            >
-                              文档
-                            </Box>
+                            未配置无法使用，请先完成当前类型的模型配置。
                           </Box>
                         </>
                       )}
@@ -1271,15 +1247,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                             />
                           </Stack>
                           <Box sx={{ color: 'error.main', fontSize: 12 }}>
-                            未配置无法使用，如果没有可用模型，可参考&nbsp;
-                            <Box
-                              component={'a'}
-                              sx={{ color: 'primary.main', cursor: 'pointer' }}
-                              href='https://pandawiki.docs.baizhi.cloud/node/01973ffe-e1bc-7165-9a71-e7aa461c05ea'
-                              target='_blank'
-                            >
-                              文档
-                            </Box>
+                            未配置无法使用，请先完成当前类型的模型配置。
                           </Box>
                         </>
                       )}
@@ -1516,7 +1484,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
               language='zh-CN'
               messageComponent={message}
               is_close_model_remark={true}
-              addingModelTutorialURL='https://pandawiki.docs.baizhi.cloud/node/019a160d-0528-736a-b88e-32a2d1207f3e'
+              addingModelTutorialURL=''
             />
           </Suspense>
         )}

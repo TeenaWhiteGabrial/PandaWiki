@@ -1,9 +1,8 @@
 'use client';
 
-import Logo from '@/assets/images/logo.png';
 import { useBasePath } from '@/hooks';
 import { useStore } from '@/provider';
-import { postShareProV1AuthLogout } from '@/request/pro/ShareAuth';
+import { clearCookie } from '@/utils/cookie';
 import { getImagePath } from '@/utils/getImagePath';
 import { Modal } from '@ctzhian/ui';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -16,20 +15,43 @@ import {
 import { useMemo, useState } from 'react';
 import QaModal from '../QaModal';
 import ThemeSwitch from './themeSwitch';
+
 interface HeaderProps {
   isDocPage?: boolean;
   isWelcomePage?: boolean;
 }
 
+const getHeaderButtons = (btns: any[] = [], basePath: string) => {
+  return btns
+    .filter(item => {
+      const text = String(item?.text || '').toLowerCase();
+      const url = String(item?.url || '').toLowerCase();
+
+      return !text.includes('github') && !url.includes('github.com');
+    })
+    .map((item: any) => {
+      const text = String(item?.text || '').toLowerCase();
+      const url = String(item?.url || '').toLowerCase();
+      const isLoginPlaceholder =
+        text.includes('pandawiki') || url.includes('pandawiki');
+
+      return {
+        ...item,
+        text: isLoginPlaceholder ? '登录' : item.text,
+        url: isLoginPlaceholder ? '' : getImagePath(item.url, basePath),
+        target: isLoginPlaceholder ? '_self' : item.target,
+        icon: getImagePath(item.icon, basePath),
+      };
+    });
+};
+
 const LogoutButton = () => {
   const [open, setOpen] = useState(false);
   const handleLogout = () => {
-    return postShareProV1AuthLogout().then(() => {
-      // 使用当前页面的协议（http 或 https）
-      const protocol = window.location.protocol;
-      const host = window.location.host;
-      window.location.href = `${protocol}//${host}/auth/login`;
-    });
+    clearCookie();
+    const protocol = window.location.protocol;
+    const host = window.location.host;
+    window.location.href = `${protocol}//${host}/auth/login`;
   };
   return (
     <>
@@ -78,6 +100,13 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
     if (isWelcomePage) return 'full';
     return kbDetail?.settings?.theme_and_style?.doc_width || 'full';
   }, [kbDetail, isWelcomePage]);
+  const headerLogo = kbDetail?.settings?.icon
+    ? getImagePath(kbDetail.settings.icon, basePath)
+    : '';
+  const headerButtons = getHeaderButtons(
+    kbDetail?.settings?.btns || [],
+    basePath,
+  );
 
   const handleSearch = (value?: string, type: 'chat' | 'search' = 'chat') => {
     if (value?.trim()) {
@@ -96,20 +125,14 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
       mobile={mobile}
       docWidth={docWidth}
       catalogWidth={catalogWidth}
-      logo={getImagePath(kbDetail?.settings?.icon || Logo.src, basePath)}
+      logo={headerLogo}
       title={kbDetail?.settings?.title}
       placeholder={
         kbDetail?.settings?.web_app_custom_style?.header_search_placeholder
       }
       showSearch
       homePath={basePath || '/'}
-      btns={
-        kbDetail?.settings?.btns?.map((item: any) => ({
-          ...item,
-          url: getImagePath(item.url, basePath),
-          icon: getImagePath(item.icon, basePath),
-        })) || []
-      }
+      btns={headerButtons}
       onSearch={handleSearch}
       onQaClick={() => setQaModalOpen?.(true)}
     >
@@ -135,6 +158,13 @@ export const WelcomeHeader = ({
     setQaModalOpen,
     authInfo,
   } = useStore();
+  const headerLogo = kbDetail?.settings?.icon
+    ? getImagePath(kbDetail.settings.icon, basePath)
+    : '';
+  const headerButtons = getHeaderButtons(
+    kbDetail?.settings?.btns || [],
+    basePath,
+  );
   const handleSearch = (value?: string, type: 'chat' | 'search' = 'chat') => {
     if (value?.trim()) {
       if (type === 'chat') {
@@ -151,20 +181,14 @@ export const WelcomeHeader = ({
       mobile={mobile}
       docWidth='full'
       catalogWidth={catalogWidth}
-      logo={getImagePath(kbDetail?.settings?.icon || Logo.src, basePath)}
+      logo={headerLogo}
       title={kbDetail?.settings?.title}
       placeholder={
         kbDetail?.settings?.web_app_custom_style?.header_search_placeholder
       }
       showSearch={showSearch}
       homePath={basePath || '/'}
-      btns={
-        kbDetail?.settings?.btns?.map((item: any) => ({
-          ...item,
-          url: getImagePath(item.url, basePath),
-          icon: getImagePath(item.icon, basePath),
-        })) || []
-      }
+      btns={headerButtons}
       onSearch={handleSearch}
       onQaClick={() => setQaModalOpen?.(true)}
     >

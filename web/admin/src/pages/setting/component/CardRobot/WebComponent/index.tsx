@@ -18,7 +18,6 @@ import {
   Button,
   Collapse,
   FormControlLabel,
-  Link,
   Radio,
   RadioGroup,
   Stack,
@@ -154,29 +153,7 @@ const CardRobotWebComponent = ({ kb }: CardRobotWebComponentProps) => {
   }, [kb]);
 
   return (
-    <SettingCardItem
-      title='网页挂件机器人'
-      isEdit={isEdit}
-      onSubmit={onSubmit}
-      more={
-        <Link
-          component='a'
-          href='https://pandawiki.docs.baizhi.cloud/node/0197f335-a1a8-786c-95df-0848f61fb98a'
-          target='_blank'
-          sx={{
-            fontSize: 14,
-            textDecoration: 'none',
-            fontWeight: 'normal',
-            ml: 1,
-            '&:hover': {
-              fontWeight: 'bold',
-            },
-          }}
-        >
-          使用方法
-        </Link>
-      }
-    >
+    <SettingCardItem title='网页挂件机器人' isEdit={isEdit} onSubmit={onSubmit}>
       <Stack spacing={3}>
         <FormItem label='网页挂件机器人'>
           <Controller
@@ -644,7 +621,7 @@ const CardRobotWebComponent = ({ kb }: CardRobotWebComponentProps) => {
                               <TextField
                                 fullWidth
                                 {...field}
-                                placeholder='本网站由 PandaWiki 提供技术支持'
+                                placeholder='本系统由内部知识库平台提供服务'
                                 error={!!errors.copyright_info}
                                 helperText={errors.copyright_info?.message}
                                 onChange={event => {
@@ -668,7 +645,7 @@ const CardRobotWebComponent = ({ kb }: CardRobotWebComponentProps) => {
                             <TextField
                               fullWidth
                               {...field}
-                              placeholder='本回答由 PandaWiki AI 自动生成，仅供参考。'
+                              placeholder='本回答由 AI 自动生成，仅供参考。'
                               error={!!errors.disclaimer}
                               helperText={errors.disclaimer?.message}
                               onChange={event => {

@@ -87,17 +87,7 @@ const CardRobotLark = ({
   }, [kb]);
 
   return (
-    <SettingCardItem
-      title='Lark 机器人'
-      isEdit={isEdit}
-      onSubmit={onSubmit}
-      more={{
-        type: 'link',
-        href: 'https://pandawiki.docs.baizhi.cloud/node/019a0131-8ad5-7653-89aa-60f75da44d14',
-        target: '_blank',
-        text: '使用方法',
-      }}
-    >
+    <SettingCardItem title='Lark 机器人' isEdit={isEdit} onSubmit={onSubmit}>
       <FormItem label='Lark 机器人'>
         <Controller
           control={control}

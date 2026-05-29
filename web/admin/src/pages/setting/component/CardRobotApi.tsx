@@ -3,7 +3,6 @@ import {
   Box,
   FormControl,
   FormControlLabel,
-  Link,
   Radio,
   RadioGroup,
   Stack,
@@ -16,8 +15,6 @@ import { useEffect, useState } from 'react';
 import { FormItem, SettingCardItem, SecretTextField } from './Common';
 import { DomainAppDetailResp } from '@/request/types';
 import { message } from '@ctzhian/ui';
-import { BUSINESS_VERSION_PERMISSION } from '@/constant/version';
-import { useAppSelector } from '@/store';
 
 const CardRobotApi = ({
   kb,
@@ -28,7 +25,6 @@ const CardRobotApi = ({
 }) => {
   const [isEdit, setIsEdit] = useState(false);
   const [detail, setDetail] = useState<DomainAppDetailResp | null>(null);
-  const { license } = useAppSelector(state => state.config);
   const {
     control,
     handleSubmit,
@@ -86,30 +82,8 @@ const CardRobotApi = ({
   });
 
   return (
-    <SettingCardItem
-      title='问答机器人 API'
-      isEdit={isEdit}
-      more={
-        <Link
-          component='a'
-          href='https://pandawiki.docs.baizhi.cloud/node/01971b60-100e-7b23-9385-e36763df5c0a'
-          target='_blank'
-          sx={{
-            fontSize: 14,
-            ml: 1,
-            textDecoration: 'none',
-            fontWeight: 'normal',
-            '&:hover': {
-              fontWeight: 'bold',
-            },
-          }}
-        >
-          使用方法
-        </Link>
-      }
-      onSubmit={onSubmit}
-    >
-      <FormItem label='问答机器人 API' permission={BUSINESS_VERSION_PERMISSION}>
+    <SettingCardItem title='问答机器人 API' isEdit={isEdit} onSubmit={onSubmit}>
+      <FormItem label='问答机器人 API'>
         <FormControl>
           <Controller
             control={control}
@@ -140,7 +114,7 @@ const CardRobotApi = ({
         </FormControl>
       </FormItem>
 
-      {isEnabled && BUSINESS_VERSION_PERMISSION.includes(license.edition!) && (
+      {isEnabled && (
         <>
           <FormItem label='API Token' required>
             <Controller

@@ -127,17 +127,7 @@ const CardRobotWecomService = ({
   }, [kb]);
 
   return (
-    <SettingCardItem
-      title='企业微信客服'
-      isEdit={isEdit}
-      onSubmit={onSubmit}
-      more={{
-        type: 'link',
-        href: 'https://pandawiki.docs.baizhi.cloud/node/01980888-bb0c-77d6-bc45-4636249b0d96',
-        target: '_blank',
-        text: '使用方法',
-      }}
-    >
+    <SettingCardItem title='企业微信客服' isEdit={isEdit} onSubmit={onSubmit}>
       <FormItem label='企业微信客服'>
         <Controller
           control={control}

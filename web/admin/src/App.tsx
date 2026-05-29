@@ -5,8 +5,6 @@ import { ThemeProvider } from '@ctzhian/ui';
 import { useEffect } from 'react';
 import { useLocation, useRoutes } from 'react-router-dom';
 
-import { getApiV1License } from './request/pro/License';
-
 import { setLicense } from './store/slices/config';
 
 import '@ctzhian/tiptap/dist/index.css';
@@ -23,11 +21,15 @@ function App() {
 
   useEffect(() => {
     if (token) {
-      getApiV1License().then(res => {
-        dispatch(setLicense(res));
-      });
+      dispatch(
+        setLicense({
+          edition: 0,
+          expired_at: 0,
+          started_at: 0,
+        }),
+      );
     }
-  }, [token]);
+  }, [dispatch, token]);
 
   if (!token && !onlyAllowShareApi) {
     window.location.href = window.__BASENAME__ + '/login';

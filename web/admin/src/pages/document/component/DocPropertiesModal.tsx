@@ -11,8 +11,6 @@ import {
   subscribeNodeSummaryStream,
   type StreamSummaryEvent,
 } from '@/request/nodeStream';
-import { getApiProV1AuthGroupList } from '@/request/pro/AuthGroup';
-import { GithubComChaitinPandaWikiProApiAuthV1AuthGroupListItem } from '@/request/pro/types';
 import {
   ConstsNodeAccessPerm,
   DomainNodeListItemResp,
@@ -23,7 +21,6 @@ import { convertToTree } from '@/utils/drag';
 import { filterEmptyFolders } from '@/utils/tree';
 import { Icon, Modal, message } from '@ctzhian/ui';
 import {
-  Autocomplete,
   Box,
   Button,
   FormControlLabel,
@@ -34,10 +31,8 @@ import {
   styled,
 } from '@mui/material';
 import dayjs from 'dayjs';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { BUSINESS_VERSION_PERMISSION } from '@/constant/version';
-import { VersionCanUse } from '@/components/VersionMask';
 import { IconShuaxin } from '@panda-wiki/icons';
 import SSEClient from '@/utils/fetch';
 
@@ -60,12 +55,7 @@ const PER_OPTIONS = [
     value: ConstsNodeAccessPerm.NodeAccessPermOpen,
   },
   {
-    label: (
-      <Stack direction={'row'} alignItems={'center'}>
-        <span>部分开放</span>
-        <VersionCanUse permission={BUSINESS_VERSION_PERMISSION} />
-      </Stack>
-    ),
+    label: '部分开放',
     value: ConstsNodeAccessPerm.NodeAccessPermPartial,
   },
   {
@@ -81,13 +71,10 @@ const DocPropertiesModal = ({
   onOk,
   isBatch = false,
 }: DocPropertiesModalProps) => {
-  const { kb_id, nav_id, license } = useAppSelector(state => state.config);
+  const { kb_id, nav_id } = useAppSelector(state => state.config);
   const [loading, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const sseClientRef = useRef<SSEClient<StreamSummaryEvent> | null>(null);
-  const [userGroups, setUserGroups] = useState<
-    GithubComChaitinPandaWikiProApiAuthV1AuthGroupListItem[]
-  >([]);
   const {
     control,
     handleSubmit,
@@ -102,18 +89,8 @@ const DocPropertiesModal = ({
       visitable: null as ConstsNodeAccessPerm | null,
       visible: null as ConstsNodeAccessPerm | null,
       summary: '',
-      answerable_groups:
-        [] as GithubComChaitinPandaWikiProApiAuthV1AuthGroupListItem[],
-      visitable_groups:
-        [] as GithubComChaitinPandaWikiProApiAuthV1AuthGroupListItem[],
-      visible_groups:
-        [] as GithubComChaitinPandaWikiProApiAuthV1AuthGroupListItem[],
     },
   });
-
-  const watchAnswerable = watch('answerable');
-  const watchVisitable = watch('visitable');
-  const watchVisible = watch('visible');
 
   const onGenerateSummary = () => {
     setSummaryLoading(true);
@@ -160,15 +137,6 @@ const DocPropertiesModal = ({
           visitable: values.visitable as ConstsNodeAccessPerm,
           visible: values.visible as ConstsNodeAccessPerm,
         },
-        answerable_groups: isBusiness
-          ? values.answerable_groups.map(item => item.id!)
-          : undefined,
-        visitable_groups: isBusiness
-          ? values.visitable_groups.map(item => item.id!)
-          : undefined,
-        visible_groups: isBusiness
-          ? values.visible_groups.map(item => item.id!)
-          : undefined,
       }),
 
       !isBatch
@@ -186,23 +154,10 @@ const DocPropertiesModal = ({
     });
   });
 
-  const isBusiness = useMemo(() => {
-    return BUSINESS_VERSION_PERMISSION.includes(license.edition!);
-  }, [license]);
-
   const tree = filterEmptyFolders(convertToTree(data));
 
   useEffect(() => {
     if (open && data) {
-      if (isBusiness) {
-        getApiProV1AuthGroupList({
-          kb_id: kb_id!,
-          page: 1,
-          per_page: 9999,
-        }).then(res => {
-          setUserGroups(res.list || []);
-        });
-      }
       if (isBatch) return;
       setValue('name', data[0].name!);
       setValue('summary', data[0].summary!);
@@ -216,30 +171,9 @@ const DocPropertiesModal = ({
           setValue('visitable', permissions.visitable!);
           setValue('visible', permissions.visible!);
         }
-        setValue(
-          'answerable_groups',
-          (res.answerable_groups || []).map((item: any) => ({
-            id: item.auth_group_id,
-            path: item.path || item.name,
-          })),
-        );
-        setValue(
-          'visitable_groups',
-          (res.visitable_groups || []).map((item: any) => ({
-            id: item.auth_group_id,
-            path: item.path || item.name,
-          })),
-        );
-        setValue(
-          'visible_groups',
-          (res.visible_groups || []).map((item: any) => ({
-            id: item.auth_group_id,
-            path: item.path || item.name,
-          })),
-        );
       });
     }
-  }, [open, data, isBusiness]);
+  }, [open, data, kb_id, isBatch, nav_id, reset, setValue]);
 
   useEffect(() => {
     if (!open) {
@@ -351,43 +285,12 @@ const DocPropertiesModal = ({
                     value={option.value}
                     control={<Radio size='small' />}
                     label={option.label}
-                    disabled={
-                      !isBusiness &&
-                      option.value ===
-                        ConstsNodeAccessPerm.NodeAccessPermPartial
-                    }
                   />
                 ))}
               </RadioGroup>
             )}
           />
         </FormItem>
-        {watchAnswerable === ConstsNodeAccessPerm.NodeAccessPermPartial && (
-          <FormItem label=' '>
-            <Controller
-              name='answerable_groups'
-              control={control}
-              render={({ field }) => (
-                <Autocomplete
-                  {...field}
-                  fullWidth
-                  multiple
-                  options={userGroups}
-                  getOptionLabel={option => option.path!}
-                  onChange={(_, value) => {
-                    field.onChange(value);
-                  }}
-                  isOptionEqualToValue={(option, value) =>
-                    option.id === value.id
-                  }
-                  renderInput={params => (
-                    <TextField {...params} placeholder='可被问答的用户组' />
-                  )}
-                />
-              )}
-            />
-          </FormItem>
-        )}
 
         <FormItem label='可被访问'>
           <Controller
@@ -401,43 +304,12 @@ const DocPropertiesModal = ({
                     value={option.value}
                     control={<Radio size='small' />}
                     label={option.label}
-                    disabled={
-                      !isBusiness &&
-                      option.value ===
-                        ConstsNodeAccessPerm.NodeAccessPermPartial
-                    }
                   />
                 ))}
               </RadioGroup>
             )}
           />
         </FormItem>
-        {watchVisitable === ConstsNodeAccessPerm.NodeAccessPermPartial && (
-          <FormItem label=' '>
-            <Controller
-              name='visitable_groups'
-              control={control}
-              render={({ field }) => (
-                <Autocomplete
-                  {...field}
-                  fullWidth
-                  multiple
-                  options={userGroups}
-                  getOptionLabel={option => option.path!}
-                  onChange={(_, value) => {
-                    field.onChange(value);
-                  }}
-                  isOptionEqualToValue={(option, value) =>
-                    option.id === value.id
-                  }
-                  renderInput={params => (
-                    <TextField {...params} placeholder='可被访问的用户组' />
-                  )}
-                />
-              )}
-            />
-          </FormItem>
-        )}
 
         <FormItem label='导航内可见'>
           <Controller
@@ -451,43 +323,12 @@ const DocPropertiesModal = ({
                     value={option.value}
                     control={<Radio size='small' />}
                     label={option.label}
-                    disabled={
-                      !isBusiness &&
-                      option.value ===
-                        ConstsNodeAccessPerm.NodeAccessPermPartial
-                    }
                   />
                 ))}
               </RadioGroup>
             )}
           />
         </FormItem>
-        {watchVisible === ConstsNodeAccessPerm.NodeAccessPermPartial && (
-          <FormItem label=' '>
-            <Controller
-              name='visible_groups'
-              control={control}
-              render={({ field }) => (
-                <Autocomplete
-                  {...field}
-                  fullWidth
-                  multiple
-                  options={userGroups}
-                  getOptionLabel={option => option.path!}
-                  onChange={(_, value) => {
-                    field.onChange(value);
-                  }}
-                  isOptionEqualToValue={(option, value) =>
-                    option.id === value.id
-                  }
-                  renderInput={params => (
-                    <TextField {...params} placeholder='导航内可见的用户组' />
-                  )}
-                />
-              )}
-            />
-          </FormItem>
-        )}
 
         {!isBatch && (
           <FormItem label='内容摘要' sx={{ alignItems: 'flex-start' }}>

@@ -8,6 +8,7 @@
 *.so
 *.dylib
 
+.cache
 # Test binary, built with `go test -c`
 *.test
 
@@ -29,7 +30,19 @@ go.work.sum
 .vscode
 
 deploy
+!deploy/server/
+!deploy/server/.env.example
+!deploy/server/README.md
+!deploy/server/deploy.sh
+!deploy/server/docker-compose.yml
 local
 
 .idea
 __debug*
+
+.app-ssl/
+.data/
+.logs/
+.pids/
+backend/tmp_*.go
+backend/migration/migration

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 
@@ -30,14 +31,31 @@ type Client struct {
 }
 
 const (
-	apiUploaderUrl     = "http://panda-wiki-api:8000/api/v1/file/upload/anydoc"
 	uploaderDir        = "/image"
-	crawlerServiceHost = "http://panda-wiki-crawler:8080"
 	SpaceIdCloud       = "cloud_disk"
 	getUrlPath         = "/api/docs/url/list"
 	UrlExportPath      = "/api/docs/url/export"
 	TaskListPath       = "/api/tasks/list"
 )
+
+var (
+	apiUploaderUrl     = getAPIUploaderURL()
+	crawlerServiceHost = getCrawlerServiceHost()
+)
+
+func getAPIUploaderURL() string {
+	if value := os.Getenv("ANYDOC_API_UPLOADER_URL"); value != "" {
+		return value
+	}
+	return "http://panda-wiki-api:8000/api/v1/file/upload/anydoc"
+}
+
+func getCrawlerServiceHost() string {
+	if value := os.Getenv("ANYDOC_CRAWLER_BASE_URL"); value != "" {
+		return value
+	}
+	return "http://panda-wiki-crawler:8080"
+}
 
 type Status string
 
@@ -74,7 +92,7 @@ func NewClient(logger *log.Logger, mqConsumer mq.MQConsumer) (*Client, error) {
 
 func (c *Client) GetUrlList(ctx context.Context, targetURL, id string) (*ListDocResponse, error) {
 
-	u, err := url.Parse(crawlerServiceHost)
+	u, err := url.Parse(getCrawlerServiceHost())
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +132,7 @@ func (c *Client) GetUrlList(ctx context.Context, targetURL, id string) (*ListDoc
 
 func (c *Client) UrlExport(ctx context.Context, id, docID, kbId string) (*UrlExportRes, error) {
 
-	u, err := url.Parse(crawlerServiceHost)
+	u, err := url.Parse(getCrawlerServiceHost())
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +145,7 @@ func (c *Client) UrlExport(ctx context.Context, id, docID, kbId string) (*UrlExp
 		"uploader": map[string]interface{}{
 			"type": uploaderTypeHTTP,
 			"http": map[string]interface{}{
-				"url": apiUploaderUrl,
+				"url": getAPIUploaderURL(),
 			},
 			"dir": fmt.Sprintf("/%s", kbId),
 		},

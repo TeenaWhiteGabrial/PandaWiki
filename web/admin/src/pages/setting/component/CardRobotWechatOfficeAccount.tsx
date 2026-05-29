@@ -92,17 +92,7 @@ const CardRobotWechatOfficeAccount = ({
   }, [kb]);
 
   return (
-    <SettingCardItem
-      title='微信公众号'
-      isEdit={isEdit}
-      onSubmit={onSubmit}
-      more={{
-        type: 'link',
-        href: 'https://pandawiki.docs.baizhi.cloud/node/01983a6a-62f2-7ecf-b7c9-606d88683f9e',
-        target: '_blank',
-        text: '使用方法',
-      }}
-    >
+    <SettingCardItem title='微信公众号' isEdit={isEdit} onSubmit={onSubmit}>
       <FormItem label='微信公众号'>
         <Controller
           control={control}

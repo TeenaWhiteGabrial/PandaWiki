@@ -5,9 +5,11 @@
 import * as Sentry from '@sentry/nextjs';
 
 // 只在生产环境下启用 Sentry
-if (process.env.NODE_ENV === 'production') {
+const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+
+if (process.env.NODE_ENV === 'production' && sentryDsn) {
   Sentry.init({
-    dsn: 'https://88c396fc9b383382005465cfc9120e5d@sentry.baizhi.cloud/5',
+    dsn: sentryDsn,
 
     // Add optional integrations for additional features
     integrations: [Sentry.replayIntegration()],

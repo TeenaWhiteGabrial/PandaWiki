@@ -21,7 +21,7 @@ const handleFooterProps = (setting: any) => {
       ...(setting.footer_settings || {}),
       brand_logo: getBasePath(setting.footer_settings?.brand_logo || ''),
     },
-    logo: 'https://release.baizhi.cloud/panda-wiki/icon.png',
+    logo: '',
     showBrand: setting.web_app_custom_style?.show_brand_info || false,
     customStyle: {
       ...(setting.web_app_custom_style || {}),

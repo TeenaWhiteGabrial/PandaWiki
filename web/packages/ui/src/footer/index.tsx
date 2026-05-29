@@ -5,8 +5,6 @@ import { useState } from 'react';
 import { IconDianhua, IconWeixingongzhonghao } from '@panda-wiki/icons';
 import Overlay from './Overlay';
 import { DocWidth } from '../constants';
-import { PROJECT_NAME } from '../constants';
-import { decodeBase64 } from '../utils';
 
 interface DomainSocialMediaAccount {
   channel?: string;
@@ -112,7 +110,7 @@ const Footer = React.memo(
                     {footerSetting?.brand_logo && (
                       <img
                         src={footerSetting.brand_logo}
-                        alt='PandaWiki'
+                        alt={footerSetting?.brand_name || '品牌标识'}
                         height={24}
                       />
                     )}
@@ -327,34 +325,6 @@ const Footer = React.memo(
                 {footerSetting?.icp}
               </Stack>
             )}
-            {customStyle?.show_brand_info !== false && (
-              <Stack
-                direction={'row'}
-                alignItems={'center'}
-                gap={0.5}
-                sx={theme => ({
-                  minHeight: 40,
-                  color: alpha(theme.palette.text.primary, 0.3),
-                })}
-              >
-                <Link
-                  href={'https://pandawiki.docs.baizhi.cloud/'}
-                  target='_blank'
-                >
-                  <Stack
-                    direction={'row'}
-                    alignItems={'center'}
-                    gap={0.5}
-                    sx={{
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <Box>{decodeBase64(PROJECT_NAME)}</Box>
-                    <img src={logo} alt='PandaWiki' width={0} height={0} />
-                  </Stack>
-                </Link>
-              </Stack>
-            )}
           </Box>
           <Overlay open={open} onClose={setOpen}>
             <Stack
@@ -504,7 +474,7 @@ const Footer = React.memo(
                     {footerSetting?.brand_logo && (
                       <img
                         src={footerSetting.brand_logo}
-                        alt='PandaWiki'
+                        alt={footerSetting?.brand_name || '品牌标识'}
                         height={36}
                       />
                     )}
@@ -755,53 +725,6 @@ const Footer = React.memo(
                     <Link href={`https://beian.miit.gov.cn/`} target='_blank'>
                       {footerSetting?.icp}
                     </Link>
-                  </>
-                )}
-                {customStyle?.show_brand_info !== false && (
-                  <>
-                    {(footerSetting?.corp_name || footerSetting?.icp) && (
-                      <Divider
-                        orientation='vertical'
-                        sx={theme => ({
-                          mx: 0.5,
-                          height: 16,
-                          borderColor: alpha(theme.palette.text.primary, 0.1),
-                        })}
-                      />
-                    )}
-                    <Stack
-                      direction={'row'}
-                      alignItems={'center'}
-                      gap={0.5}
-                      sx={theme => ({
-                        color: alpha(theme.palette.text.primary, 0.5),
-                      })}
-                    >
-                      <Link
-                        href={'https://pandawiki.docs.baizhi.cloud/'}
-                        target='_blank'
-                      >
-                        <Stack
-                          direction={'row'}
-                          alignItems={'center'}
-                          gap={0.5}
-                          sx={{
-                            cursor: 'pointer',
-                            '&:hover': {
-                              color: 'primary.main',
-                            },
-                          }}
-                        >
-                          <Box>{decodeBase64(PROJECT_NAME)}</Box>
-                          <img
-                            src={logo}
-                            alt='PandaWiki'
-                            width={0}
-                            height={0}
-                          />
-                        </Stack>
-                      </Link>
-                    </Stack>
                   </>
                 )}
               </Stack>

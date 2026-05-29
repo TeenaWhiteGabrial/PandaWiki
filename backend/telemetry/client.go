@@ -27,6 +27,13 @@ const (
 	reportInterval = time.Hour
 )
 
+func getMachineIDFilePath() string {
+	if path := os.Getenv("PANDA_WIKI_MACHINE_ID_FILE"); path != "" {
+		return path
+	}
+	return machineIDFile
+}
+
 // Client is the telemetry client
 type Client struct {
 	baseURL          string
@@ -92,6 +99,8 @@ func (c *Client) GetMachineID() string {
 }
 
 func (c *Client) getOrCreateMachineID() (string, error) {
+	machineIDFile := getMachineIDFilePath()
+
 	// get machine id from file
 	if id, err := os.ReadFile(machineIDFile); err == nil {
 		c.firstReport = false

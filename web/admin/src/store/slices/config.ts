@@ -1,6 +1,6 @@
 import { KnowledgeBaseListItem } from '@/api';
-import { DomainLicenseResp } from '@/request/pro/types';
 import {
+  ConstsLicenseEdition,
   DomainAppDetailResp,
   DomainKnowledgeBaseDetail,
   GithubComChaitinPandaWikiDomainModelListItem,
@@ -8,11 +8,17 @@ import {
 } from '@/request/types';
 import { createSlice } from '@reduxjs/toolkit';
 
+export interface LocalLicenseConfig {
+  edition?: ConstsLicenseEdition;
+  expired_at?: number;
+  started_at?: number;
+}
+
 export interface config {
   user: V1UserInfoResp;
   kb_id: string;
   nav_id: string;
-  license: DomainLicenseResp;
+  license: LocalLicenseConfig;
   kbList: KnowledgeBaseListItem[] | null;
   modelList: GithubComChaitinPandaWikiDomainModelListItem[] | null;
   kb_c: boolean;

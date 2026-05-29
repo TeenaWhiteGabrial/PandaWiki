@@ -40,8 +40,8 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
       useState(initialChatModel);
     const [showApiKey, setShowApiKey] = useState(false);
 
-    // 默认百智云 Chat 模型列表
-    const DEFAULT_BAIZHI_CLOUD_CHAT_MODELS: string[] = [
+    // 默认自动配置 Chat 模型列表
+    const DEFAULT_AUTO_CHAT_MODELS: string[] = [
       'deepseek-chat',
       'deepseek-r1',
       'kimi-k2-0711-preview',
@@ -49,7 +49,7 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
       'glm-4.5',
     ];
 
-    const modelList = DEFAULT_BAIZHI_CLOUD_CHAT_MODELS;
+    const modelList = DEFAULT_AUTO_CHAT_MODELS;
 
     // 当从父组件接收到新的初始值时，更新状态
     useEffect(() => {
@@ -121,8 +121,8 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
                   color: 'text.secondary',
                 }}
               >
-                通过 API Key 连接百智云提供平台后，PandaWiki
-                会自动配置好系统所需的问答模型、向量模型、重排序模型、文档分析模型。充分利用平台配置，无需逐个手动配置。
+                通过 API Key
+                连接兼容模型平台后，系统会自动配置问答模型、向量模型、重排序模型和文档分析模型，无需逐个手动填写。
               </Box>
             </Box>
           )}
@@ -157,19 +157,16 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
               API Key
             </Box>
             <Box
-              component='a'
-              href='https://model-square.app.baizhi.cloud/token'
-              target='_blank'
               sx={{
-                color: 'primary.main',
+                color: 'text.secondary',
                 fontSize: 12,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 0.5,
               }}
             >
-              <KeySharpIcon sx={{ fontSize: 14, color: 'primary.main' }} />
-              获取百智云 API Key
+              <KeySharpIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+              请填写内部可用模型平台的 API Key
             </Box>
           </Box>
           <TextField

@@ -128,12 +128,6 @@ const CardMCP = ({ kb }: CardMCPProps) => {
           ConstsLicenseEdition.LicenseEditionBusiness,
           ConstsLicenseEdition.LicenseEditionEnterprise,
         ]}
-        more={{
-          type: 'link',
-          href: 'https://pandawiki.docs.baizhi.cloud/node/019aa45c-90c1-7e6f-b17a-74ab1b200153',
-          target: '_blank',
-          text: '使用方法',
-        }}
       >
         <FormItem label='MCP Server'>
           <FormControl>
