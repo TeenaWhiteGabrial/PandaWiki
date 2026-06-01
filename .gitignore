@@ -35,6 +35,8 @@ deploy
 !deploy/server/README.md
 !deploy/server/deploy.sh
 !deploy/server/docker-compose.yml
+!deploy/server/postgres-init/
+!deploy/server/postgres-init/01-create-raglite-db.sql
 local
 
 .idea

@@ -1,20 +1,19 @@
-FROM --platform=$BUILDPLATFORM golang:1.24.3-alpine AS builder
+FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/golang:1.24.3-alpine AS builder
 
 WORKDIR /src
-ENV CGO_ENABLED=0
+ENV CGO_ENABLED=0 \
+    GOPROXY=https://goproxy.cn,direct \
+    GOSUMDB=sum.golang.google.cn
 
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
+RUN go mod download
 
 COPY . .
 
 ARG TARGETOS TARGETARCH
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg/mod \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags "-s -w -extldflags '-static'" -o /build/panda-wiki-consumer cmd/consumer/main.go cmd/consumer/wire_gen.go
+RUN go build -ldflags "-s -w -extldflags '-static'" -o /build/panda-wiki-consumer cmd/consumer/main.go cmd/consumer/wire_gen.go
 
-FROM alpine:3.21 AS consumer
+FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/alpine:3.21 AS consumer
 
 RUN apk update \
     && apk upgrade \

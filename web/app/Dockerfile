@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/node:22-alpine
 
 ENV NODE_ENV=production
 

@@ -20,9 +20,9 @@ docker info >/dev/null
 echo "==> 使用环境文件: ${ENV_FILE}"
 echo "==> 构建并启动 PandaWiki 单机部署"
 
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build postgres redis nats minio qdrant crawler raglite
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up --build admin-build app-build
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build api consumer admin app
+docker-compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build postgres redis nats minio qdrant crawler raglite
+docker-compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up --build admin-build app-build
+docker-compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build api consumer admin app
 
 echo
 echo "部署完成。可访问地址："
@@ -38,7 +38,7 @@ echo "  后端:    http://${SERVER_IP}:${API_PORT}"
 echo "  MinIO:   http://${SERVER_IP}:${MINIO_CONSOLE_PORT}"
 echo
 echo "查看容器状态："
-echo "  docker compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} ps"
+echo "  docker-compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} ps"
 echo
 echo "查看日志："
-echo "  docker compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} logs -f api"
+echo "  docker-compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} logs -f api"

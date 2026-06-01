@@ -32,11 +32,18 @@ cp .env.example .env
 
 - `SERVER_IP`
 - `POSTGRES_PASSWORD`
+- `RAGLITE_POSTGRES_DB`
 - `MINIO_ROOT_PASSWORD`
 - `JWT_SECRET`
 - `ADMIN_PASSWORD`
 - `QDRANT_API_KEY`
 - `RAGLITE_API_KEY`
+
+说明：
+
+- `POSTGRES_DB` 是 PandaWiki 主应用数据库
+- `RAGLITE_POSTGRES_DB` 是 raglite 独立数据库
+- 两者不要配置成同一个库名，否则会发生迁移表冲突
 
 3. 执行一键部署：
 
@@ -49,7 +56,7 @@ bash deploy.sh
 
 部署完成后默认会输出：
 
-- 管理台：`http://SERVER_IP:8080`
+- 管理台：`http://SERVER_IP:18080`
 - 前台：`http://SERVER_IP:3010`
 - 后端：`http://SERVER_IP:8000`
 - MinIO Console：`http://SERVER_IP:9001`
