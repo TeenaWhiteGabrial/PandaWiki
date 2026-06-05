@@ -4,8 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="${ROOT_DIR}/.logs"
 PID_DIR="${ROOT_DIR}/.pids"
+LOCAL_DATA_DIR="${ROOT_DIR}/.local-data"
+SSL_DIR="${LOCAL_DATA_DIR}/ssl"
 
-mkdir -p "${LOG_DIR}" "${PID_DIR}" "${ROOT_DIR}/.cache/go-build" "${ROOT_DIR}/.cache/gomod"
+mkdir -p \
+  "${LOG_DIR}" \
+  "${PID_DIR}" \
+  "${ROOT_DIR}/.cache/go-build" \
+  "${ROOT_DIR}/.cache/gomod" \
+  "${SSL_DIR}"
 
 GO_BIN="/opt/homebrew/opt/go@1.24/bin/go"
 if [[ ! -x "${GO_BIN}" ]]; then
@@ -76,6 +83,8 @@ start_if_not_running \
   CADDY_API="" \
   FILE_BASE_URL="http://127.0.0.1:8000/static-file" \
   ANYDOC_BASE_URL="http://127.0.0.1:8080" \
+  PANDA_WIKI_MACHINE_ID_FILE="${LOCAL_DATA_DIR}/.machine_id" \
+  PANDA_WIKI_SSL_DIR="${SSL_DIR}" \
   "${GO_BIN}" run ../../cmd/api/main.go ../../cmd/api/wire_gen.go
 
 echo "==> 启动 consumer"
@@ -99,6 +108,8 @@ start_if_not_running \
   SENTRY_ENABLED="false" \
   FILE_BASE_URL="http://127.0.0.1:8000/static-file" \
   ANYDOC_BASE_URL="http://127.0.0.1:8080" \
+  PANDA_WIKI_MACHINE_ID_FILE="${LOCAL_DATA_DIR}/.machine_id" \
+  PANDA_WIKI_SSL_DIR="${SSL_DIR}" \
   "${GO_BIN}" run ../../cmd/consumer/main.go ../../cmd/consumer/wire_gen.go
 
 echo "==> 启动前端工作区"
