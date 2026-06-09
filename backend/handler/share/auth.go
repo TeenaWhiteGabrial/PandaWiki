@@ -7,11 +7,13 @@ import (
 	"github.com/labstack/echo/v4"
 
 	v1 "github.com/chaitin/panda-wiki/api/share/v1"
+	"github.com/chaitin/panda-wiki/config"
 	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/middleware"
+	"github.com/chaitin/panda-wiki/repo/pg"
 	"github.com/chaitin/panda-wiki/usecase"
 )
 
@@ -25,9 +27,11 @@ type ShareAuthHandler struct {
 func NewShareAuthHandler(
 	e *echo.Echo,
 	baseHandler *handler.BaseHandler,
+	config *config.Config,
 	logger *log.Logger,
 	kbUsecase *usecase.KnowledgeBaseUsecase,
 	authUsecase *usecase.AuthUsecase,
+	apiTokenRepo *pg.APITokenRepo,
 ) *ShareAuthHandler {
 	h := &ShareAuthHandler{
 		BaseHandler: baseHandler,
@@ -36,7 +40,7 @@ func NewShareAuthHandler(
 		authUsecase: authUsecase,
 	}
 
-	shareAuthMiddleware := middleware.NewShareAuthMiddleware(logger, kbUsecase)
+	shareAuthMiddleware := middleware.NewShareAuthMiddleware(config, logger, kbUsecase, apiTokenRepo)
 
 	share := e.Group("share/v1/auth", shareAuthMiddleware.CheckForbidden)
 	share.GET("/get", h.AuthGet)

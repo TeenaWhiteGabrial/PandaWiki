@@ -12,7 +12,8 @@ import {
   Header as CustomHeader,
   WelcomeHeader as WelcomeHeaderComponent,
 } from '@panda-wiki/ui';
-import { useMemo, useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import QaModal from '../QaModal';
 import ThemeSwitch from './themeSwitch';
 
@@ -21,24 +22,38 @@ interface HeaderProps {
   isWelcomePage?: boolean;
 }
 
-const getHeaderButtons = (btns: any[] = [], basePath: string) => {
+const getHeaderButtons = (
+  btns: any[] = [],
+  basePath: string,
+  redirectPath: string,
+  isAuthenticated: boolean,
+) => {
   return btns
     .filter(item => {
       const text = String(item?.text || '').toLowerCase();
       const url = String(item?.url || '').toLowerCase();
+      const isLoginPlaceholder =
+        text.includes('pandawiki') || url.includes('pandawiki');
 
-      return !text.includes('github') && !url.includes('github.com');
+      return (
+        !text.includes('github') &&
+        !url.includes('github.com') &&
+        !(isAuthenticated && isLoginPlaceholder)
+      );
     })
     .map((item: any) => {
       const text = String(item?.text || '').toLowerCase();
       const url = String(item?.url || '').toLowerCase();
       const isLoginPlaceholder =
         text.includes('pandawiki') || url.includes('pandawiki');
+      const redirect = encodeURIComponent(redirectPath);
 
       return {
         ...item,
         text: isLoginPlaceholder ? '登录' : item.text,
-        url: isLoginPlaceholder ? '' : getImagePath(item.url, basePath),
+        url: isLoginPlaceholder
+          ? `${basePath || ''}/auth/login${redirect ? `?redirect=${redirect}` : ''}`
+          : getImagePath(item.url, basePath),
         target: isLoginPlaceholder ? '_self' : item.target,
         icon: getImagePath(item.icon, basePath),
       };
@@ -49,6 +64,8 @@ const LogoutButton = () => {
   const [open, setOpen] = useState(false);
   const handleLogout = () => {
     clearCookie();
+    window.localStorage.removeItem('panda_wiki_token');
+    window.localStorage.removeItem('panda_wiki_remember_login');
     const protocol = window.location.protocol;
     const host = window.location.host;
     window.location.href = `${protocol}//${host}/auth/login`;
@@ -87,6 +104,16 @@ const LogoutButton = () => {
   );
 };
 
+const useMounted = () => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return mounted;
+};
+
 const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
   const {
     mobile = false,
@@ -95,17 +122,31 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
     setQaModalOpen,
     authInfo,
   } = useStore();
+  const mounted = useMounted();
   const basePath = useBasePath();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const docWidth = useMemo(() => {
     if (isWelcomePage) return 'full';
     return kbDetail?.settings?.theme_and_style?.doc_width || 'full';
   }, [kbDetail, isWelcomePage]);
+  const currentRedirectPath = useMemo(() => {
+    const search = searchParams?.toString();
+    const normalizedPathname =
+      pathname && basePath && pathname.startsWith(basePath)
+        ? pathname.slice(basePath.length) || '/'
+        : pathname || '/';
+
+    return search ? `${normalizedPathname}?${search}` : normalizedPathname;
+  }, [basePath, pathname, searchParams]);
   const headerLogo = kbDetail?.settings?.icon
     ? getImagePath(kbDetail.settings.icon, basePath)
     : '';
   const headerButtons = getHeaderButtons(
     kbDetail?.settings?.btns || [],
     basePath,
+    currentRedirectPath,
+    !!authInfo,
   );
 
   const handleSearch = (value?: string, type: 'chat' | 'search' = 'chat') => {
@@ -118,6 +159,23 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
       }
     }
   };
+
+  if (!mounted) {
+    return (
+      <Box
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 101,
+          height: 64,
+          flexShrink: 0,
+          bgcolor: 'background.default',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
+      />
+    );
+  }
 
   return (
     <CustomHeader
@@ -137,6 +195,22 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
       onQaClick={() => setQaModalOpen?.(true)}
     >
       <Stack sx={{ ml: 2 }} direction='row' alignItems='center' gap={1}>
+        {!!authInfo && (
+          <Box
+            sx={theme => ({
+              maxWidth: 180,
+              color: theme.palette.text.secondary,
+              fontSize: 14,
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            })}
+            title={authInfo.name || authInfo.account || ''}
+          >
+            {authInfo.name || authInfo.account}
+          </Box>
+        )}
         <ThemeSwitch />
         {!!authInfo && <LogoutButton />}
       </Stack>
@@ -158,12 +232,26 @@ export const WelcomeHeader = ({
     setQaModalOpen,
     authInfo,
   } = useStore();
+  const mounted = useMounted();
   const headerLogo = kbDetail?.settings?.icon
     ? getImagePath(kbDetail.settings.icon, basePath)
     : '';
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentRedirectPath = useMemo(() => {
+    const search = searchParams?.toString();
+    const normalizedPathname =
+      pathname && basePath && pathname.startsWith(basePath)
+        ? pathname.slice(basePath.length) || '/'
+        : pathname || '/';
+
+    return search ? `${normalizedPathname}?${search}` : normalizedPathname;
+  }, [basePath, pathname, searchParams]);
   const headerButtons = getHeaderButtons(
     kbDetail?.settings?.btns || [],
     basePath,
+    currentRedirectPath,
+    !!authInfo,
   );
   const handleSearch = (value?: string, type: 'chat' | 'search' = 'chat') => {
     if (value?.trim()) {
@@ -175,6 +263,24 @@ export const WelcomeHeader = ({
       }
     }
   };
+
+  if (!mounted) {
+    return (
+      <Box
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 101,
+          height: 64,
+          flexShrink: 0,
+          bgcolor: 'background.default',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
+      />
+    );
+  }
+
   return (
     <WelcomeHeaderComponent
       isDocPage={false}

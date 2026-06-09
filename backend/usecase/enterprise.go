@@ -1,0 +1,313 @@
+package usecase
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+
+	"github.com/google/uuid"
+
+	enterpriseV1 "github.com/chaitin/panda-wiki/api/enterprise/v1"
+	"github.com/chaitin/panda-wiki/domain"
+	"github.com/chaitin/panda-wiki/log"
+	"github.com/chaitin/panda-wiki/repo/pg"
+)
+
+type EnterpriseUsecase struct {
+	repo     *pg.EnterpriseRepository
+	authRepo *pg.AuthRepo
+	nodeRepo *pg.NodeRepository
+	logger   *log.Logger
+}
+
+func NewEnterpriseUsecase(repo *pg.EnterpriseRepository, authRepo *pg.AuthRepo, nodeRepo *pg.NodeRepository, logger *log.Logger) (*EnterpriseUsecase, error) {
+	if err := repo.EnsureDefaultPermissionLevel(context.Background()); err != nil {
+		return nil, err
+	}
+	return &EnterpriseUsecase{
+		repo:     repo,
+		authRepo: authRepo,
+		nodeRepo: nodeRepo,
+		logger:   logger.WithModule("usecase.enterprise"),
+	}, nil
+}
+
+func (u *EnterpriseUsecase) ListDepartments(ctx context.Context) (*enterpriseV1.DepartmentListResp, error) {
+	departments, err := u.repo.ListDepartments(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &enterpriseV1.DepartmentListResp{Departments: departments}, nil
+}
+
+func (u *EnterpriseUsecase) UpsertDepartment(ctx context.Context, req *enterpriseV1.DepartmentUpsertReq) (string, error) {
+	id := req.ID
+	if id == "" {
+		id = uuid.New().String()
+	}
+	department := &domain.Department{
+		ID:       id,
+		Name:     req.Name,
+		ParentID: req.ParentID,
+		Path:     req.Path,
+		Sort:     req.Sort,
+		Status:   req.Status,
+	}
+	if department.Status == "" {
+		department.Status = domain.DepartmentStatusActive
+	}
+	if department.Path == "" {
+		department.Path = id
+		if req.ParentID != nil && *req.ParentID != "" {
+			parent, err := u.repo.GetDepartmentByID(ctx, *req.ParentID)
+			if err != nil {
+				return "", err
+			}
+			department.Path = fmt.Sprintf("%s/%s", parent.Path, id)
+		}
+	}
+	return id, u.repo.UpsertDepartment(ctx, department)
+}
+
+func (u *EnterpriseUsecase) DeleteDepartment(ctx context.Context, id string) error {
+	return u.repo.DeleteDepartment(ctx, id)
+}
+
+func (u *EnterpriseUsecase) ListPermissionLevels(ctx context.Context) (*enterpriseV1.PermissionLevelListResp, error) {
+	levels, err := u.repo.ListPermissionLevels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &enterpriseV1.PermissionLevelListResp{Levels: levels}, nil
+}
+
+func (u *EnterpriseUsecase) UpsertPermissionLevel(ctx context.Context, req *enterpriseV1.PermissionLevelUpsertReq) (string, error) {
+	id := req.ID
+	if id == "" {
+		id = uuid.New().String()
+	}
+	level := &domain.PermissionLevel{
+		ID:          id,
+		Name:        req.Name,
+		Code:        req.Code,
+		Rank:        int(req.Rank),
+		Description: req.Description,
+		IsDefault:   req.IsDefault,
+		Status:      req.Status,
+	}
+	if level.Status == "" {
+		level.Status = domain.PermissionLevelStatusActive
+	}
+	return id, u.repo.UpsertPermissionLevel(ctx, level)
+}
+
+func (u *EnterpriseUsecase) DeletePermissionLevel(ctx context.Context, id string) error {
+	return u.repo.DeletePermissionLevel(ctx, id)
+}
+
+func (u *EnterpriseUsecase) UpdateUserEnterpriseAccess(ctx context.Context, req *enterpriseV1.UpdateUserEnterpriseAccessReq) error {
+	if len(req.DepartmentIDs) == 0 {
+		return errors.New("department is required")
+	}
+	if req.PrimaryDepartment == "" {
+		return errors.New("primary department is required")
+	}
+	return u.repo.UpdateUserEnterpriseAccess(ctx, req.UserID, req.PermissionLevelID, req.DepartmentIDs, req.PrimaryDepartment)
+}
+
+func (u *EnterpriseUsecase) GetUserAccessContext(ctx context.Context, userID string) (*domain.EnterpriseAccessContext, error) {
+	return u.repo.GetUserAccessContext(ctx, userID)
+}
+
+func (u *EnterpriseUsecase) GetDepartmentIDs(ctx context.Context, userID string) ([]string, error) {
+	departmentIDs, _, err := u.repo.GetUserDepartments(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return departmentIDs, nil
+}
+
+func (u *EnterpriseUsecase) BuildShareAccessContext(ctx context.Context, authID uint) (*domain.EnterpriseAccessContext, error) {
+	if authID == 0 {
+		if authInfo := domain.GetAuthInfoFromCtx(ctx); authInfo != nil && authInfo.UserId != "" && !authInfo.IsToken {
+			return u.repo.GetUserAccessContext(ctx, authInfo.UserId)
+		}
+	}
+
+	result := &domain.EnterpriseAccessContext{
+		PrincipalID: fmt.Sprintf("auth:%d", authID),
+	}
+
+	defaultLevel, err := u.repo.GetDefaultPermissionLevel(ctx)
+	if err == nil {
+		result.PermissionLevelID = defaultLevel.ID
+		result.PermissionLevelRank = defaultLevel.Rank
+	}
+
+	if authID == 0 {
+		return result, nil
+	}
+
+	groups, err := u.authRepo.GetAuthGroupWithParentsByAuthId(ctx, authID)
+	if err != nil {
+		return nil, err
+	}
+	departmentIDs := make([]string, 0, len(groups))
+	for _, group := range groups {
+		departmentIDs = append(departmentIDs, strconv.FormatUint(uint64(group.ID), 10))
+	}
+	result.DepartmentIDs = departmentIDs
+	return result, nil
+}
+
+func (u *EnterpriseUsecase) CanVisible(perm domain.NodePermissions, access *domain.EnterpriseAccessContext) bool {
+	return u.canAccess(perm, access)
+}
+
+func (u *EnterpriseUsecase) CanVisitable(perm domain.NodePermissions, access *domain.EnterpriseAccessContext) bool {
+	return u.canAccess(perm, access)
+}
+
+func (u *EnterpriseUsecase) CanAnswerable(perm domain.NodePermissions, access *domain.EnterpriseAccessContext) bool {
+	return u.canAccess(perm, access)
+}
+
+func (u *EnterpriseUsecase) ResolveNodePermissions(ctx context.Context, node *domain.Node) (domain.NodePermissions, error) {
+	if node == nil {
+		return domain.NodePermissions{}, nil
+	}
+
+	perm := node.Permissions
+	if perm.Inherit == nil || !*perm.Inherit || node.ParentID == "" {
+		return perm, nil
+	}
+
+	visited := map[string]struct{}{node.ID: {}}
+	parentID := node.ParentID
+	for depth := 0; depth < 20 && parentID != ""; depth++ {
+		if _, ok := visited[parentID]; ok {
+			break
+		}
+		visited[parentID] = struct{}{}
+
+		parentNode, err := u.nodeRepo.GetNodeByID(ctx, parentID)
+		if err != nil {
+			return perm, nil
+		}
+		perm = parentNode.Permissions
+		if perm.Inherit == nil || !*perm.Inherit || parentNode.ParentID == "" {
+			return perm, nil
+		}
+		parentID = parentNode.ParentID
+	}
+
+	return perm, nil
+}
+
+func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nodeID, parentID string, current domain.NodePermissions) (domain.NodePermissions, error) {
+	perm := current
+	if perm.Inherit == nil || !*perm.Inherit || parentID == "" {
+		return perm, nil
+	}
+
+	visited := map[string]struct{}{nodeID: {}}
+	nextParentID := parentID
+	for depth := 0; depth < 20 && nextParentID != ""; depth++ {
+		if _, ok := visited[nextParentID]; ok {
+			break
+		}
+		visited[nextParentID] = struct{}{}
+
+		parentNode, err := u.nodeRepo.GetNodeByID(ctx, nextParentID)
+		if err != nil {
+			return perm, nil
+		}
+		perm = parentNode.Permissions
+		if perm.Inherit == nil || !*perm.Inherit || parentNode.ParentID == "" {
+			return perm, nil
+		}
+		nextParentID = parentNode.ParentID
+	}
+
+	return perm, nil
+}
+
+func (u *EnterpriseUsecase) ResolveParentNodePermissions(ctx context.Context, node *domain.Node) (domain.NodePermissions, error) {
+	if node == nil || node.ParentID == "" {
+		return domain.NodePermissions{}, nil
+	}
+
+	parentNode, err := u.nodeRepo.GetNodeByID(ctx, node.ParentID)
+	if err != nil {
+		return domain.NodePermissions{}, err
+	}
+	return u.ResolveNodePermissions(ctx, parentNode)
+}
+
+func (u *EnterpriseUsecase) ListDescendantDepartmentIDs(ctx context.Context, departmentIDs []string) (map[string]struct{}, error) {
+	allowed := make(map[string]struct{})
+	for _, departmentID := range departmentIDs {
+		if departmentID == "" {
+			continue
+		}
+		department, err := u.repo.GetDepartmentByID(ctx, departmentID)
+		if err != nil {
+			return nil, err
+		}
+		departments, err := u.repo.GetDepartmentsByParentPath(ctx, department.Path)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range departments {
+			allowed[item.ID] = struct{}{}
+		}
+	}
+	return allowed, nil
+}
+
+func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domain.EnterpriseAccessContext) bool {
+	if !perm.HasEnterpriseRule() {
+		return true
+	}
+
+	if access == nil {
+		access = &domain.EnterpriseAccessContext{}
+	}
+
+	if perm.MinPermissionLevelRank > 0 && access.PermissionLevelRank < perm.MinPermissionLevelRank {
+		return false
+	}
+
+	scopeType := perm.ScopeType
+	if scopeType == "" {
+		scopeType = domain.NodePermissionScopePublic
+	}
+
+	switch scopeType {
+	case domain.NodePermissionScopeDepartment:
+		if access.PrincipalID != "" && slices.Contains(perm.AllowedUserIDs, access.PrincipalID) {
+			return true
+		}
+		for _, departmentID := range access.DepartmentIDs {
+			if slices.Contains(perm.AllowedDepartmentIDs, departmentID) {
+				return true
+			}
+		}
+		return false
+	default:
+		if len(perm.AllowedUserIDs) == 0 && len(perm.AllowedDepartmentIDs) == 0 {
+			return true
+		}
+		if access.PrincipalID != "" && slices.Contains(perm.AllowedUserIDs, access.PrincipalID) {
+			return true
+		}
+		for _, departmentID := range access.DepartmentIDs {
+			if slices.Contains(perm.AllowedDepartmentIDs, departmentID) {
+				return true
+			}
+		}
+		return false
+	}
+}
