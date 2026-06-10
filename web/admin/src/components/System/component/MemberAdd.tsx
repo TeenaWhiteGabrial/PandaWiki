@@ -218,14 +218,14 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
                 select
                 SelectProps={{ multiple: true }}
                 value={field.value || []}
-                onChange={event =>
+                onChange={event => {
+                  const selectedValues = Array.isArray(event.target.value)
+                    ? event.target.value
+                    : [event.target.value];
                   field.onChange(
-                    normalizeSelectedDepartmentIDs(
-                      event.target.value as string[],
-                      departments,
-                    ),
-                  )
-                }
+                    normalizeSelectedDepartmentIDs(selectedValues, departments),
+                  );
+                }}
                 error={!!errors.department_ids}
                 helperText={errors.department_ids?.message as string}
               >

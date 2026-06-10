@@ -124,14 +124,14 @@ const MemberEnterpriseAccess = ({
               select
               SelectProps={{ multiple: true }}
               value={field.value || []}
-              onChange={event =>
+              onChange={event => {
+                const selectedValues = Array.isArray(event.target.value)
+                  ? event.target.value
+                  : [event.target.value];
                 field.onChange(
-                  normalizeSelectedDepartmentIDs(
-                    event.target.value as string[],
-                    departments,
-                  ),
-                )
-              }
+                  normalizeSelectedDepartmentIDs(selectedValues, departments),
+                );
+              }}
             >
               {flatDepartments.map(item => (
                 <MenuItem key={item.id} value={item.id}>
