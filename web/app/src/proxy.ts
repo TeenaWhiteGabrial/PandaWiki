@@ -49,6 +49,17 @@ const stripBasePath = (pathname: string, basePath: string) => {
   return pathname;
 };
 
+const isLoginPath = (pathname: string) => pathname === '/auth/login';
+
+const isProtectedPath = (pathname: string) => {
+  if (pathname === '/') return true;
+  if (pathname.startsWith('/node')) return true;
+  if (pathname.startsWith('/home')) return true;
+  if (pathname.startsWith('/welcome')) return true;
+  if (pathname.startsWith('/chat')) return true;
+  return false;
+};
+
 const homeProxy = async (
   request: NextRequest,
   headers: Record<string, string>,
@@ -168,6 +179,23 @@ export async function proxy(request: NextRequest) {
     // Allow the request flow to continue even when app info is temporarily unavailable.
   }
   const appPathname = stripBasePath(pathname, basePath);
+  const token =
+    request.cookies.get('panda_wiki_token')?.value ||
+    request.cookies.get('token')?.value;
+
+  if (token && isLoginPath(appPathname)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = `${basePath || ''}/`;
+    redirectUrl.search = '';
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (!token && isProtectedPath(appPathname)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = `${basePath || ''}/auth/login`;
+    redirectUrl.search = `?redirect=${encodeURIComponent(appPathname + url.search)}`;
+    return NextResponse.redirect(redirectUrl);
+  }
 
   if (appPathname.startsWith('/widget')) {
     const widgetInfo: any = await getShareV1AppWidgetInfo();

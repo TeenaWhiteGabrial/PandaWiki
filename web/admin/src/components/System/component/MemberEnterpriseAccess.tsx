@@ -16,6 +16,7 @@ import {
   buildDepartmentTree,
   flattenDepartmentTree,
   formatDepartmentOptionLabel,
+  normalizeSelectedDepartmentIDs,
 } from '@/utils/enterprise';
 
 type MemberEnterpriseAccessProps = {
@@ -123,6 +124,14 @@ const MemberEnterpriseAccess = ({
               select
               SelectProps={{ multiple: true }}
               value={field.value || []}
+              onChange={event =>
+                field.onChange(
+                  normalizeSelectedDepartmentIDs(
+                    event.target.value as string[],
+                    departments,
+                  ),
+                )
+              }
             >
               {flatDepartments.map(item => (
                 <MenuItem key={item.id} value={item.id}>

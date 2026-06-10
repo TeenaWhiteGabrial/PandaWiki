@@ -8,6 +8,7 @@ import {
   buildDepartmentTree,
   flattenDepartmentTree,
   formatDepartmentOptionLabel,
+  normalizeSelectedDepartmentIDs,
 } from '@/utils/enterprise';
 import { CheckCircle } from '@mui/icons-material';
 import { Box, Button, MenuItem, Stack, TextField } from '@mui/material';
@@ -217,6 +218,14 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
                 select
                 SelectProps={{ multiple: true }}
                 value={field.value || []}
+                onChange={event =>
+                  field.onChange(
+                    normalizeSelectedDepartmentIDs(
+                      event.target.value as string[],
+                      departments,
+                    ),
+                  )
+                }
                 error={!!errors.department_ids}
                 helperText={errors.department_ids?.message as string}
               >

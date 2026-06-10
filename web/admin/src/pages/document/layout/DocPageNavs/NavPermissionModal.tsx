@@ -14,6 +14,7 @@ import {
   buildDepartmentTree,
   flattenDepartmentTree,
   formatDepartmentOptionLabel,
+  normalizeSelectedDepartmentIDs,
 } from '@/utils/enterprise';
 import { message, Modal } from '@ctzhian/ui';
 import { MenuItem, TextField } from '@mui/material';
@@ -183,6 +184,14 @@ const NavPermissionModal = ({
                     size='small'
                     SelectProps={{ multiple: true }}
                     value={field.value || []}
+                    onChange={event =>
+                      field.onChange(
+                        normalizeSelectedDepartmentIDs(
+                          event.target.value as string[],
+                          flatDepartments,
+                        ),
+                      )
+                    }
                   >
                     {flatDepartments.map(item => (
                       <MenuItem key={item.id} value={item.id}>

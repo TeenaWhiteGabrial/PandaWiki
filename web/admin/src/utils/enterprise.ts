@@ -74,3 +74,24 @@ export const formatDepartmentOptionLabel = (department: Department) => {
   const depth = getDepartmentDepth(department);
   return `${'　'.repeat(depth)}${depth > 0 ? '└ ' : ''}${department.name}`;
 };
+
+export const normalizeSelectedDepartmentIDs = (
+  selectedIDs: string[],
+  departments: Department[],
+) => {
+  if (!selectedIDs.length) return [];
+
+  const departmentMap = new Map(departments.map(item => [item.id, item]));
+  const selectedSet = new Set(selectedIDs);
+
+  return selectedIDs.filter(id => {
+    let current = departmentMap.get(id);
+    while (current?.parent_id) {
+      if (selectedSet.has(current.parent_id)) {
+        return false;
+      }
+      current = departmentMap.get(current.parent_id);
+    }
+    return true;
+  });
+};

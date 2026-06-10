@@ -577,6 +577,26 @@ func (r *KnowledgeBaseRepository) resolveSingleKnowledgeBaseDatasetID(ctx contex
 	if err != nil {
 		return fmt.Errorf("list rag datasets failed: %w", err)
 	}
+	if len(datasets) == 0 {
+		var kbCount int64
+		if err := r.db.WithContext(ctx).
+			Model(&domain.KnowledgeBase{}).
+			Count(&kbCount).Error; err != nil {
+			return fmt.Errorf("count knowledge bases failed: %w", err)
+		}
+		if kbCount != 1 {
+			return nil
+		}
+		datasetID, err := r.rag.CreateKnowledgeBase(ctx)
+		if err != nil {
+			return fmt.Errorf("create rag dataset failed: %w", err)
+		}
+		kb.DatasetID = datasetID
+		if err := r.UpdateDatasetID(ctx, kb.ID, kb.DatasetID); err != nil {
+			return fmt.Errorf("update knowledge base dataset_id failed: %w", err)
+		}
+		return nil
+	}
 	if len(datasets) != 1 {
 		return nil
 	}

@@ -25,6 +25,7 @@ import {
   buildDepartmentTree,
   flattenDepartmentTree,
   formatDepartmentOptionLabel,
+  normalizeSelectedDepartmentIDs,
 } from '@/utils/enterprise';
 import { filterEmptyFolders } from '@/utils/tree';
 import { Modal, message } from '@ctzhian/ui';
@@ -434,6 +435,14 @@ const DocPropertiesModal = ({
                     size='small'
                     SelectProps={{ multiple: true }}
                     value={field.value || []}
+                    onChange={event =>
+                      field.onChange(
+                        normalizeSelectedDepartmentIDs(
+                          event.target.value as string[],
+                          departments,
+                        ),
+                      )
+                    }
                   >
                     {availableDepartments.map(item => (
                       <MenuItem key={item.id} value={item.id}>
