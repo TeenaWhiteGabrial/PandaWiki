@@ -33,10 +33,33 @@ export const getApiV1UserListCompat = async (query?: {
   role?: ConstsUserRole | '';
   department_id?: string;
 }) => {
-  const resp = await getApiV1UserList({
-    query,
+  const resp = await getApiV1UserList();
+  const users = ((resp.users || []) as UserListItemCompat[]) ?? [];
+
+  const filteredUsers = users.filter(user => {
+    if (query?.keyword) {
+      const keyword = query.keyword.toLowerCase();
+      const matched =
+        user.account?.toLowerCase().includes(keyword) ||
+        user.name?.toLowerCase().includes(keyword);
+      if (!matched) return false;
+    }
+
+    if (query?.role && user.role !== query.role) {
+      return false;
+    }
+
+    if (
+      query?.department_id &&
+      !user.department_ids?.includes(query.department_id)
+    ) {
+      return false;
+    }
+
+    return true;
   });
+
   return {
-    users: ((resp.users || []) as UserListItemCompat[]) ?? [],
+    users: filteredUsers,
   };
 };

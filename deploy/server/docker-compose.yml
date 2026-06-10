@@ -200,6 +200,7 @@ services:
       TARGET: http://${SERVER_IP}:${API_PORT}
       STATIC_FILE_TARGET: http://${SERVER_IP}:${MINIO_PORT}
       SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
+      NODE_OPTIONS: --max-old-space-size=4096
       CI: 'true'
     command: >
       sh -lc "
@@ -221,6 +222,7 @@ services:
       STATIC_FILE_TARGET: http://${SERVER_IP}:${MINIO_PORT}
       SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
       DEV_KB_ID: ''
+      NODE_OPTIONS: --max-old-space-size=4096
       CI: 'true'
     command: >
       sh -lc "

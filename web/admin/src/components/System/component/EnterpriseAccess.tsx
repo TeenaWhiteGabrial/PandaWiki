@@ -202,7 +202,7 @@ const EnterpriseAccess = () => {
       {
         title: '操作',
         dataIndex: 'action',
-        render: (_, record) => (
+        render: (_: unknown, record: Department) => (
           <Stack direction='row' gap={2}>
             <Button
               size='small'
@@ -282,7 +282,7 @@ const EnterpriseAccess = () => {
       {
         title: '操作',
         dataIndex: 'action',
-        render: (_, record) => (
+        render: (_: unknown, record: PermissionLevel) => (
           <Stack direction='row' gap={2}>
             <Button
               size='small'

@@ -220,10 +220,13 @@ const DocPropertiesModal = ({
               account: item.account || '',
             })),
           );
-          const parentPermissions =
-            parentNodePermissionResp?.permissions ||
+          const parentPermissions = (parentNodePermissionResp?.permissions ||
             navPermissionResp?.permissions ||
-            {};
+            {}) as {
+            scope_type?: string;
+            allowed_department_ids?: string[];
+            min_permission_level_id?: string;
+          };
           const scope =
             parentPermissions?.scope_type === 'department'
               ? 'department'
