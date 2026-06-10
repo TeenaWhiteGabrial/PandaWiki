@@ -206,9 +206,9 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
             })}
-            title={authInfo.name || authInfo.account || ''}
+            title={authInfo.account || ''}
           >
-            {authInfo.name || authInfo.account}
+            {authInfo.account}
           </Box>
         )}
         <ThemeSwitch />
