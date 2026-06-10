@@ -81,7 +81,30 @@ func (u *KnowledgeBaseUsecase) CreateKnowledgeBase(ctx context.Context, req *dom
 	return kbID, nil
 }
 
+func (u *KnowledgeBaseUsecase) EnsureDefaultKnowledgeBase(ctx context.Context) error {
+	kbList, err := u.repo.GetKnowledgeBaseList(ctx)
+	if err != nil {
+		return err
+	}
+	if len(kbList) > 0 {
+		return nil
+	}
+
+	_, err = u.CreateKnowledgeBase(ctx, &domain.CreateKnowledgeBaseReq{
+		Name:  "默认知识库",
+		MaxKB: max(domain.GetBaseEditionLimitation(ctx).MaxKb, 1),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to initialize default knowledge base: %w", err)
+	}
+
+	return nil
+}
+
 func (u *KnowledgeBaseUsecase) GetKnowledgeBaseList(ctx context.Context) ([]*domain.KnowledgeBaseListItem, error) {
+	if err := u.EnsureDefaultKnowledgeBase(ctx); err != nil {
+		return nil, err
+	}
 	knowledgeBases, err := u.repo.GetKnowledgeBaseList(ctx)
 	if err != nil {
 		return nil, err
@@ -89,12 +112,37 @@ func (u *KnowledgeBaseUsecase) GetKnowledgeBaseList(ctx context.Context) ([]*dom
 	return knowledgeBases, nil
 }
 
+func (u *KnowledgeBaseUsecase) GetDefaultKnowledgeBase(ctx context.Context) (*domain.KnowledgeBaseListItem, error) {
+	knowledgeBases, err := u.GetKnowledgeBaseList(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(knowledgeBases) == 0 {
+		return nil, fmt.Errorf("knowledge base not found")
+	}
+	return knowledgeBases[0], nil
+}
+
 func (u *KnowledgeBaseUsecase) GetKnowledgeBaseListByUserId(ctx context.Context) ([]*domain.KnowledgeBaseListItem, error) {
+	if err := u.EnsureDefaultKnowledgeBase(ctx); err != nil {
+		return nil, err
+	}
 	knowledgeBases, err := u.repo.GetKnowledgeBaseListByUserId(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return knowledgeBases, nil
+}
+
+func (u *KnowledgeBaseUsecase) GetDefaultKnowledgeBaseByUser(ctx context.Context) (*domain.KnowledgeBaseListItem, error) {
+	knowledgeBases, err := u.GetKnowledgeBaseListByUserId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(knowledgeBases) == 0 {
+		return nil, fmt.Errorf("knowledge base not found")
+	}
+	return knowledgeBases[0], nil
 }
 
 func (u *KnowledgeBaseUsecase) UpdateKnowledgeBase(ctx context.Context, req *domain.UpdateKnowledgeBaseReq) error {
@@ -161,23 +209,9 @@ func (u *KnowledgeBaseUsecase) DeleteKnowledgeBase(ctx context.Context, kbID str
 func (u *KnowledgeBaseUsecase) CreateKBRelease(ctx context.Context, req *domain.CreateKBReleaseReq, userId string) (string, error) {
 	if len(req.NodeIDs) > 0 {
 		// create published nodes
-		releaseIDs, err := u.nodeRepo.CreateNodeReleases(ctx, req.KBID, userId, req.NodeIDs)
+		_, err := u.nodeRepo.CreateNodeReleases(ctx, req.KBID, userId, req.NodeIDs)
 		if err != nil {
 			return "", fmt.Errorf("failed to create published nodes: %w", err)
-		}
-		if len(releaseIDs) > 0 {
-			// async upsert vector content via mq
-			nodeContentVectorRequests := make([]*domain.NodeReleaseVectorRequest, 0)
-			for _, releaseID := range releaseIDs {
-				nodeContentVectorRequests = append(nodeContentVectorRequests, &domain.NodeReleaseVectorRequest{
-					KBID:          req.KBID,
-					NodeReleaseID: releaseID,
-					Action:        "upsert",
-				})
-			}
-			if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, nodeContentVectorRequests); err != nil {
-				return "", err
-			}
 		}
 	}
 

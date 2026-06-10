@@ -91,7 +91,7 @@ func createApp() (*App, error) {
 		return nil, err
 	}
 	userHandler := v1.NewUserHandler(echo, baseHandler, logger, userUsecase, authMiddleware, configConfig, cacheCache)
-	enterpriseUsecase, err := usecase.NewEnterpriseUsecase(enterpriseRepository, authRepo, nodeRepository, logger)
+	enterpriseUsecase, err := usecase.NewEnterpriseUsecase(enterpriseRepository, authRepo, nodeRepository, navRepository, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func createApp() (*App, error) {
 	wecomUsecase := usecase.NewWecomUsecase(logger, cacheCache, appUsecase, chatUsecase, authRepo)
 	wechatAppUsecase := usecase.NewWechatAppUsecase(logger, appUsecase, chatUsecase, wechatRepository, authRepo, appRepository)
 	shareWechatHandler := share.NewShareWechatHandler(echo, baseHandler, logger, appUsecase, conversationUsecase, wechatServiceUsecase, wecomUsecase, wechatAppUsecase)
-	shareCaptchaHandler := share.NewShareCaptchaHandler(baseHandler, echo, logger)
+	shareCaptchaHandler := share.NewShareCaptchaHandler(baseHandler, echo, logger, knowledgeBaseUsecase)
 	openapiV1Handler := share.NewOpenapiV1Handler(echo, baseHandler, logger, authUsecase, appUsecase)
 	shareCommonHandler := share.NewShareCommonHandler(echo, baseHandler, logger, fileUsecase)
 	shareHandler := &share.ShareHandler{

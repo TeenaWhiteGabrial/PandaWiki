@@ -26,17 +26,25 @@ class SSEClient<T> {
   private reader: ReadableStreamDefaultReader<Uint8Array> | null;
   private textDecoder: TextDecoder;
   private buffer: string;
+  private isCanceled: boolean;
+  private hasNotifiedCancel: boolean;
 
   constructor(private options: SSEClientOptions) {
     this.controller = new AbortController();
     this.reader = null;
     this.textDecoder = new TextDecoder();
     this.buffer = '';
+    this.isCanceled = false;
+    this.hasNotifiedCancel = false;
   }
 
   public subscribe(body: BodyInit, onMessage: SSECallback<T>) {
+    this.isCanceled = false;
+    this.hasNotifiedCancel = false;
     this.controller.abort();
     this.controller = new AbortController();
+    this.reader = null;
+    this.buffer = '';
     const {
       url,
       headers,
@@ -101,7 +109,7 @@ class SSEClient<T> {
       })
       .catch(error => {
         clearTimeout(timeoutId);
-        if (error.name !== 'AbortError') {
+        if (error?.name !== 'AbortError' && !this.isCanceled) {
           onError?.(error);
         }
       });
@@ -145,11 +153,23 @@ class SSEClient<T> {
   }
 
   public unsubscribe() {
+    if (this.isCanceled) {
+      return;
+    }
+    this.isCanceled = true;
     this.controller.abort();
     if (this.reader) {
-      this.reader.cancel();
+      void this.reader.cancel().catch(error => {
+        if (error?.name !== 'AbortError') {
+          console.error(error);
+        }
+      });
     }
-    this.options.onCancel?.(new Error('Request canceled'));
+    this.reader = null;
+    if (!this.hasNotifiedCancel) {
+      this.hasNotifiedCancel = true;
+      this.options.onCancel?.(new Error('Request canceled'));
+    }
   }
 }
 

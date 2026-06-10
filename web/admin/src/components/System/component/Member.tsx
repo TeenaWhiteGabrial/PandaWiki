@@ -1,35 +1,65 @@
 import NoData from '@/assets/images/nodata.png';
 import Card from '@/components/Card';
 import { tableSx } from '@/constant/styles';
-import { getApiV1UserList } from '@/request/User';
-import { ConstsUserRole, V1UserListItemResp } from '@/request/types';
+import {
+  getApiV1EnterpriseDepartments,
+  getApiV1EnterprisePermissionLevels,
+} from '@/request/Enterprise';
+import {
+  getApiV1UserListCompat,
+  UserListItemCompat,
+} from '@/request/userCompat';
+import { ConstsUserRole } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { Table } from '@ctzhian/ui';
 import { ColumnType } from '@ctzhian/ui/dist/Table';
-import { Box, Button, Stack, Tooltip } from '@mui/material';
+import {
+  Box,
+  Button,
+  MenuItem,
+  Stack,
+  TextField,
+  Tooltip,
+} from '@mui/material';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import MemberAdd from './MemberAdd';
 import MemberDelete from './MemberDelete';
+import MemberEnterpriseAccess from './MemberEnterpriseAccess';
 import MemberUpdate from './MemberUpdate';
 
 const ConstsUserRoleMap = {
   [ConstsUserRole.UserRoleAdmin]: '超级管理员',
-  [ConstsUserRole.UserRoleUser]: '普通管理员',
+  [ConstsUserRole.UserRoleManager]: '管理员',
+  [ConstsUserRole.UserRoleUser]: '普通用户',
 };
 
 const Member = () => {
   const { user } = useAppSelector(state => state.config);
   const [loading, setLoading] = useState(false);
-  const [userList, setUserList] = useState<V1UserListItemResp[]>([]);
-  const [curUser, setCurUser] = useState<V1UserListItemResp | null>(null);
+  const [userList, setUserList] = useState<UserListItemCompat[]>([]);
+  const [curUser, setCurUser] = useState<UserListItemCompat | null>(null);
   const [curType, setCurType] = useState<'delete' | 'reset-password' | null>(
     null,
   );
+  const [enterpriseOpen, setEnterpriseOpen] = useState(false);
+  const [departmentNameMap, setDepartmentNameMap] = useState<
+    Record<string, string>
+  >({});
+  const [levelNameMap, setLevelNameMap] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<{
+    keyword: string;
+    role: ConstsUserRole | '';
+    department_id: string;
+  }>({
+    keyword: '',
+    role: '',
+    department_id: '',
+  });
 
-  const columns: ColumnType<V1UserListItemResp>[] = [
+  const columns: ColumnType<UserListItemCompat>[] = [
     {
-      title: '用户名',
+      title: '账号',
       dataIndex: 'account',
       render: (text: string, record) => (
         <Stack direction={'row'} alignItems={'center'} gap={2}>
@@ -52,9 +82,31 @@ const Member = () => {
       ),
     },
     {
+      title: '姓名',
+      dataIndex: 'name',
+      render: (text?: string) => <Box>{text || '-'}</Box>,
+    },
+    {
       title: '身份',
       dataIndex: 'role',
       render: (text: ConstsUserRole) => <Box>{ConstsUserRoleMap[text]}</Box>,
+    },
+    {
+      title: '权限等级',
+      dataIndex: 'permission_level_id',
+      render: (value?: string) => (
+        <Box>{(value && levelNameMap[value]) || '默认'}</Box>
+      ),
+    },
+    {
+      title: '所属部门',
+      dataIndex: 'department_ids',
+      render: (value?: string[]) => (
+        <Box>
+          {(value || []).map(id => departmentNameMap[id] || id).join('、') ||
+            '-'}
+        </Box>
+      ),
     },
     {
       title: '上次使用时间',
@@ -69,6 +121,20 @@ const Member = () => {
       width: 140,
       render: (_, record) => (
         <Stack direction={'row'} gap={2}>
+          <Button
+            size='small'
+            sx={{ p: 0, minWidth: 'auto' }}
+            disabled={
+              user?.role === ConstsUserRole.UserRoleManager &&
+              record.role !== ConstsUserRole.UserRoleUser
+            }
+            onClick={() => {
+              setCurUser(record);
+              setEnterpriseOpen(true);
+            }}
+          >
+            组织权限
+          </Button>
           {record.account === 'admin' ? (
             <Tooltip
               arrow
@@ -152,9 +218,12 @@ const Member = () => {
               sx={{ p: 0, minWidth: 'auto' }}
               color='primary'
               disabled={
-                record.role === 'admin' &&
-                user.account !== 'admin' &&
-                user.id !== record.id
+                (record.role === ConstsUserRole.UserRoleAdmin &&
+                  user.account !== 'admin' &&
+                  user.id !== record.id) ||
+                (user?.role === ConstsUserRole.UserRoleManager &&
+                  record.role !== ConstsUserRole.UserRoleUser &&
+                  user?.id !== record.id)
               }
               onClick={() => {
                 setCurUser(record);
@@ -166,7 +235,10 @@ const Member = () => {
           )}
           {user?.id !== record.id &&
             (user.account === 'admin' ||
-              (user.role === 'admin' && record.role !== 'admin')) && (
+              (user.role === ConstsUserRole.UserRoleAdmin &&
+                record.role !== ConstsUserRole.UserRoleAdmin) ||
+              (user.role === ConstsUserRole.UserRoleManager &&
+                record.role === ConstsUserRole.UserRoleUser)) && (
               <Button
                 size='small'
                 color='error'
@@ -186,9 +258,31 @@ const Member = () => {
 
   const getData = () => {
     setLoading(true);
-    getApiV1UserList()
-      .then(data => {
+    Promise.all([
+      getApiV1UserListCompat(filters),
+      getApiV1EnterpriseDepartments(),
+      getApiV1EnterprisePermissionLevels(),
+    ])
+      .then(([data, departments, levels]) => {
         const res = data.users || [];
+        setDepartmentNameMap(
+          (departments.departments || []).reduce(
+            (acc, item) => {
+              acc[item.id] = item.name;
+              return acc;
+            },
+            {} as Record<string, string>,
+          ),
+        );
+        setLevelNameMap(
+          (levels.levels || []).reduce(
+            (acc, item) => {
+              acc[item.id] = item.name;
+              return acc;
+            },
+            {} as Record<string, string>,
+          ),
+        );
         const idx = res.findIndex(item => item.id === user?.id);
         if (idx !== -1) {
           setUserList([res[idx], ...res.slice(0, idx), ...res.slice(idx + 1)]);
@@ -204,7 +298,7 @@ const Member = () => {
   useEffect(() => {
     getData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [filters]);
 
   return (
     <Card
@@ -226,7 +320,54 @@ const Member = () => {
         <Box sx={{ fontSize: 14, lineHeight: '24px', fontWeight: 'bold' }}>
           用户管理
         </Box>
-        <MemberAdd refresh={getData} userLen={userList.length} />
+        <Stack direction='row' gap={2} sx={{ mb: 2 }}>
+          <TextField
+            size='small'
+            placeholder='按账号或姓名搜索'
+            value={filters.keyword}
+            onChange={event =>
+              setFilters(prev => ({ ...prev, keyword: event.target.value }))
+            }
+            sx={{ width: 220 }}
+          />
+          <TextField
+            size='small'
+            select
+            value={filters.role}
+            onChange={event =>
+              setFilters(prev => ({
+                ...prev,
+                role: event.target.value as ConstsUserRole | '',
+              }))
+            }
+            sx={{ width: 160 }}
+          >
+            <MenuItem value=''>全部角色</MenuItem>
+            <MenuItem value={ConstsUserRole.UserRoleAdmin}>超级管理员</MenuItem>
+            <MenuItem value={ConstsUserRole.UserRoleManager}>管理员</MenuItem>
+            <MenuItem value={ConstsUserRole.UserRoleUser}>普通用户</MenuItem>
+          </TextField>
+          <TextField
+            size='small'
+            select
+            value={filters.department_id}
+            onChange={event =>
+              setFilters(prev => ({
+                ...prev,
+                department_id: event.target.value,
+              }))
+            }
+            sx={{ width: 200 }}
+          >
+            <MenuItem value=''>全部部门</MenuItem>
+            {Object.entries(departmentNameMap).map(([id, name]) => (
+              <MenuItem key={id} value={id}>
+                {name}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Stack>
+        <MemberAdd refresh={getData} />
       </Stack>
       <Table
         columns={columns}
@@ -263,6 +404,15 @@ const Member = () => {
           type={user?.id === curUser.id ? 'update' : 'reset'}
         />
       )}
+      <MemberEnterpriseAccess
+        open={enterpriseOpen}
+        user={curUser}
+        refresh={getData}
+        onClose={() => {
+          setEnterpriseOpen(false);
+          setCurUser(null);
+        }}
+      />
       <MemberDelete
         open={!!curUser && curType === 'delete'}
         onClose={() => {

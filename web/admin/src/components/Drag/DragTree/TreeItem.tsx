@@ -7,7 +7,6 @@ import {
 import RAG_SOURCES from '@/constant/rag';
 import { treeSx } from '@/constant/styles';
 import { postApiV1Node, putApiV1NodeDetail } from '@/request/Node';
-import { ConstsNodeAccessPerm } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { AppContext, updateTree } from '@/utils/drag';
 import {
@@ -51,48 +50,14 @@ const StyledTag = styled('div')<{ color: keyof Theme['palette'] }>(
   }),
 );
 
-const ANSWERABLE_PERMISSIONS_MAP = {
-  [ConstsNodeAccessPerm.NodeAccessPermClosed]: {
-    label: '不可被问答',
+const SCOPE_TYPE_MAP = {
+  public: {
+    label: '公共目录',
+    color: 'primary',
+  },
+  department: {
+    label: '部门目录',
     color: 'warning',
-  },
-  [ConstsNodeAccessPerm.NodeAccessPermPartial]: {
-    label: '部分可被问答',
-    color: 'warning',
-  },
-  [ConstsNodeAccessPerm.NodeAccessPermOpen]: {
-    label: '可被问答',
-    color: 'success',
-  },
-} as const;
-
-const VISITABLE_PERMISSIONS_MAP = {
-  [ConstsNodeAccessPerm.NodeAccessPermClosed]: {
-    label: '不可被访问',
-    color: 'warning',
-  },
-  [ConstsNodeAccessPerm.NodeAccessPermPartial]: {
-    label: '部分可被访问',
-    color: 'warning',
-  },
-  [ConstsNodeAccessPerm.NodeAccessPermOpen]: {
-    label: '可被访问',
-    color: 'success',
-  },
-} as const;
-
-const VISIBLE_PERMISSIONS_MAP = {
-  [ConstsNodeAccessPerm.NodeAccessPermClosed]: {
-    label: '导航内不可见',
-    color: 'warning',
-  },
-  [ConstsNodeAccessPerm.NodeAccessPermPartial]: {
-    label: '部分导航内可见',
-    color: 'warning',
-  },
-  [ConstsNodeAccessPerm.NodeAccessPermOpen]: {
-    label: '导航内可见',
-    color: 'success',
   },
 } as const;
 
@@ -257,6 +222,40 @@ const TreeItem = React.forwardRef<
     }
     return null;
   }, [item.permissions]);
+
+  const enterprisePermissionTags = useMemo(() => {
+    if (!permissions) return [];
+    const tags: Array<{ label: string; color: keyof Theme['palette'] }> = [];
+    const scopeType = (permissions as { scope_type?: string }).scope_type;
+    const minPermissionLevelID = (
+      permissions as { min_permission_level_id?: string }
+    ).min_permission_level_id;
+    const inherit = (permissions as { inherit?: boolean }).inherit;
+    const allowedDepartmentIDs = (
+      permissions as {
+        allowed_department_ids?: string[];
+      }
+    ).allowed_department_ids;
+    const allowedUserIDs = (permissions as { allowed_user_ids?: string[] })
+      .allowed_user_ids;
+
+    if (scopeType && SCOPE_TYPE_MAP[scopeType as keyof typeof SCOPE_TYPE_MAP]) {
+      tags.push(SCOPE_TYPE_MAP[scopeType as keyof typeof SCOPE_TYPE_MAP]);
+    }
+    if (inherit) {
+      tags.push({ label: '继承父级', color: 'info' });
+    }
+    if (minPermissionLevelID) {
+      tags.push({ label: '等级受限', color: 'secondary' });
+    }
+    if (
+      (allowedDepartmentIDs && allowedDepartmentIDs.length > 0) ||
+      (allowedUserIDs && allowedUserIDs.length > 0)
+    ) {
+      tags.push({ label: '有白名单', color: 'success' });
+    }
+    return tags;
+  }, [permissions]);
 
   const isChecked = selectedSet.has(item.id);
   const isIndeterminate =
@@ -579,58 +578,13 @@ const TreeItem = React.forwardRef<
                           </Tooltip>
                         )}
 
-                      {item.type === 2 && (
+                      {enterprisePermissionTags.length > 0 && (
                         <>
-                          {permissions?.answerable &&
-                            ANSWERABLE_PERMISSIONS_MAP[
-                              permissions.answerable
-                            ] && (
-                              <StyledTag
-                                color={
-                                  ANSWERABLE_PERMISSIONS_MAP[
-                                    permissions.answerable
-                                  ].color
-                                }
-                              >
-                                {
-                                  ANSWERABLE_PERMISSIONS_MAP[
-                                    permissions.answerable
-                                  ].label
-                                }
-                              </StyledTag>
-                            )}
-                          {permissions?.visitable &&
-                            VISITABLE_PERMISSIONS_MAP[
-                              permissions.visitable
-                            ] && (
-                              <StyledTag
-                                color={
-                                  VISITABLE_PERMISSIONS_MAP[
-                                    permissions.visitable
-                                  ].color
-                                }
-                              >
-                                {
-                                  VISITABLE_PERMISSIONS_MAP[
-                                    permissions.visitable
-                                  ].label
-                                }
-                              </StyledTag>
-                            )}
-                          {permissions?.visible &&
-                            VISIBLE_PERMISSIONS_MAP[permissions.visible] && (
-                              <StyledTag
-                                color={
-                                  VISIBLE_PERMISSIONS_MAP[permissions.visible]
-                                    .color
-                                }
-                              >
-                                {
-                                  VISIBLE_PERMISSIONS_MAP[permissions.visible]
-                                    .label
-                                }
-                              </StyledTag>
-                            )}
+                          {enterprisePermissionTags.map(tag => (
+                            <StyledTag key={tag.label} color={tag.color}>
+                              {tag.label}
+                            </StyledTag>
+                          ))}
                         </>
                       )}
                     </Stack>

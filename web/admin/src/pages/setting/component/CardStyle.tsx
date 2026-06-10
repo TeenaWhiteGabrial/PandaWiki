@@ -2,9 +2,8 @@ import { ThemeAndStyleSetting, ThemeMode } from '@/api/type';
 import doc_width_full from '@/assets/images/full.png';
 import doc_width_normal from '@/assets/images/normal.png';
 import doc_width_wide from '@/assets/images/wide.png';
-import { putApiV1App } from '@/request/App';
+import { putApiV1AppCompat } from '@/request/appCompat';
 import { DomainAppDetailResp } from '@/request/types';
-import { useAppSelector } from '@/store';
 import { message } from '@ctzhian/ui';
 import {
   Box,
@@ -26,7 +25,6 @@ interface CardStyleProps {
 
 const CardStyle = ({ id, data, refresh }: CardStyleProps) => {
   const [isEdit, setIsEdit] = useState(false);
-  const { kb_id } = useAppSelector(state => state.config);
   const { control, handleSubmit, setValue } = useForm<
     ThemeMode & ThemeAndStyleSetting
   >({
@@ -38,10 +36,9 @@ const CardStyle = ({ id, data, refresh }: CardStyleProps) => {
   });
 
   const onSubmit = (value: ThemeMode & ThemeAndStyleSetting) => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id },
       {
-        kb_id,
         settings: {
           ...data.settings,
           // theme_mode: value.theme_mode,
@@ -63,7 +60,7 @@ const CardStyle = ({ id, data, refresh }: CardStyleProps) => {
     // setValue('theme_mode', data.settings?.theme_mode as 'light' | 'dark');
     // setValue('bg_image', data.settings?.theme_and_style?.bg_image || '');
     setValue('doc_width', data.settings?.theme_and_style?.doc_width || 'full');
-  }, [data]);
+  }, [data, setValue]);
 
   return (
     <SettingCardItem

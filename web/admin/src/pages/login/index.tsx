@@ -4,9 +4,17 @@ import Logo from '@/assets/images/logo.png';
 import Avatar from '@/components/Avatar';
 import Card from '@/components/Card';
 import { useURLSearchParams } from '@/hooks';
-import { Box, Button, IconButton, Stack, TextField } from '@mui/material';
-import { Icon, message } from '@ctzhian/ui';
-import { useState } from 'react';
+import {
+  Box,
+  Button,
+  Checkbox,
+  FormControlLabel,
+  IconButton,
+  Stack,
+  TextField,
+} from '@mui/material';
+import { message } from '@ctzhian/ui';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   IconZhanghao,
@@ -16,19 +24,49 @@ import {
   IconBukejian,
 } from '@panda-wiki/icons';
 
+const REMEMBER_KEY = 'panda_wiki_remember_login';
+
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useURLSearchParams();
   const redirect = searchParams.get('redirect') || '/';
   const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
   const [see, setSee] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const remembered = localStorage.getItem(REMEMBER_KEY);
+    if (!remembered) return;
+    try {
+      const parsed = JSON.parse(remembered) as {
+        account?: string;
+        password?: string;
+      };
+      setAccount(parsed.account || '');
+      setPassword(parsed.password || '');
+      setRemember(true);
+    } catch {
+      localStorage.removeItem(REMEMBER_KEY);
+    }
+  }, []);
 
   const submit = () => {
     postApiV1UserLogin({ account, password })
       .then(res => {
         localStorage.setItem('panda_wiki_token', res.token!);
+        if (remember) {
+          localStorage.setItem(
+            REMEMBER_KEY,
+            JSON.stringify({
+              account,
+              password,
+            }),
+          );
+        } else {
+          localStorage.removeItem(REMEMBER_KEY);
+        }
         navigate(redirect);
         message.success('登录成功');
       })
@@ -164,6 +202,17 @@ const Login = () => {
                 },
               }}
             />
+            <Box sx={{ width: '100%', mb: 3, mt: -2 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={remember}
+                    onChange={event => setRemember(event.target.checked)}
+                  />
+                }
+                label='记住密码'
+              />
+            </Box>
             <Button
               fullWidth
               variant='contained'

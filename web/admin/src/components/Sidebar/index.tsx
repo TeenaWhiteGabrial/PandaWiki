@@ -1,6 +1,6 @@
 import Logo from '@/assets/images/logo.png';
 import { Box, Button, Stack, useTheme } from '@mui/material';
-import { ConstsUserKBPermission } from '@/request/types';
+import { ConstsUserKBPermission, ConstsUserRole } from '@/request/types';
 import { useMemo, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import Avatar from '../Avatar';
@@ -64,22 +64,35 @@ const MENUS = [
     pathname: 'application-setting',
     icon: IconChilun,
     show: true,
-    perms: [ConstsUserKBPermission.UserKBPermissionFullControl],
+    perms: [
+      ConstsUserKBPermission.UserKBPermissionFullControl,
+      ConstsUserKBPermission.UserKBPermissionNotNull,
+    ],
   },
 ];
 
 const Sidebar = () => {
   const { pathname } = useLocation();
-  const { kbDetail } = useAppSelector(state => state.config);
+  const { kbDetail, user } = useAppSelector(state => state.config);
   const theme = useTheme();
   const navigate = useNavigate();
   const menus = useMemo(() => {
     return MENUS.filter(it => {
+      if (
+        it.value === '/setting' &&
+        user?.role === ConstsUserRole.UserRoleManager
+      ) {
+        return true;
+      }
       return it.perms.includes(kbDetail.perm!);
     });
-  }, [kbDetail]);
+  }, [kbDetail, user]);
 
   useEffect(() => {
+    if (pathname === '/') {
+      return;
+    }
+
     const menu = menus.find(it => {
       if (it.value === '/') {
         return pathname === '/';

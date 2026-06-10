@@ -7,7 +7,7 @@ import {
   filterEmptyFolders,
   parseNodeListResponse,
 } from '@/utils/tree';
-import NodeClientLayout from './NodeClientLayout';
+import NodeClientLayoutShell from './NodeClientLayoutShell';
 
 export default async function Layout({
   children,
@@ -41,7 +41,7 @@ export default async function Layout({
       selectedNavId={defaultNavId || (navList[0]?.id ?? '')}
       navDataMap={navDataMap}
     >
-      <NodeClientLayout>{children}</NodeClientLayout>
+      <NodeClientLayoutShell>{children}</NodeClientLayoutShell>
     </StoreProvider>
   );
 }

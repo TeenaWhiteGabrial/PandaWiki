@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -28,6 +29,25 @@ type UserHandler struct {
 	rateLimiter *ratelimit.RateLimiter
 }
 
+func (h *UserHandler) validateManagerDepartmentScope(ctx context.Context, operator *domain.User, targetDepartmentIDs []string) error {
+	if operator == nil || operator.Role != consts.UserRoleManager {
+		return nil
+	}
+	managerDepartments, _, err := h.usecase.GetUserDepartments(ctx, operator.ID)
+	if err != nil {
+		return err
+	}
+	if len(managerDepartments) == 0 {
+		return fmt.Errorf("manager has no department")
+	}
+	for _, departmentID := range targetDepartmentIDs {
+		if !slices.Contains(managerDepartments, departmentID) {
+			return fmt.Errorf("department out of manager scope")
+		}
+	}
+	return nil
+}
+
 func NewUserHandler(e *echo.Echo, baseHandler *handler.BaseHandler, logger *log.Logger, usecase *usecase.UserUsecase, auth middleware.AuthMiddleware, config *config.Config, cache *cache.Cache) *UserHandler {
 	handlerLogger := logger.WithModule("handler.v1.user")
 	h := &UserHandler{
@@ -43,9 +63,9 @@ func NewUserHandler(e *echo.Echo, baseHandler *handler.BaseHandler, logger *log.
 
 	group.GET("", h.GetUserInfo, h.auth.Authorize)
 	group.GET("/list", h.ListUsers, h.auth.Authorize)
-	group.POST("/create", h.CreateUser, h.auth.Authorize, h.auth.ValidateUserRole(consts.UserRoleAdmin))
-	group.PUT("/reset_password", h.ResetPassword, h.auth.Authorize, h.auth.ValidateUserRole(consts.UserRoleAdmin))
-	group.DELETE("/delete", h.DeleteUser, h.auth.Authorize, h.auth.ValidateUserRole(consts.UserRoleAdmin))
+	group.POST("/create", h.CreateUser, h.auth.Authorize, h.auth.ValidateUserRole(consts.UserRoleManager))
+	group.PUT("/reset_password", h.ResetPassword, h.auth.Authorize, h.auth.ValidateUserRole(consts.UserRoleManager))
+	group.DELETE("/delete", h.DeleteUser, h.auth.Authorize, h.auth.ValidateUserRole(consts.UserRoleManager))
 
 	return h
 }
@@ -70,13 +90,26 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 		return h.NewResponseWithError(c, "invalid request", err)
 	}
 
+	authInfo := domain.GetAuthInfoFromCtx(c.Request().Context())
+	if authInfo == nil {
+		return h.NewResponseWithError(c, "authInfo not found in context", nil)
+	}
+	operator, err := h.usecase.GetUser(c.Request().Context(), authInfo.UserId)
+	if err != nil {
+		return h.NewResponseWithError(c, "failed to get user", err)
+	}
+	if err := h.validateManagerDepartmentScope(c.Request().Context(), operator, req.DepartmentIDs); err != nil {
+		return h.NewResponseWithError(c, "cannot create user out of your department scope", err)
+	}
+
 	uid := uuid.New().String()
-	err := h.usecase.CreateUser(c.Request().Context(), &domain.User{
+	err = h.usecase.CreateUser(c.Request().Context(), &domain.User{
 		ID:       uid,
 		Account:  req.Account,
+		Name:     req.Name,
 		Password: req.Password,
 		Role:     req.Role,
-	}, consts.GetLicenseEdition(c))
+	}, req.DepartmentIDs, req.PrimaryDepartment, consts.GetLicenseEdition(c))
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to create user", err)
 	}
@@ -148,12 +181,18 @@ func (h *UserHandler) GetUserInfo(c echo.Context) error {
 	}
 
 	userInfo := &v1.UserInfoResp{
-		ID:         user.ID,
-		Account:    user.Account,
-		Role:       user.Role,
-		IsToken:    authInfo.IsToken,
-		LastAccess: &user.LastAccess,
-		CreatedAt:  user.CreatedAt,
+		ID:                user.ID,
+		Account:           user.Account,
+		Name:              user.Name,
+		Role:              user.Role,
+		PermissionLevelID: user.PermissionLevelID,
+		IsToken:           authInfo.IsToken,
+		LastAccess:        &user.LastAccess,
+		CreatedAt:         user.CreatedAt,
+	}
+	if departments, primaryDepartment, err := h.usecase.GetUserDepartments(ctx, user.ID); err == nil {
+		userInfo.DepartmentIDs = departments
+		userInfo.PrimaryDepartment = primaryDepartment
 	}
 
 	return h.NewResponseWithData(c, userInfo)
@@ -173,8 +212,16 @@ func (h *UserHandler) ListUsers(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return h.NewResponseWithError(c, "invalid request", err)
 	}
+	if err := c.Validate(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid request", err)
+	}
 
-	users, err := h.usecase.ListUsers(c.Request().Context())
+	authInfo := domain.GetAuthInfoFromCtx(c.Request().Context())
+	if authInfo == nil {
+		return h.NewResponseWithError(c, "authInfo not found in context", nil)
+	}
+
+	users, err := h.usecase.ListUsers(c.Request().Context(), authInfo.UserId, &req)
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to list users", err)
 	}
@@ -227,9 +274,19 @@ func (h *UserHandler) ResetPassword(c echo.Context) error {
 			return h.NewResponseWithError(c, "failed to get target user", err)
 		}
 
-		// 超级管理员不能改其他超级管理员密码
+		// 超级管理员不能改其他超级管理员密码；管理员不能修改超级管理员密码
 		if targetUser.Role == consts.UserRoleAdmin && targetUser.ID != authInfo.UserId {
 			return h.NewResponseWithError(c, "无法修改其他超级管理员密码", nil)
+		}
+		if user.Role == consts.UserRoleManager && targetUser.Role != consts.UserRoleUser && targetUser.ID != authInfo.UserId {
+			return h.NewResponseWithError(c, "管理员无法修改该用户密码", nil)
+		}
+		targetDepartments, _, err := h.usecase.GetUserDepartments(ctx, targetUser.ID)
+		if err != nil {
+			return h.NewResponseWithError(c, "failed to get target user departments", err)
+		}
+		if err := h.validateManagerDepartmentScope(ctx, user, targetDepartments); err != nil {
+			return h.NewResponseWithError(c, "管理员无法修改其他部门用户密码", err)
 		}
 	}
 
@@ -289,8 +346,15 @@ func (h *UserHandler) DeleteUser(c echo.Context) error {
 	// 非admin账号的管理员只能删除普通用户的账户
 	if user.Account != "admin" {
 		if targetUser.Role != consts.UserRoleUser {
-			return h.NewResponseWithError(c, "cannot delete other admin users", nil)
+			return h.NewResponseWithError(c, "管理员无法删除该用户", nil)
 		}
+	}
+	targetDepartments, _, err := h.usecase.GetUserDepartments(ctx, targetUser.ID)
+	if err != nil {
+		return h.NewResponseWithError(c, "failed to get target user departments", err)
+	}
+	if err := h.validateManagerDepartmentScope(ctx, user, targetDepartments); err != nil {
+		return h.NewResponseWithError(c, "管理员无法删除其他部门用户", err)
 	}
 
 	err = h.usecase.DeleteUser(ctx, req.UserID)

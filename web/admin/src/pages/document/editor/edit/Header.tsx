@@ -23,7 +23,7 @@ import {
   IconMuluzhankai,
 } from '@panda-wiki/icons';
 import dayjs from 'dayjs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { WrapContext } from '..';
 import DocAddByCustomText from '../../component/DocAddByCustomText';
@@ -54,11 +54,7 @@ const Header = ({
     wikiUrlRef.current = wikiUrl;
   }, [wikiUrl]);
 
-  const { kb_id, nav_id, kbList } = useAppSelector(state => state.config);
-
-  const currentKb = useMemo(() => {
-    return kbList?.find(item => item.id === kb_id);
-  }, [kbList, kb_id]);
+  const { kb_id, nav_id, kbDetail } = useAppSelector(state => state.config);
 
   const {
     catalogOpen,
@@ -75,13 +71,13 @@ const Header = ({
   const [showSaveTip, setShowSaveTip] = useState(false);
 
   useEffect(() => {
-    if (currentKb?.access_settings?.base_url) {
-      setWikiUrl(currentKb.access_settings.base_url);
+    if (kbDetail?.access_settings?.base_url) {
+      setWikiUrl(kbDetail.access_settings.base_url);
       return;
     }
-    const host = currentKb?.access_settings?.hosts?.[0] || '';
+    const host = kbDetail?.access_settings?.hosts?.[0] || '';
     if (host === '') return;
-    const { ssl_ports = [], ports = [] } = currentKb?.access_settings || {};
+    const { ssl_ports = [], ports = [] } = kbDetail?.access_settings || {};
 
     if (ssl_ports) {
       if (ssl_ports.includes(443)) setWikiUrl(`https://${host}`);
@@ -91,7 +87,7 @@ const Header = ({
       if (ports.includes(80)) setWikiUrl(`http://${host}`);
       else if (ports.length > 0) setWikiUrl(`http://${host}:${ports[0]}`);
     }
-  }, [currentKb]);
+  }, [kbDetail]);
 
   const handlePublish = useCallback(() => {
     if (nodeDetail?.status === 2 && !edit) {
@@ -102,7 +98,7 @@ const Header = ({
         setPublishOpen(true);
       }, 200);
     }
-  }, [nodeDetail, edit]);
+  }, [nodeDetail, edit, handleSave]);
 
   const handleDeleteAndNavigate = async () => {
     // 深度优先遍历树，按照目录顺序收集所有文档

@@ -1,403 +1,259 @@
 'use client';
 
-import {
-  getShareV1AuthGet,
-  postShareV1AuthLoginSimple,
-} from '@/request/ShareAuth';
-import { getShareV1NodeList } from '@/request/ShareNode';
-import { parseNodeListResponse } from '@/utils/tree';
+import { getApiV1User, postApiV1UserLogin } from '@/request/User';
 import { clearCookie } from '@/utils/cookie';
-
 import {
-  IconKoulingrenzheng,
-  IconLDAP,
-  IconMima,
-  IconZhanghao,
-} from '@panda-wiki/icons';
-
-import Logo from '@/assets/images/logo.png';
-import { FooterProvider } from '@/components/footer';
-import { useStore } from '@/provider';
-import { ConstsSourceType, ConstsAuthType } from '@/request/types';
-import { Box, Button, InputAdornment, Stack, TextField } from '@mui/material';
+  Box,
+  Button,
+  Checkbox,
+  FormControlLabel,
+  Stack,
+  TextField,
+} from '@mui/material';
 import { message } from '@ctzhian/ui';
+import { IconMima, IconZhanghao } from '@panda-wiki/icons';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
+import Logo from '@/assets/images/logo.png';
 import { useBasePath } from '@/hooks';
+import { useStore } from '@/provider';
 import { getImagePath } from '@/utils/getImagePath';
+
+const REMEMBER_KEY = 'panda_wiki_remember_login';
+
+const useMounted = () => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return mounted;
+};
+
 export default function Login() {
   const searchParams = useSearchParams();
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [authType, setAuthType] = useState<ConstsAuthType>();
-  const [sourceType, setSourceType] = useState<ConstsSourceType>();
-  const { kbDetail, themeMode, mobile = false, setNodeList } = useStore();
+  const { kbDetail, mobile = false, themeMode, setAuthInfo } = useStore();
   const basePath = useBasePath();
+  const mounted = useMounted();
 
-  const redirectUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}${basePath}${decodeURIComponent(searchParams.get('redirect') || '')}`
-      : '';
+  const [account, setAccount] = useState('');
+  const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const redirectPath = searchParams.get('redirect') || '/';
+  const redirectUrl = useMemo(() => {
+    if (typeof window === 'undefined') return redirectPath;
+    return `${window.location.origin}${basePath}${decodeURIComponent(redirectPath)}`;
+  }, [basePath, redirectPath]);
+  const logoSrc =
+    mounted && kbDetail?.settings?.icon
+      ? getImagePath(kbDetail.settings.icon, basePath)
+      : Logo.src;
+  const title = kbDetail?.settings?.title || '知识库';
+
+  useEffect(() => {
+    const remembered = localStorage.getItem(REMEMBER_KEY);
+    if (!remembered) return;
+    try {
+      const parsed = JSON.parse(remembered) as {
+        account?: string;
+        password?: string;
+      };
+      setAccount(parsed.account || '');
+      setPassword(parsed.password || '');
+      setRemember(true);
+    } catch {
+      localStorage.removeItem(REMEMBER_KEY);
+    }
+  }, []);
 
   const handleLogin = async () => {
-    if (!password.trim()) {
-      message.error('请输入访问口令');
+    if (!account.trim()) {
+      message.error('请输入账号');
       return;
     }
+    if (!password.trim()) {
+      message.error('请输入密码');
+      return;
+    }
+
     setLoading(true);
     try {
       clearCookie();
-      postShareV1AuthLoginSimple({
+      const res = await postApiV1UserLogin({
+        account: account.trim(),
         password,
-      }).then(() => {
-        getShareV1NodeList().then(res => {
-          const raw = (res as any) ?? [];
-          const { isGrouped, navDataMap, defaultNavId } =
-            parseNodeListResponse(raw);
-          const nodeList = isGrouped
-            ? (navDataMap[defaultNavId || ''] ??
-              navDataMap[Object.keys(navDataMap)[0]] ??
-              [])
-            : raw;
-          setNodeList?.(Array.isArray(nodeList) ? nodeList : []);
-          message.success('认证成功');
-          window.open(redirectUrl, '_self');
-        });
       });
-    } catch (error) {
-      message.error('认证失败，请重试');
+      const token = res?.token;
+      if (!token) {
+        message.error('登录失败，请重试');
+        return;
+      }
+
+      localStorage.setItem('panda_wiki_token', token);
+      document.cookie = `panda_wiki_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+      const userInfo = await getApiV1User({ isAlert: false }).catch(
+        () => undefined,
+      );
+      setAuthInfo?.(userInfo);
+
+      if (remember) {
+        localStorage.setItem(
+          REMEMBER_KEY,
+          JSON.stringify({
+            account: account.trim(),
+            password,
+          }),
+        );
+      } else {
+        localStorage.removeItem(REMEMBER_KEY);
+      }
+
+      message.success('登录成功');
+      window.location.href = redirectUrl;
     } finally {
       setLoading(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      if (authType === ConstsAuthType.AuthTypeEnterprise) {
-        if (username.trim() && password.trim()) {
-          handleLDAPLogin();
-        }
-      } else {
-        handleLogin();
-      }
+    if (e.key === 'Enter' && account.trim() && password.trim()) {
+      handleLogin();
     }
   };
-
-  const handleLDAPLogin = () => {
-    setLoading(true);
-    try {
-      message.error('当前页面未启用该认证方式');
-    } catch (error) {
-      message.error('认证失败，请重试');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    getShareV1AuthGet({}).then(res => {
-      setAuthType(res?.auth_type);
-      setSourceType(res?.source_type);
-      if (res?.auth_type === ConstsAuthType.AuthTypeNull) {
-        window.open(redirectUrl, '_self');
-      }
-    });
-  }, []);
 
   return (
-    <>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor:
+          themeMode === 'dark' ? 'background.default' : 'background.paper',
+      }}
+    >
       <Box
         sx={{
-          minHeight: mobile ? `calc(100vh - 120px)` : `calc(100vh - 40px)`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: '100%',
+          maxWidth: 420,
+          p: 4,
+          backdropFilter: 'blur(2px)',
           bgcolor:
-            themeMode === 'dark' ? 'background.default' : 'background.paper',
-        }}
-      >
-        <Box
-          sx={{
-            width: '100%',
-            maxWidth: 400,
-            p: 4,
-            backdropFilter: 'blur(2px)',
-            bgcolor:
-              themeMode === 'dark' ? 'background.paper' : 'background.default',
-            borderRadius: '10px',
-            ...(mobile && {
+            themeMode === 'dark' ? 'background.paper' : 'background.default',
+          borderRadius: '10px',
+          ...(mounted &&
+            mobile && {
               m: 3,
             }),
-          }}
-        >
-          <Stack alignItems='center'>
-            <Stack alignItems='center' gap={1} sx={{ mb: 5 }}>
-              {kbDetail?.settings?.icon ? (
-                <img
-                  src={getImagePath(kbDetail?.settings?.icon, basePath)}
-                  alt='logo'
-                  width={40}
-                  height={40}
-                />
-              ) : (
-                <Image src={Logo.src} width={40} height={40} alt='logo' />
-              )}
-              <Box
-                sx={{ fontSize: 28, lineHeight: '36px', fontWeight: 'bold' }}
-              >
-                {kbDetail?.settings?.title}
-              </Box>
-            </Stack>
-            {authType === ConstsAuthType.AuthTypeSimple && (
-              <>
-                <TextField
-                  fullWidth
-                  type='password'
-                  value={password}
-                  autoFocus
-                  onChange={e => setPassword(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder='请输入访问口令'
-                  disabled={loading}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position='start'>
-                          <IconKoulingrenzheng
-                            sx={{ fontSize: 16, width: 24, height: 16 }}
-                          />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                  sx={{
-                    borderRadius: '10px',
-                    overflow: 'hidden',
-                    '& .MuiInputBase-input': {
-                      p: 2,
-                      lineHeight: '24px',
-                      height: '24px',
-                      fontFamily: 'Mono',
-                    },
-                    '& .MuiOutlinedInput-root': {
-                      pr: '18px',
-                      bgcolor: 'background.paper',
-                      '& fieldset': {
-                        borderRadius: '10px',
-                        borderColor: 'divider',
-                        px: 2,
-                      },
-                    },
-                  }}
-                />
-                <Button
-                  fullWidth
-                  variant='contained'
-                  onClick={handleLogin}
-                  sx={{ mt: 5, height: '50px', fontSize: 16 }}
-                  disabled={loading || !password.trim()}
-                >
-                  {loading ? '验证中...' : '认证访问'}
-                </Button>
-              </>
-            )}
-
-            {authType === ConstsAuthType.AuthTypeEnterprise && (
-              <>
-                {sourceType === ConstsSourceType.SourceTypeDingTalk && (
-                  <Button
-                    fullWidth
-                    variant='contained'
-                    disabled
-                    sx={{ height: '50px', fontSize: 16 }}
-                  >
-                    当前未启用
-                  </Button>
-                )}
-                {sourceType === ConstsSourceType.SourceTypeFeishu && (
-                  <Button
-                    fullWidth
-                    variant='contained'
-                    disabled
-                    sx={{ height: '50px', fontSize: 16 }}
-                  >
-                    当前未启用
-                  </Button>
-                )}
-                {sourceType === ConstsSourceType.SourceTypeWeCom && (
-                  <Button
-                    fullWidth
-                    variant='contained'
-                    disabled
-                    sx={{ height: '50px', fontSize: 16 }}
-                  >
-                    当前未启用
-                  </Button>
-                )}
-                {sourceType === ConstsSourceType.SourceTypeOAuth && (
-                  <Button
-                    fullWidth
-                    variant='contained'
-                    disabled
-                    sx={{ height: '50px', fontSize: 16 }}
-                  >
-                    当前未启用
-                  </Button>
-                )}
-                {sourceType === ConstsSourceType.SourceTypeGitHub && (
-                  <Button
-                    fullWidth
-                    variant='contained'
-                    disabled
-                    sx={{ height: '50px', fontSize: 16 }}
-                  >
-                    当前未启用
-                  </Button>
-                )}
-
-                {sourceType === ConstsSourceType.SourceTypeCAS && (
-                  <Button
-                    fullWidth
-                    variant='contained'
-                    disabled
-                    sx={{ height: '50px', fontSize: 16 }}
-                  >
-                    当前未启用
-                  </Button>
-                )}
-
-                {sourceType === ConstsSourceType.SourceTypeLDAP && (
-                  <Stack spacing={2} width='100%'>
-                    {(() => {
-                      const textFieldSx = {
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        '& .MuiInputBase-input': {
-                          p: 2,
-                          lineHeight: '24px',
-                          height: '24px',
-                          fontFamily: 'Mono',
-                        },
-                        '& .MuiOutlinedInput-root': {
-                          pr: '18px',
-                          bgcolor: 'background.paper',
-                          '& fieldset': {
-                            borderRadius: '10px',
-                            borderColor: 'divider',
-                            px: 2,
-                          },
-                        },
-                      };
-
-                      return (
-                        <>
-                          <TextField
-                            fullWidth
-                            type='text'
-                            value={username}
-                            autoFocus
-                            onChange={e => setUsername(e.target.value)}
-                            placeholder='用户名'
-                            disabled={loading}
-                            slotProps={{
-                              input: {
-                                startAdornment: (
-                                  <InputAdornment position='start'>
-                                    <IconZhanghao
-                                      sx={{
-                                        fontSize: 16,
-                                        width: 24,
-                                        height: 16,
-                                      }}
-                                    />
-                                  </InputAdornment>
-                                ),
-                              },
-                            }}
-                            sx={textFieldSx}
-                          />
-                          <TextField
-                            fullWidth
-                            type='password'
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder='密码'
-                            disabled={loading}
-                            slotProps={{
-                              input: {
-                                startAdornment: (
-                                  <InputAdornment position='start'>
-                                    <IconMima
-                                      sx={{
-                                        fontSize: 16,
-                                        width: 24,
-                                        height: 16,
-                                      }}
-                                    />
-                                  </InputAdornment>
-                                ),
-                              },
-                            }}
-                            sx={textFieldSx}
-                          />
-                          <Button
-                            fullWidth
-                            variant='contained'
-                            onClick={handleLDAPLogin}
-                            sx={{
-                              mt: 2,
-                              height: '50px',
-                              fontSize: 16,
-                              borderRadius: '10px',
-                              boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
-                            }}
-                            startIcon={
-                              <IconLDAP
-                                sx={{
-                                  fontSize: 16,
-                                  width: 24,
-                                  height: 16,
-                                  color:
-                                    loading ||
-                                    !username.trim() ||
-                                    !password.trim()
-                                      ? ''
-                                      : '#e73f3f',
-                                }}
-                              />
-                            }
-                            disabled={
-                              loading || !username.trim() || !password.trim()
-                            }
-                          >
-                            {loading ? '验证中...' : '登录'}
-                          </Button>
-                        </>
-                      );
-                    })()}
-                  </Stack>
-                )}
-              </>
-            )}
-
-            <Box
-              sx={{
-                textAlign: 'center',
-                color: 'text.disabled',
-                fontSize: 14,
-                lineHeight: '20px',
-                mt: 2,
-              }}
-            >
-              需要认证以后才能访问
+        }}
+      >
+        <Stack alignItems='center'>
+          <Stack alignItems='center' gap={1} sx={{ mb: 5 }}>
+            <Image src={logoSrc} width={40} height={40} alt='logo' />
+            <Box sx={{ fontSize: 28, lineHeight: '36px', fontWeight: 'bold' }}>
+              {title}
             </Box>
           </Stack>
-        </Box>
+
+          <TextField
+            fullWidth
+            value={account}
+            autoFocus
+            onChange={e => setAccount(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder='账号'
+            disabled={loading}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <IconZhanghao sx={{ fontSize: 16, width: 24, mr: 1 }} />
+                ),
+              },
+            }}
+            sx={{
+              mb: 3,
+              borderRadius: '10px',
+              overflow: 'hidden',
+              '& .MuiInputBase-input': {
+                p: 2,
+                lineHeight: '24px',
+                height: '24px',
+              },
+              '& .MuiOutlinedInput-root': {
+                pr: '18px',
+                bgcolor: 'background.paper',
+                '& fieldset': {
+                  borderRadius: '10px',
+                  borderColor: 'divider',
+                  px: 2,
+                },
+              },
+            }}
+          />
+
+          <TextField
+            fullWidth
+            type='password'
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder='密码'
+            disabled={loading}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <IconMima sx={{ fontSize: 16, width: 24, mr: 1 }} />
+                ),
+              },
+            }}
+            sx={{
+              borderRadius: '10px',
+              overflow: 'hidden',
+              '& .MuiInputBase-input': {
+                p: 2,
+                lineHeight: '24px',
+                height: '24px',
+              },
+              '& .MuiOutlinedInput-root': {
+                pr: '18px',
+                bgcolor: 'background.paper',
+                '& fieldset': {
+                  borderRadius: '10px',
+                  borderColor: 'divider',
+                  px: 2,
+                },
+              },
+            }}
+          />
+
+          <Box sx={{ width: '100%', mt: 1, mb: 3 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={remember}
+                  onChange={event => setRemember(event.target.checked)}
+                />
+              }
+              label='记住密码'
+            />
+          </Box>
+
+          <Button
+            fullWidth
+            variant='contained'
+            onClick={handleLogin}
+            sx={{ height: '50px', fontSize: 16 }}
+            disabled={loading || !account.trim() || !password.trim()}
+          >
+            {loading ? '登录中...' : '登录'}
+          </Button>
+        </Stack>
       </Box>
-      <FooterProvider showBrand={false} />
-    </>
+    </Box>
   );
 }

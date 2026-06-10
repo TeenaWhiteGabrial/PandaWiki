@@ -39,16 +39,6 @@ func (r *NodeRepository) Create(ctx context.Context, req *domain.CreateNodeReq, 
 	}
 	nodeIDStr := nodeID.String()
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// check count
-		var count int64
-		if err := tx.Model(&domain.Node{}).
-			Where("kb_id = ?", req.KBID).
-			Count(&count).Error; err != nil {
-			return err
-		}
-		if count >= int64(req.MaxNode) {
-			return domain.ErrMaxNodeLimitReached
-		}
 		var maxPos float64
 		query := tx.WithContext(ctx).
 			Model(&domain.Node{}).
@@ -111,9 +101,7 @@ func (r *NodeRepository) Create(ctx context.Context, req *domain.CreateNodeReq, 
 				Message: "",
 			},
 			Permissions: domain.NodePermissions{
-				Answerable: consts.NodeAccessPermOpen,
-				Visitable:  consts.NodeAccessPermOpen,
-				Visible:    consts.NodeAccessPermOpen,
+				Inherit: lo.ToPtr(true),
 			},
 		}
 
@@ -793,7 +781,6 @@ func (r *NodeRepository) GetNodeReleaseListByKBID(ctx context.Context, kbID stri
 		Joins("LEFT JOIN nodes ON nodes.id = kb_release_node_releases.node_id").
 		Where("kb_release_node_releases.kb_id = ?", kbID).
 		Where("kb_release_node_releases.release_id = ?", kbRelease.ID).
-		Where("nodes.permissions->>'visible' != ?", consts.NodeAccessPermClosed).
 		Select("node_releases.node_id as id, node_releases.name, node_releases.type, node_releases.parent_id, nodes.position, node_releases.meta->>'emoji' as emoji, node_releases.updated_at, nodes.permissions, nodes.meta, kb_release_node_releases.nav_id")
 
 	if err := qs.Find(&nodes).Error; err != nil {
@@ -915,6 +902,15 @@ func (r *NodeRepository) UpdateNodeStatus(ctx context.Context, kbID, nodeID stri
 		Where("kb_id = ? AND id = ?", kbID, nodeID).
 		Updates(map[string]any{
 			"status": nodeStatus,
+		}).Error
+}
+
+func (r *NodeRepository) UpdateNodeRagInfo(ctx context.Context, kbID, nodeID string, ragInfo domain.RagInfo) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Node{}).
+		Where("kb_id = ? AND id = ?", kbID, nodeID).
+		Updates(map[string]any{
+			"rag_info": ragInfo,
 		}).Error
 }
 
@@ -1358,7 +1354,7 @@ func (r *NodeRepository) GetNodeListByStatus(ctx context.Context, kbId, status, 
 
 	if search != "" {
 		searchPattern := "%" + search + "%"
-		query = query.Where("name LIKE ? OR content LIKE ?", searchPattern, searchPattern)
+		query = query.Where("nodes.name LIKE ? OR nodes.content LIKE ?", searchPattern, searchPattern)
 	}
 
 	switch status {

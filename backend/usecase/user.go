@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,12 +18,13 @@ import (
 )
 
 type UserUsecase struct {
-	repo   *pg.UserRepository
-	logger *log.Logger
-	config *config.Config
+	repo           *pg.UserRepository
+	enterpriseRepo *pg.EnterpriseRepository
+	logger         *log.Logger
+	config         *config.Config
 }
 
-func NewUserUsecase(repo *pg.UserRepository, logger *log.Logger, config *config.Config) (*UserUsecase, error) {
+func NewUserUsecase(repo *pg.UserRepository, enterpriseRepo *pg.EnterpriseRepository, logger *log.Logger, config *config.Config) (*UserUsecase, error) {
 	if config.AdminPassword != "" {
 		if err := repo.UpsertDefaultUser(context.Background(), &domain.User{
 			ID:       uuid.New().String(),
@@ -34,14 +36,31 @@ func NewUserUsecase(repo *pg.UserRepository, logger *log.Logger, config *config.
 		}
 	}
 	return &UserUsecase{
-		repo:   repo,
-		logger: logger.WithModule("usecase.user"),
-		config: config,
+		repo:           repo,
+		enterpriseRepo: enterpriseRepo,
+		logger:         logger.WithModule("usecase.user"),
+		config:         config,
 	}, nil
 }
 
-func (u *UserUsecase) CreateUser(ctx context.Context, user *domain.User, edition consts.LicenseEdition) error {
-	return u.repo.CreateUser(ctx, user, edition)
+func (u *UserUsecase) CreateUser(ctx context.Context, user *domain.User, departmentIDs []string, primaryDepartment string, edition consts.LicenseEdition) error {
+	if user.Role == consts.UserRoleAdmin {
+		return errors.New("admin user cannot be created from ui")
+	}
+	if len(departmentIDs) == 0 {
+		return errors.New("department is required")
+	}
+	hasPrimary := false
+	for _, departmentID := range departmentIDs {
+		if departmentID == primaryDepartment {
+			hasPrimary = true
+			break
+		}
+	}
+	if !hasPrimary {
+		return errors.New("primary department must be included in departments")
+	}
+	return u.repo.CreateUser(ctx, user, departmentIDs, primaryDepartment, edition, u.enterpriseRepo)
 }
 
 func (u *UserUsecase) VerifyUserAndGenerateToken(ctx context.Context, req v1.LoginReq) (string, error) {
@@ -63,9 +82,12 @@ func (u *UserUsecase) GetUser(ctx context.Context, userID string) (*domain.User,
 	return u.repo.GetUser(ctx, userID)
 }
 
-func (u *UserUsecase) ListUsers(ctx context.Context) (*v1.UserListResp, error) {
-	// 获取所有用户列表
-	users, err := u.repo.ListUsers(ctx)
+func (u *UserUsecase) GetUserDepartments(ctx context.Context, userID string) ([]string, string, error) {
+	return u.enterpriseRepo.GetUserDepartments(ctx, userID)
+}
+
+func (u *UserUsecase) ListUsers(ctx context.Context, authUserID string, req *v1.UserListReq) (*v1.UserListResp, error) {
+	users, err := u.repo.ListUsersWithEnterpriseAccess(ctx, u.enterpriseRepo, authUserID, req)
 	if err != nil {
 		return nil, err
 	}

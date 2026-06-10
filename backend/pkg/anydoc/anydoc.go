@@ -31,11 +31,11 @@ type Client struct {
 }
 
 const (
-	uploaderDir        = "/image"
-	SpaceIdCloud       = "cloud_disk"
-	getUrlPath         = "/api/docs/url/list"
-	UrlExportPath      = "/api/docs/url/export"
-	TaskListPath       = "/api/tasks/list"
+	uploaderDir   = "/image"
+	SpaceIdCloud  = "cloud_disk"
+	getUrlPath    = "/api/docs/url/list"
+	UrlExportPath = "/api/docs/url/export"
+	TaskListPath  = "/api/tasks/list"
 )
 
 var (
@@ -52,6 +52,9 @@ func getAPIUploaderURL() string {
 
 func getCrawlerServiceHost() string {
 	if value := os.Getenv("ANYDOC_CRAWLER_BASE_URL"); value != "" {
+		return value
+	}
+	if value := os.Getenv("ANYDOC_BASE_URL"); value != "" {
 		return value
 	}
 	return "http://panda-wiki-crawler:8080"

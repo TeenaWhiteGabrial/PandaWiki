@@ -13,6 +13,8 @@ type APIHandlers struct {
 	KnowledgeBaseHandler *KnowledgeBaseHandler
 	NodeHandler          *NodeHandler
 	AppHandler           *AppHandler
+	MCPHandler           *MCPHandler
+	APITokenHandler      *APITokenHandler
 	FileHandler          *FileHandler
 	ModelHandler         *ModelHandler
 	ConversationHandler  *ConversationHandler
@@ -22,6 +24,7 @@ type APIHandlers struct {
 	CommentHandler       *CommentHandler
 	AuthV1Handler        *AuthV1Handler
 	NavHandler           *NavHandler
+	EnterpriseHandler    *EnterpriseHandler
 }
 
 var ProviderSet = wire.NewSet(
@@ -31,6 +34,8 @@ var ProviderSet = wire.NewSet(
 	handler.NewBaseHandler,
 	NewNodeHandler,
 	NewAppHandler,
+	NewMCPHandler,
+	NewAPITokenHandler,
 	NewConversationHandler,
 	NewUserHandler,
 	NewFileHandler,
@@ -42,6 +47,7 @@ var ProviderSet = wire.NewSet(
 	NewCommentHandler,
 	NewAuthV1Handler,
 	NewNavHandler,
+	NewEnterpriseHandler,
 
 	wire.Struct(new(APIHandlers), "*"),
 )

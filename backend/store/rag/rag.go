@@ -46,6 +46,11 @@ type Document struct {
 	Tags        []string         `json:"tags"`
 }
 
+type Dataset struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type RAGService interface {
 	CreateKnowledgeBase(ctx context.Context) (string, error)
 	UpsertRecords(ctx context.Context, req *UpsertRecordsRequest) (string, error)
@@ -54,6 +59,7 @@ type RAGService interface {
 	DeleteKnowledgeBase(ctx context.Context, datasetID string) error
 	UpdateDocumentGroupIDs(ctx context.Context, datasetID string, docID string, groupIds []int) error
 	ListDocuments(ctx context.Context, datasetID string, documentIDs []string) ([]Document, error)
+	ListKnowledgeBases(ctx context.Context) ([]Dataset, error)
 
 	GetModelList(ctx context.Context) ([]*domain.Model, error)
 	AddModel(ctx context.Context, model *domain.Model) (string, error)

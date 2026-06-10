@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Button, Stack, Typography } from '@mui/material';
 import { CusTabs, message, Modal } from '@ctzhian/ui';
 import {
@@ -13,7 +13,10 @@ import {
 } from '@/request/types';
 import { IconPCduan, IconYidongduan } from '@panda-wiki/icons';
 
-import { getApiV1AppDetail, putApiV1App } from '@/request/App';
+import {
+  getApiV1AppDetailCompat,
+  putApiV1AppCompat,
+} from '@/request/appCompat';
 import { useAppSelector, useAppDispatch } from '@/store';
 import { setAppPreviewData } from '@/store/slices/config';
 import ComponentBar from './components/components/ComponentBar';
@@ -72,8 +75,8 @@ const CustomModal = ({
   const [baseUrl, setBaseUrl] = useState('');
   const appPreviewData = useAppSelector(state => state.config.appPreviewData);
 
-  const getInfo = async () => {
-    const res = await getApiV1AppDetail({ kb_id: kb_id, type: '1' });
+  const getInfo = useCallback(async () => {
+    const res = await getApiV1AppDetailCompat({ type: '1' });
     const web_app_landing_configs = res.settings?.web_app_landing_configs || [];
 
     await Promise.all(
@@ -127,7 +130,7 @@ const CustomModal = ({
     );
     setInfo(res);
     handleInitComponents(res);
-  };
+  }, [kb_id]);
   const onSubmit = () => {
     if (!info || !appPreviewData) return;
 
@@ -159,7 +162,7 @@ const CustomModal = ({
       })
       .filter(Boolean);
 
-    putApiV1App(
+    putApiV1AppCompat(
       { id: info.id! },
       {
         settings: {
@@ -167,7 +170,6 @@ const CustomModal = ({
           ...appPreviewData.settings,
           web_app_landing_configs: submitWebAppLandingConfigs,
         },
-        kb_id,
       },
     ).then(() => {
       refresh({
@@ -190,71 +192,76 @@ const CustomModal = ({
     setScale(1);
   };
 
-  const handleInitComponents = (info: DomainAppDetailResp) => {
-    const mergeInfo = { ...info };
-    const web_app_landing_configs =
-      info.settings?.web_app_landing_configs || [];
-    if (web_app_landing_configs.length === 0) {
-      mergeInfo.settings = {
-        ...mergeInfo.settings,
-        web_app_landing_configs: [
-          {
-            type: 'banner',
-            id: bannerRefId.current,
-            ...DEFAULT_DATA.banner,
-          } as WebAppLandingConfigWithId,
-        ],
-      };
-    } else {
-      const newWebAppLandingConfigs = web_app_landing_configs.map(item => {
-        return {
-          id:
-            item.type === 'banner'
-              ? bannerRefId.current
-              : (item as any).id || uuidv4(),
-          type: item.type,
-          ...(item as any)[
-            TYPE_TO_CONFIG_LABEL[item.type as keyof typeof TYPE_TO_CONFIG_LABEL]
+  const handleInitComponents = useCallback(
+    (info: DomainAppDetailResp) => {
+      const mergeInfo = { ...info };
+      const web_app_landing_configs =
+        info.settings?.web_app_landing_configs || [];
+      if (web_app_landing_configs.length === 0) {
+        mergeInfo.settings = {
+          ...mergeInfo.settings,
+          web_app_landing_configs: [
+            {
+              type: 'banner',
+              id: bannerRefId.current,
+              ...DEFAULT_DATA.banner,
+            } as WebAppLandingConfigWithId,
           ],
         };
-      });
-
-      mergeInfo.settings = {
-        ...mergeInfo.settings,
-        web_app_landing_configs: newWebAppLandingConfigs,
-      };
-
-      setComponents(pre => {
-        let customComponents = newWebAppLandingConfigs.map(item => {
+      } else {
+        const newWebAppLandingConfigs = web_app_landing_configs.map(item => {
           return {
-            ...COMPONENTS_MAP[item.type as keyof typeof COMPONENTS_MAP],
-            id: item.id,
+            id:
+              item.type === 'banner'
+                ? bannerRefId.current
+                : (item as any).id || uuidv4(),
+            type: item.type,
+            ...(item as any)[
+              TYPE_TO_CONFIG_LABEL[
+                item.type as keyof typeof TYPE_TO_CONFIG_LABEL
+              ]
+            ],
           };
         });
-        // @ts-expect-error ignore
-        customComponents = [pre[0], ...customComponents, pre[pre.length - 1]];
 
-        if (propsComponents) {
-          customComponents = customComponents.map(item => ({
-            ...item,
-            hidden: !propsComponents?.includes(item.name),
-          }));
-        }
-        if ((disabledComponents || []).length > 0) {
-          customComponents = customComponents.map(item => ({
-            ...item,
-            disabled: disabledComponents?.includes(item.name) || false,
-          }));
-        }
-        setCurComponent(
-          customComponents.find(item => !item.disabled && !item.hidden) ||
-            customComponents[0],
-        );
-        return customComponents;
-      });
-    }
-    dispatch(setAppPreviewData(mergeInfo));
-  };
+        mergeInfo.settings = {
+          ...mergeInfo.settings,
+          web_app_landing_configs: newWebAppLandingConfigs,
+        };
+
+        setComponents(pre => {
+          let customComponents = newWebAppLandingConfigs.map(item => {
+            return {
+              ...COMPONENTS_MAP[item.type as keyof typeof COMPONENTS_MAP],
+              id: item.id,
+            };
+          });
+          // @ts-expect-error ignore
+          customComponents = [pre[0], ...customComponents, pre[pre.length - 1]];
+
+          if (propsComponents) {
+            customComponents = customComponents.map(item => ({
+              ...item,
+              hidden: !propsComponents?.includes(item.name),
+            }));
+          }
+          if ((disabledComponents || []).length > 0) {
+            customComponents = customComponents.map(item => ({
+              ...item,
+              disabled: disabledComponents?.includes(item.name) || false,
+            }));
+          }
+          setCurComponent(
+            customComponents.find(item => !item.disabled && !item.hidden) ||
+              customComponents[0],
+          );
+          return customComponents;
+        });
+      }
+      dispatch(setAppPreviewData(mergeInfo));
+    },
+    [disabledComponents, dispatch, propsComponents],
+  );
 
   useEffect(() => {
     if (open && kb_id) {
@@ -286,7 +293,7 @@ const CustomModal = ({
       });
       getInfo();
     }
-  }, [kb_id, open]);
+  }, [getInfo, kb_id, open]);
 
   useEffect(() => {
     if (!open) {

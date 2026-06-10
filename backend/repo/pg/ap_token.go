@@ -2,7 +2,9 @@ package pg
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -55,4 +57,39 @@ func (r *APITokenRepo) GetByTokenWithCache(ctx context.Context, token string) (*
 	}
 
 	return &apiToken, nil
+}
+
+func (r *APITokenRepo) Create(ctx context.Context, token *domain.APIToken) error {
+	if err := r.db.WithContext(ctx).Create(token).Error; err != nil {
+		return fmt.Errorf("create api token failed: %w", err)
+	}
+	return nil
+}
+
+func (r *APITokenRepo) ListByUserAndKB(ctx context.Context, userID, kbID string) ([]domain.APIToken, error) {
+	var tokens []domain.APIToken
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND kb_id = ?", userID, kbID).
+		Order("created_at desc").
+		Find(&tokens).Error; err != nil {
+		return nil, fmt.Errorf("list api tokens failed: %w", err)
+	}
+	return tokens, nil
+}
+
+func (r *APITokenRepo) DeleteByID(ctx context.Context, id, userID, kbID string) error {
+	if err := r.db.WithContext(ctx).
+		Where("id = ? AND user_id = ? AND kb_id = ?", id, userID, kbID).
+		Delete(&domain.APIToken{}).Error; err != nil {
+		return fmt.Errorf("delete api token failed: %w", err)
+	}
+	return nil
+}
+
+func (r *APITokenRepo) BuildToken() (string, error) {
+	buf := make([]byte, 24)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate api token failed: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }

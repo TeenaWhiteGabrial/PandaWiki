@@ -94,6 +94,28 @@ func NewAppUsecase(
 	return u
 }
 
+func (u *AppUsecase) GetDefaultKnowledgeBaseByUser(ctx context.Context) (*domain.KnowledgeBaseListItem, error) {
+	knowledgeBases, err := u.kbRepo.GetKnowledgeBaseListByUserId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(knowledgeBases) == 0 {
+		return nil, fmt.Errorf("knowledge base not found")
+	}
+	return knowledgeBases[0], nil
+}
+
+func (u *AppUsecase) GetDefaultKnowledgeBase(ctx context.Context) (*domain.KnowledgeBaseListItem, error) {
+	knowledgeBases, err := u.kbRepo.GetKnowledgeBaseList(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(knowledgeBases) == 0 {
+		return nil, fmt.Errorf("knowledge base not found")
+	}
+	return knowledgeBases[0], nil
+}
+
 func (u *AppUsecase) ValidateUpdateApp(ctx context.Context, id string, req *domain.UpdateAppReq) error {
 	app, err := u.repo.GetAppDetail(ctx, id)
 	if err != nil {
@@ -163,6 +185,14 @@ func (u *AppUsecase) ValidateUpdateApp(ctx context.Context, id string, req *doma
 }
 
 func (u *AppUsecase) UpdateApp(ctx context.Context, id string, appRequest *domain.UpdateAppReq) error {
+	if appRequest.KbID == "" {
+		kb, err := u.GetDefaultKnowledgeBaseByUser(ctx)
+		if err != nil {
+			return err
+		}
+		appRequest.KbID = kb.ID
+	}
+
 	if err := u.handleBotAuths(ctx, id, appRequest.Settings); err != nil {
 		return err
 	}
@@ -950,50 +980,50 @@ func (u *AppUsecase) GetOpenAIAPIAppInfo(ctx context.Context, kbID string) (*dom
 }
 
 // filterNodesByPermissions 对节点列表进行权限过滤
-func (u *AppUsecase) filterNodesByPermissions(nodes []*domain.RecommendNodeListResp, nodeVisibleGroupIds, nodeVisitableGroupIds []string) []*domain.RecommendNodeListResp {
+func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*domain.RecommendNodeListResp, authId uint) ([]*domain.RecommendNodeListResp, error) {
+	shareAccess, err := u.nodeUsecase.enterprise.BuildShareAccessContext(ctx, authId)
+	if err != nil {
+		return nil, err
+	}
+
 	filteredNodes := make([]*domain.RecommendNodeListResp, 0)
 
 	for i, node := range nodes {
-		// 处理 Visitable 权限
-		switch node.Permissions.Visitable {
-		case consts.NodeAccessPermClosed:
-			nodes[i].Summary = ""
-		case consts.NodeAccessPermPartial:
-			if !slices.Contains(nodeVisitableGroupIds, node.ID) {
-				nodes[i].Summary = ""
-			}
+		resolvedPermissions, resolveErr := u.nodeUsecase.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
+		if resolveErr == nil {
+			node.Permissions = resolvedPermissions
 		}
 
-		// 处理 Visible 权限
-		switch node.Permissions.Visible {
-		case consts.NodeAccessPermOpen:
+		if u.nodeUsecase.enterprise.CanVisible(node.Permissions, shareAccess) {
 			filteredNodes = append(filteredNodes, nodes[i])
-		case consts.NodeAccessPermPartial:
-			if slices.Contains(nodeVisibleGroupIds, node.ID) {
-				filteredNodes = append(filteredNodes, nodes[i])
-			}
+		} else {
+			nodes[i].Summary = ""
 		}
 
 		// 如果是文件夹类型，处理其子节点的权限
 		if node.Type == domain.NodeTypeFolder {
 			newFileNodes := make([]*domain.RecommendNodeListResp, 0)
 
-			for i2, recommendNode := range node.RecommendNodes {
+			for i2 := range node.RecommendNodes {
 				node.RecommendNodes[i2].Summary = ""
-				switch recommendNode.Permissions.Visible {
-				case consts.NodeAccessPermOpen:
+				resolvedChildPermissions, resolveErr := u.nodeUsecase.enterprise.ResolveShareNodePermissions(
+					ctx,
+					node.RecommendNodes[i2].ID,
+					node.RecommendNodes[i2].ParentID,
+					node.RecommendNodes[i2].Permissions,
+				)
+				if resolveErr == nil {
+					node.RecommendNodes[i2].Permissions = resolvedChildPermissions
+				}
+				if u.nodeUsecase.enterprise.CanVisible(node.RecommendNodes[i2].Permissions, shareAccess) {
 					newFileNodes = append(newFileNodes, node.RecommendNodes[i2])
-				case consts.NodeAccessPermPartial:
-					if slices.Contains(nodeVisibleGroupIds, node.RecommendNodes[i2].ID) {
-						newFileNodes = append(newFileNodes, node.RecommendNodes[i2])
-					}
 				}
 			}
 			node.RecommendNodes = newFileNodes
 		}
 	}
 
-	return filteredNodes
+	return filteredNodes, nil
 }
 
 func (u *AppUsecase) GetRecommendNodesByIds(ctx context.Context, kbId string, nodeIds []string, authId uint) ([]*domain.RecommendNodeListResp, error) {
@@ -1005,32 +1035,10 @@ func (u *AppUsecase) GetRecommendNodesByIds(ctx context.Context, kbId string, no
 		return nil, err
 	}
 
-	nodeVisibleGroupIds, err := u.nodeUsecase.GetNodeIdsByAuthId(ctx, authId, consts.NodePermNameVisible)
-	if err != nil {
-		return nil, err
-	}
-
-	nodeVisitableGroupIds, err := u.nodeUsecase.GetNodeIdsByAuthId(ctx, authId, consts.NodePermNameVisitable)
-	if err != nil {
-		return nil, err
-	}
-
-	// 使用抽象的权限过滤方法
-	return u.filterNodesByPermissions(nodes, nodeVisibleGroupIds, nodeVisitableGroupIds), nil
+	return u.filterNodesByPermissions(ctx, nodes, authId)
 }
 
 func (u *AppUsecase) GetRecommendNodesByNavIds(ctx context.Context, kbId string, navIds []string, authId uint) ([]*domain.RecommendNodeListResp, error) {
-	// 获取用户的可见和可访问权限节点列表
-	nodeVisibleGroupIds, err := u.nodeUsecase.GetNodeIdsByAuthId(ctx, authId, consts.NodePermNameVisible)
-	if err != nil {
-		return nil, err
-	}
-
-	nodeVisitableGroupIds, err := u.nodeUsecase.GetNodeIdsByAuthId(ctx, authId, consts.NodePermNameVisitable)
-	if err != nil {
-		return nil, err
-	}
-
 	navList, err := u.navRepo.GetListByIds(ctx, kbId, navIds)
 	if err != nil {
 		return nil, err
@@ -1050,7 +1058,10 @@ func (u *AppUsecase) GetRecommendNodesByNavIds(ctx context.Context, kbId string,
 		return nil, err
 	}
 
-	filteredAll := u.filterNodesByPermissions(allNodes, nodeVisibleGroupIds, nodeVisitableGroupIds)
+	filteredAll, err := u.filterNodesByPermissions(ctx, allNodes, authId)
+	if err != nil {
+		return nil, err
+	}
 
 	// 按 navId 分组，保持 navIds 的原始顺序
 	nodesByNav := make(map[string][]*domain.RecommendNodeListResp, len(navIds))

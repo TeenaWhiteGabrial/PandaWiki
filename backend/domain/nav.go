@@ -7,6 +7,7 @@ type Nav struct {
 	Name      string    `json:"name" gorm:"column:name;type:text;not null"`
 	KbID      string    `json:"kb_id" gorm:"column:kb_id;type:text;not null"`
 	Position  float64   `json:"position"`
+	Permissions NodePermissions `json:"permissions" gorm:"type:jsonb"`
 	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
 	UpdatedAt time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
@@ -23,6 +24,7 @@ type NavRelease struct {
 	KbID      string    `json:"kb_id" gorm:"column:kb_id;type:text;not null;index"`
 	Name      string    `json:"name" gorm:"column:name;type:text;not null"`
 	Position  float64   `json:"position"`
+	Permissions NodePermissions `json:"permissions" gorm:"type:jsonb"`
 	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
 }
 

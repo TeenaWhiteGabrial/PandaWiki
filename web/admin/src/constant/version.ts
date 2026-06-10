@@ -130,7 +130,7 @@ export const VERSION_INFO: Record<ConstsLicenseEdition, VersionInfo> = {
     label: '基础配置',
     features: {
       wikiCount: 1,
-      docCountPerWiki: 300,
+      docCountPerWiki: Infinity,
       adminCount: 1,
       adminPermissionControl: FeatureStatus.NOT_SUPPORTED,
       seoConfig: FeatureStatus.BASIC,
@@ -158,7 +158,7 @@ export const VERSION_INFO: Record<ConstsLicenseEdition, VersionInfo> = {
     label: '增强配置',
     features: {
       wikiCount: 10,
-      docCountPerWiki: 10000,
+      docCountPerWiki: Infinity,
       adminCount: 20,
       adminPermissionControl: FeatureStatus.SUPPORTED,
       seoConfig: FeatureStatus.ADVANCED,
@@ -186,7 +186,7 @@ export const VERSION_INFO: Record<ConstsLicenseEdition, VersionInfo> = {
     label: '扩展配置',
     features: {
       wikiCount: 20,
-      docCountPerWiki: 10000,
+      docCountPerWiki: Infinity,
       adminCount: 50,
       adminPermissionControl: FeatureStatus.SUPPORTED,
       seoConfig: FeatureStatus.ADVANCED,

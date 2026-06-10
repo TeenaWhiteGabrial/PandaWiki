@@ -1,15 +1,16 @@
 import { updateKnowledgeBase } from '@/api';
 import Card from '@/components/Card';
 import { useAppDispatch, useAppSelector } from '@/store';
-import { setKbList } from '@/store/slices/config';
+import { setKbDetail, setKbList } from '@/store/slices/config';
 import { Box, Button, Stack, TextField } from '@mui/material';
 import { Ellipsis, message } from '@ctzhian/ui';
 import { useEffect, useState } from 'react';
 
 const ConfigKB = () => {
   const dispatch = useAppDispatch();
-  const { kb_id, kbList } = useAppSelector(state => state.config);
-  const kb = kbList?.find(item => item.id === kb_id);
+  const { kb_id, kbList, kbDetail } = useAppSelector(state => state.config);
+  const kb = kbDetail?.id === kb_id ? kbDetail : null;
+  const accessSettings = kb?.access_settings;
 
   const [editName, setEditName] = useState(false);
   const [name, setName] = useState('');
@@ -18,6 +19,14 @@ const ConfigKB = () => {
     if (!kb_id) return;
     updateKnowledgeBase({ id: kb_id, name }).then(() => {
       message.success('保存成功');
+      if (kb) {
+        dispatch(
+          setKbDetail({
+            ...kb,
+            name,
+          }),
+        );
+      }
       dispatch(
         setKbList(
           kbList?.map(item => (item.id === kb_id ? { ...item, name } : item)),
@@ -28,10 +37,8 @@ const ConfigKB = () => {
   };
 
   useEffect(() => {
-    if (!kb_id || !kbList) return;
-    const kb = kbList.find(item => item.id === kb_id);
     setName(kb?.name || '');
-  }, [kb_id, kbList]);
+  }, [kb]);
 
   return (
     <Card sx={{ p: 2 }}>
@@ -94,9 +101,9 @@ const ConfigKB = () => {
           gap={1}
           sx={{ fontSize: 14, lineHeight: '36px', fontWeight: 700 }}
         >
-          {kb?.access_settings?.ports &&
-            kb.access_settings.ports.length > 0 &&
-            kb.access_settings.hosts && (
+          {accessSettings?.ports &&
+            accessSettings.ports.length > 0 &&
+            accessSettings.hosts && (
               <Box
                 sx={{
                   width: 300,
@@ -109,41 +116,37 @@ const ConfigKB = () => {
                   },
                 }}
                 onClick={() => {
-                  if (!kb.access_settings.hosts || !kb.access_settings.ports)
-                    return;
-                  if (kb.access_settings.hosts[0] === '*') {
+                  if (!accessSettings.hosts || !accessSettings.ports) return;
+                  if (accessSettings.hosts[0] === '*') {
                     window.open(
-                      `http://${window.location.hostname}:${kb.access_settings.ports[0]}`,
+                      `http://${window.location.hostname}:${accessSettings.ports[0]}`,
                       '_blank',
                     );
                     return;
                   }
                   window.open(
-                    `http://${kb.access_settings.hosts[0]}:${kb.access_settings.ports[0]}`,
+                    `http://${accessSettings.hosts[0]}:${accessSettings.ports[0]}`,
                     '_blank',
                   );
                 }}
-              >{`http://${kb.access_settings.hosts[0] === '*' ? window.location.hostname : kb.access_settings.hosts[0]}:${kb.access_settings.ports[0]}`}</Box>
+              >{`http://${accessSettings.hosts[0] === '*' ? window.location.hostname : accessSettings.hosts[0]}:${accessSettings.ports[0]}`}</Box>
             )}
-          {kb?.access_settings?.ssl_ports &&
-            kb.access_settings.ssl_ports.length > 0 &&
-            kb.access_settings.hosts && (
+          {accessSettings?.ssl_ports &&
+            accessSettings.ssl_ports.length > 0 &&
+            accessSettings.hosts && (
               <Box
                 onClick={() => {
-                  if (
-                    !kb.access_settings.hosts ||
-                    !kb.access_settings.ssl_ports
-                  )
+                  if (!accessSettings.hosts || !accessSettings.ssl_ports)
                     return;
-                  if (kb.access_settings.hosts[0] === '*') {
+                  if (accessSettings.hosts[0] === '*') {
                     window.open(
-                      `https://${window.location.hostname}:${kb.access_settings.ssl_ports[0]}`,
+                      `https://${window.location.hostname}:${accessSettings.ssl_ports[0]}`,
                       '_blank',
                     );
                     return;
                   }
                   window.open(
-                    `https://${kb.access_settings.hosts[0]}:${kb.access_settings.ssl_ports[0]}`,
+                    `https://${accessSettings.hosts[0]}:${accessSettings.ssl_ports[0]}`,
                     '_blank',
                   );
                 }}
@@ -157,7 +160,7 @@ const ConfigKB = () => {
                     color: 'primary.main',
                   },
                 }}
-              >{`https://${kb.access_settings.hosts[0] === '*' ? window.location.hostname : kb.access_settings.hosts[0]}`}</Box>
+              >{`https://${accessSettings.hosts[0] === '*' ? window.location.hostname : accessSettings.hosts[0]}`}</Box>
             )}
         </Stack>
       </Stack>

@@ -11,7 +11,6 @@ var ErrSyncCaddyConfigFailed = errors.New("failed to sync caddy config")
 var ErrNodeParentIDInIDs = errors.New("node.parent_id in ids, can't delete")
 
 var ErrPermissionDenied = errors.New("permission denied")
+var ErrNodePermissionOutOfParentScope = errors.New("node permission exceeds parent scope")
 
 var ErrInternalServerError = errors.New("internal server error")
-
-var ErrMaxNodeLimitReached = errors.New("max node limit reached")

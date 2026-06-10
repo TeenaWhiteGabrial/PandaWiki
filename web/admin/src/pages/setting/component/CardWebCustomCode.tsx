@@ -5,8 +5,7 @@ import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { DomainKnowledgeBaseDetail } from '@/request/types';
 import { SettingCardItem, FormItem } from './Common';
-import { useAppSelector } from '@/store';
-import { putApiV1App } from '@/request/App';
+import { putApiV1AppCompat } from '@/request/appCompat';
 
 interface CardWebCustomCodeProps {
   id: string;
@@ -16,7 +15,6 @@ interface CardWebCustomCodeProps {
 
 const CardWebCustomCode = ({ id, data, refresh }: CardWebCustomCodeProps) => {
   const [isEdit, setIsEdit] = useState(false);
-  const { kb_id } = useAppSelector(state => state.config);
   const {
     handleSubmit,
     control,
@@ -30,10 +28,10 @@ const CardWebCustomCode = ({ id, data, refresh }: CardWebCustomCodeProps) => {
   });
 
   const onSubmit = handleSubmit((value: CustomCodeSetting) => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id },
       // @ts-expect-error 类型不匹配
-      { kb_id, settings: { ...data.settings, ...value } },
+      { settings: { ...data.settings, ...value } },
     ).then(() => {
       message.success('保存成功');
       refresh(value);
@@ -46,7 +44,7 @@ const CardWebCustomCode = ({ id, data, refresh }: CardWebCustomCodeProps) => {
     setValue('head_code', data.settings?.head_code || '');
     // @ts-expect-error 类型不匹配
     setValue('body_code', data.settings?.body_code || '');
-  }, [data]);
+  }, [data, setValue]);
 
   return (
     <SettingCardItem title='自定义代码' isEdit={isEdit} onSubmit={onSubmit}>

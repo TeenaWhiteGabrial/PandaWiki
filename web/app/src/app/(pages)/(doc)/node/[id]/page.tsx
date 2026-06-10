@@ -4,6 +4,8 @@ import { formatMeta } from '@/utils';
 import Doc from '@/views/node';
 import { ResolvingMetadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export interface PageProps {
   params: Promise<{ id: string }>;
 }

@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/samber/lo"
 	"gorm.io/gorm"
 
-	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/repo/pg"
@@ -29,12 +27,13 @@ type ChatUsecase struct {
 	kbRepo              *pg.KnowledgeBaseRepository
 	nodeRepo            *pg.NodeRepository
 	AuthRepo            *pg.AuthRepo
+	enterpriseUsecase   *EnterpriseUsecase
 	logger              *log.Logger
 	modelkit            *modelkit.ModelKit
 }
 
 func NewChatUsecase(llmUsecase *LLMUsecase, kbRepo *pg.KnowledgeBaseRepository, conversationUsecase *ConversationUsecase, modelUsecase *ModelUsecase, appRepo *pg.AppRepository,
-	blockWordRepo *pg.BlockWordRepo, nodeRepo *pg.NodeRepository, authRepo *pg.AuthRepo, logger *log.Logger) (*ChatUsecase, error) {
+	blockWordRepo *pg.BlockWordRepo, nodeRepo *pg.NodeRepository, authRepo *pg.AuthRepo, enterpriseUsecase *EnterpriseUsecase, logger *log.Logger) (*ChatUsecase, error) {
 	modelkit := modelkit.NewModelKit(logger.Logger)
 	u := &ChatUsecase{
 		llmUsecase:          llmUsecase,
@@ -45,6 +44,7 @@ func NewChatUsecase(llmUsecase *LLMUsecase, kbRepo *pg.KnowledgeBaseRepository, 
 		kbRepo:              kbRepo,
 		nodeRepo:            nodeRepo,
 		AuthRepo:            authRepo,
+		enterpriseUsecase:   enterpriseUsecase,
 		logger:              logger.WithModule("usecase.chat"),
 		modelkit:            modelkit,
 	}
@@ -224,7 +224,14 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 			return
 		}
 
-		messages, rankedNodes, err := u.llmUsecase.BuildConversationMessageWithRAG(ctx, req.ConversationID, req.KBID, groupIds, req.Prompt)
+		shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.Info.UserInfo.AuthUserID)
+		if err != nil {
+			u.logger.Error("failed to build enterprise access context", log.Error(err))
+			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to build enterprise access context"}
+			return
+		}
+
+		messages, rankedNodes, err := u.llmUsecase.BuildConversationMessageWithRAG(ctx, req.ConversationID, req.KBID, groupIds, shareAccess, req.Prompt)
 		if err != nil {
 			u.logger.Error("build messages failed", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: err.Error()}
@@ -438,6 +445,11 @@ func (u *ChatUsecase) Search(ctx context.Context, req *domain.ChatSearchReq) (*d
 	if err != nil {
 		return nil, err
 	}
+	shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.AuthUserID)
+	if err != nil {
+		return nil, err
+	}
+
 	kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, req.KBID)
 	if err != nil {
 		return nil, err
@@ -463,32 +475,18 @@ func (u *ChatUsecase) Search(ctx context.Context, req *domain.ChatSearchReq) (*d
 	if err != nil {
 		return nil, err
 	}
-
-	// Get user's visitable node IDs (for partial permission check)
-	userGroupIds := lo.Map(groupIds, func(id int, _ int) uint {
-		return uint(id)
-	})
-	visitableNodeGroups, err := u.nodeRepo.GetNodeGroupsByGroupIdsPerm(ctx, userGroupIds, consts.NodePermNameVisitable)
-	if err != nil {
-		return nil, err
+	for _, nodeInfo := range nodesMap {
+		resolvedPermissions, resolveErr := u.enterpriseUsecase.ResolveNodePermissions(ctx, nodeInfo)
+		if resolveErr == nil {
+			nodeInfo.Permissions = resolvedPermissions
+		}
 	}
-	visitableNodeIds := lo.Map(visitableNodeGroups, func(v domain.NodeAuthGroup, _ int) string {
-		return v.NodeID
-	})
 
 	resp := domain.ChatSearchResp{}
 	for _, node := range rankedNodes {
-		// Check visitable permission
 		if nodeInfo, ok := nodesMap[node.NodeID]; ok {
-			switch nodeInfo.Permissions.Visitable {
-			case consts.NodeAccessPermClosed:
-				// Skip nodes with closed visitable permission
+			if !u.enterpriseUsecase.CanVisitable(nodeInfo.Permissions, shareAccess) {
 				continue
-			case consts.NodeAccessPermPartial:
-				// Skip if user doesn't have visitable permission for this node
-				if !slices.Contains(visitableNodeIds, node.NodeID) {
-					continue
-				}
 			}
 		}
 

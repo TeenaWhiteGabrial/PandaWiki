@@ -2,7 +2,6 @@ import { getBasePath } from './getBasePath';
 export async function getServerHeader(): Promise<Record<string, string>> {
   const { headers, cookies } = await import('next/headers');
   const headersList = await headers();
-  const kb_id = headersList.get('x-kb-id') || process.env.DEV_KB_ID || '';
   const cookieStore = await cookies();
 
   // 手动构建 cookie header，避免转义问题
@@ -14,10 +13,21 @@ export async function getServerHeader(): Promise<Record<string, string>> {
     })
     .join('; ');
 
-  return {
-    'x-kb-id': kb_id,
+  const requestHeaders: Record<string, string> = {
     cookie: cookieHeader,
   };
+
+  const token = cookieStore.get('panda_wiki_token')?.value;
+  if (token) {
+    requestHeaders.Authorization = `Bearer ${decodeURIComponent(token)}`;
+  }
+
+  const kbID = headersList.get('x-kb-id');
+  if (kbID) {
+    requestHeaders['x-kb-id'] = kbID;
+  }
+
+  return requestHeaders;
 }
 
 export async function getServerPathname(): Promise<string> {

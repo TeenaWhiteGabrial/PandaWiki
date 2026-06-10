@@ -532,7 +532,7 @@ func (r *KnowledgeBaseRepository) GetKnowledgeBaseListByUserId(ctx context.Conte
 			return nil, err
 		}
 
-		if user.Role == consts.UserRoleAdmin {
+		if user.Role == consts.UserRoleAdmin || user.Role == consts.UserRoleManager {
 			if err := r.db.WithContext(ctx).
 				Model(&domain.KnowledgeBase{}).
 				Order("created_at ASC").
@@ -567,6 +567,27 @@ func (r *KnowledgeBaseRepository) UpdateDatasetID(ctx context.Context, kbID, dat
 		Model(&domain.KnowledgeBase{}).
 		Where("id = ?", kbID).
 		Update("dataset_id", datasetID).Error
+}
+
+func (r *KnowledgeBaseRepository) resolveSingleKnowledgeBaseDatasetID(ctx context.Context, kb *domain.KnowledgeBase) error {
+	if kb == nil {
+		return fmt.Errorf("knowledge base is nil")
+	}
+	datasets, err := r.rag.ListKnowledgeBases(ctx)
+	if err != nil {
+		return fmt.Errorf("list rag datasets failed: %w", err)
+	}
+	if len(datasets) != 1 {
+		return nil
+	}
+	if kb.DatasetID == datasets[0].ID {
+		return nil
+	}
+	kb.DatasetID = datasets[0].ID
+	if err := r.UpdateDatasetID(ctx, kb.ID, kb.DatasetID); err != nil {
+		return fmt.Errorf("update knowledge base dataset_id failed: %w", err)
+	}
+	return nil
 }
 
 func (r *KnowledgeBaseRepository) UpdateKnowledgeBase(ctx context.Context, req *domain.UpdateKnowledgeBaseReq) (bool, error) {
@@ -621,6 +642,9 @@ func (r *KnowledgeBaseRepository) UpdateKnowledgeBase(ctx context.Context, req *
 func (r *KnowledgeBaseRepository) GetKnowledgeBaseByID(ctx context.Context, kbID string) (*domain.KnowledgeBase, error) {
 	var kb domain.KnowledgeBase
 	if err := r.db.WithContext(ctx).Where("id = ?", kbID).First(&kb).Error; err != nil {
+		return nil, err
+	}
+	if err := r.resolveSingleKnowledgeBaseDatasetID(ctx, &kb); err != nil {
 		return nil, err
 	}
 	return &kb, nil
@@ -718,13 +742,14 @@ func (r *KnowledgeBaseRepository) CreateKBRelease(ctx context.Context, release *
 			now := time.Now()
 			for i, nav := range navs {
 				navReleases[i] = &domain.NavRelease{
-					ID:        uuid.New().String(),
-					NavID:     nav.ID,
-					ReleaseID: release.ID,
-					KbID:      release.KBID,
-					Name:      nav.Name,
-					Position:  nav.Position,
-					CreatedAt: now,
+					ID:          uuid.New().String(),
+					NavID:       nav.ID,
+					ReleaseID:   release.ID,
+					KbID:        release.KBID,
+					Name:        nav.Name,
+					Position:    nav.Position,
+					Permissions: nav.Permissions,
+					CreatedAt:   now,
 				}
 			}
 			if err := tx.CreateInBatches(&navReleases, 2000).Error; err != nil {
@@ -855,6 +880,9 @@ func (r *KnowledgeBaseRepository) GetKBPermByUserId(ctx context.Context, kbId st
 		}
 		if user.Role == consts.UserRoleAdmin {
 			return consts.UserKBPermissionFullControl, nil
+		}
+		if user.Role == consts.UserRoleManager {
+			return consts.UserKBPermissionDocManage, nil
 		}
 		kbUser, err := r.GetKBUser(ctx, kbId, authInfo.UserId)
 		if err != nil {

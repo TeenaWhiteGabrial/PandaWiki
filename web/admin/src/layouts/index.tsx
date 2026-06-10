@@ -2,12 +2,10 @@ import { Box } from '@mui/material';
 import { Outlet, useLocation } from 'react-router-dom';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
-import KBCreate from '@/components/KB/KBCreate';
-import CreateWikiModal from '@/components/CreateWikiModal';
 import { getApiV1ModelList } from '@/request/Model';
 import { getApiV1KnowledgeBaseList } from '@/request/KnowledgeBase';
-import { getApiV1User } from '@/request/User';
-import { useAppDispatch, useAppSelector } from '@/store';
+import { getApiV1UserCompat } from '@/request/userCompat';
+import { useAppDispatch } from '@/store';
 import {
   setModelStatus,
   setModelList,
@@ -23,7 +21,6 @@ const useAuth = (hasAuth: boolean) => {
   const { pathname } = useLocation();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const kb_id = useAppSelector(state => state.config.kb_id);
   const getModel = () => {
     return getApiV1ModelList().then(res => {
       // @ts-expect-error 类型不匹配
@@ -53,7 +50,7 @@ const useAuth = (hasAuth: boolean) => {
   };
 
   const getUser = () => {
-    return getApiV1User().then(res => {
+    return getApiV1UserCompat().then(res => {
       dispatch(setUser(res));
       return res;
     });
@@ -66,9 +63,10 @@ const useAuth = (hasAuth: boolean) => {
           ? getModel()
           : Promise.resolve(null),
         getKbList(),
-      ]).then(([modelStatus, kbList]) => {
+      ]).then(([, kbList]) => {
         if (
-          user.role === ConstsUserRole.UserRoleUser &&
+          (user.role === ConstsUserRole.UserRoleUser ||
+            user.role === ConstsUserRole.UserRoleManager) &&
           kbList.length === 0 &&
           pathname !== '/login'
         ) {
@@ -82,6 +80,7 @@ const useAuth = (hasAuth: boolean) => {
     if (hasAuth) {
       initData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasAuth]);
 };
 
@@ -112,8 +111,6 @@ export const MainLayout = () => {
           <Outlet />
         </Box>
       </Box>
-      {/* <KBCreate /> */}
-      <CreateWikiModal />
     </>
   );
 };

@@ -23,6 +23,17 @@ type ShareAppHandler struct {
 	usecase *usecase.AppUsecase
 }
 
+func (h *ShareAppHandler) resolveKBID(ctx context.Context, kbID string) (string, error) {
+	if kbID != "" {
+		return kbID, nil
+	}
+	kb, err := h.usecase.GetDefaultKnowledgeBase(ctx)
+	if err != nil {
+		return "", err
+	}
+	return kb.ID, nil
+}
+
 func NewShareAppHandler(
 	e *echo.Echo,
 	baseHandler *handler.BaseHandler,
@@ -68,10 +79,11 @@ func NewShareAppHandler(
 //	@Success		200		{object}	domain.Response{data=domain.AppInfoResp}
 //	@Router			/share/v1/app/web/info [get]
 func (h *ShareAppHandler) GetWebAppInfo(c echo.Context) error {
-	kbID := c.Request().Header.Get("X-KB-ID")
-	if kbID == "" {
-		return h.NewResponseWithError(c, "kb_id is required", nil)
+	kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))
+	if err != nil {
+		return h.NewResponseWithError(c, "kb_id is required", err)
 	}
+	c.Request().Header.Set("X-KB-ID", kbID)
 	ctx := context.WithValue(c.Request().Context(), consts.ContextKeyEdition, consts.GetLicenseEdition(c))
 	appInfo, err := h.usecase.ShareGetWebAppInfo(ctx, kbID, domain.GetAuthID(c))
 	if err != nil {
@@ -91,10 +103,11 @@ func (h *ShareAppHandler) GetWebAppInfo(c echo.Context) error {
 //	@Success		200		{object}	domain.Response
 //	@Router			/share/v1/app/widget/info [get]
 func (h *ShareAppHandler) GetWidgetAppInfo(c echo.Context) error {
-	kbID := c.Request().Header.Get("X-KB-ID")
-	if kbID == "" {
-		return h.NewResponseWithError(c, "kb_id is required", nil)
+	kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))
+	if err != nil {
+		return h.NewResponseWithError(c, "kb_id is required", err)
 	}
+	c.Request().Header.Set("X-KB-ID", kbID)
 	appInfo, err := h.usecase.GetWidgetAppInfo(c.Request().Context(), kbID)
 	if err != nil {
 		return h.NewResponseWithError(c, err.Error(), err)
@@ -113,10 +126,11 @@ func (h *ShareAppHandler) GetWidgetAppInfo(c echo.Context) error {
 //	@Success		200		{object}	domain.Response{data=v1.WechatAppInfoResp}
 //	@Router			/share/v1/app/wechat/info [get]
 func (h *ShareAppHandler) WechatAppInfo(c echo.Context) error {
-	kbID := c.Request().Header.Get("X-KB-ID")
-	if kbID == "" {
-		return h.NewResponseWithError(c, "kb_id is required", nil)
+	kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))
+	if err != nil {
+		return h.NewResponseWithError(c, "kb_id is required", err)
 	}
+	c.Request().Header.Set("X-KB-ID", kbID)
 	appInfo, err := h.usecase.GetWechatAppInfo(c.Request().Context(), kbID)
 	if err != nil {
 		return h.NewResponseWithError(c, err.Error(), err)

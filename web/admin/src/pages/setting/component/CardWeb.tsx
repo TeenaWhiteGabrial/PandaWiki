@@ -1,4 +1,4 @@
-import { getApiV1AppDetail } from '@/request/App';
+import { getApiV1AppDetailCompat } from '@/request/appCompat';
 import {
   DomainAppDetailResp,
   DomainKnowledgeBaseDetail,
@@ -8,7 +8,6 @@ import { useEffect, useState } from 'react';
 import CardBasicInfo from './CardBasicInfo';
 import CardCatalog from './CardCatalog';
 import CardCustom from './CardCustom';
-import CardListen from './CardListen';
 import CardProxy from './CardProxy';
 import CardStyle from './CardStyle';
 import CardWebCustomCode from './CardWebCustomCode';
@@ -25,7 +24,7 @@ const CardWeb = ({ kb, refresh }: CardWebProps) => {
   const [info, setInfo] = useState<DomainAppDetailResp | null>(null);
 
   const getInfo = async () => {
-    const res = await getApiV1AppDetail({ kb_id: kb.id!, type: '1' });
+    const res = await getApiV1AppDetailCompat({ type: '1' });
     setInfo(res);
   };
 
@@ -44,7 +43,6 @@ const CardWeb = ({ kb, refresh }: CardWebProps) => {
       }}
     >
       <CardCustom
-        kb={kb}
         refresh={value => {
           setInfo({
             ...info,
@@ -74,7 +72,6 @@ const CardWeb = ({ kb, refresh }: CardWebProps) => {
           });
         }}
       />
-      <CardListen kb={kb} refresh={refresh} />
       <CardProxy kb={kb} refresh={refresh} />
       <CardBasicInfo kb={kb} refresh={refresh} />
       <CardQaCopyright

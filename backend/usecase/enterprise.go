@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 
 	enterpriseV1 "github.com/chaitin/panda-wiki/api/enterprise/v1"
 	"github.com/chaitin/panda-wiki/domain"
@@ -19,10 +20,11 @@ type EnterpriseUsecase struct {
 	repo     *pg.EnterpriseRepository
 	authRepo *pg.AuthRepo
 	nodeRepo *pg.NodeRepository
+	navRepo  *pg.NavRepository
 	logger   *log.Logger
 }
 
-func NewEnterpriseUsecase(repo *pg.EnterpriseRepository, authRepo *pg.AuthRepo, nodeRepo *pg.NodeRepository, logger *log.Logger) (*EnterpriseUsecase, error) {
+func NewEnterpriseUsecase(repo *pg.EnterpriseRepository, authRepo *pg.AuthRepo, nodeRepo *pg.NodeRepository, navRepo *pg.NavRepository, logger *log.Logger) (*EnterpriseUsecase, error) {
 	if err := repo.EnsureDefaultPermissionLevel(context.Background()); err != nil {
 		return nil, err
 	}
@@ -30,6 +32,7 @@ func NewEnterpriseUsecase(repo *pg.EnterpriseRepository, authRepo *pg.AuthRepo, 
 		repo:     repo,
 		authRepo: authRepo,
 		nodeRepo: nodeRepo,
+		navRepo:  navRepo,
 		logger:   logger.WithModule("usecase.enterprise"),
 	}, nil
 }
@@ -234,6 +237,50 @@ func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nod
 	return perm, nil
 }
 
+func (u *EnterpriseUsecase) MergeNodeAndNavPermissions(nodePerm, navPerm domain.NodePermissions) domain.NodePermissions {
+	if !navPerm.HasEnterpriseRule() {
+		return nodePerm
+	}
+	if !nodePerm.HasEnterpriseRule() {
+		return navPerm
+	}
+
+	merged := nodePerm
+	if merged.ScopeType == "" {
+		merged.ScopeType = navPerm.ScopeType
+	}
+	if merged.MinPermissionLevelRank < navPerm.MinPermissionLevelRank {
+		merged.MinPermissionLevelRank = navPerm.MinPermissionLevelRank
+	}
+	if merged.MinPermissionLevelID == "" {
+		merged.MinPermissionLevelID = navPerm.MinPermissionLevelID
+	}
+
+	if len(navPerm.AllowedDepartmentIDs) > 0 {
+		if len(merged.AllowedDepartmentIDs) == 0 {
+			merged.AllowedDepartmentIDs = append([]string(nil), navPerm.AllowedDepartmentIDs...)
+		} else {
+			merged.AllowedDepartmentIDs = lo.Intersect(merged.AllowedDepartmentIDs, navPerm.AllowedDepartmentIDs)
+		}
+	}
+	if len(navPerm.AllowedUserIDs) > 0 {
+		if len(merged.AllowedUserIDs) == 0 {
+			merged.AllowedUserIDs = append([]string(nil), navPerm.AllowedUserIDs...)
+		} else {
+			merged.AllowedUserIDs = lo.Intersect(merged.AllowedUserIDs, navPerm.AllowedUserIDs)
+		}
+	}
+
+	if len(navPerm.DeniedDepartmentIDs) > 0 {
+		merged.DeniedDepartmentIDs = lo.Uniq(append(append([]string(nil), merged.DeniedDepartmentIDs...), navPerm.DeniedDepartmentIDs...))
+	}
+	if len(navPerm.DeniedUserIDs) > 0 {
+		merged.DeniedUserIDs = lo.Uniq(append(append([]string(nil), merged.DeniedUserIDs...), navPerm.DeniedUserIDs...))
+	}
+
+	return merged
+}
+
 func (u *EnterpriseUsecase) ResolveParentNodePermissions(ctx context.Context, node *domain.Node) (domain.NodePermissions, error) {
 	if node == nil || node.ParentID == "" {
 		return domain.NodePermissions{}, nil
@@ -278,6 +325,15 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 
 	if perm.MinPermissionLevelRank > 0 && access.PermissionLevelRank < perm.MinPermissionLevelRank {
 		return false
+	}
+
+	if access.PrincipalID != "" && slices.Contains(perm.DeniedUserIDs, access.PrincipalID) {
+		return false
+	}
+	for _, departmentID := range access.DepartmentIDs {
+		if slices.Contains(perm.DeniedDepartmentIDs, departmentID) {
+			return false
+		}
 	}
 
 	scopeType := perm.ScopeType

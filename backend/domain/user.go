@@ -7,12 +7,14 @@ import (
 )
 
 type User struct {
-	ID         string          `json:"id" gorm:"primaryKey"`
-	Account    string          `json:"account" gorm:"uniqueIndex"`
-	Password   string          `json:"password"`
-	Role       consts.UserRole `json:"role" gorm:"default:'user'"`
-	CreatedAt  time.Time       `json:"created_at"`
-	LastAccess time.Time       `json:"last_access" gorm:"default:null"`
+	ID                string          `json:"id" gorm:"primaryKey"`
+	Account           string          `json:"account" gorm:"uniqueIndex"`
+	Name              string          `json:"name"`
+	Password          string          `json:"password"`
+	Role              consts.UserRole `json:"role" gorm:"default:'user'"`
+	PermissionLevelID *string         `json:"permission_level_id"`
+	CreatedAt         time.Time       `json:"created_at"`
+	LastAccess        time.Time       `json:"last_access" gorm:"default:null"`
 }
 
 // KBUsers 知识库用户关联表（多对多关系）

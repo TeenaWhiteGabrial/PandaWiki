@@ -72,6 +72,11 @@ export function useDocTreeMenu(
               onClick: () => handleUrl(item, k),
             })),
           },
+          {
+            label: '目录权限',
+            key: 'properties',
+            onClick: () => handleProperties(item),
+          },
         );
       }
 
@@ -95,7 +100,7 @@ export function useDocTreeMenu(
         }
         menuItems.push(
           {
-            label: '文档属性',
+            label: '文档权限',
             key: 'properties',
             onClick: () => handleProperties(item),
           },

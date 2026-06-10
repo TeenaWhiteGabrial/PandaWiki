@@ -126,8 +126,6 @@ const homeProxy = async (
 
 const proxyShare = async (request: NextRequest, pathname?: string) => {
   // 转发到 process.env.TARGET
-  const kb_id = request.headers.get('x-kb-id') || process.env.DEV_KB_ID || '';
-
   const targetOrigin = process.env.TARGET!;
   const targetUrl = new URL(
     (pathname || request.nextUrl.pathname) + request.nextUrl.search,
@@ -135,7 +133,12 @@ const proxyShare = async (request: NextRequest, pathname?: string) => {
   );
   // 构造 fetch 选项
   const fetchHeaders = new Headers(request.headers);
-  fetchHeaders.set('x-kb-id', kb_id);
+  const kbID = request.headers.get('x-kb-id');
+  if (kbID) {
+    fetchHeaders.set('x-kb-id', kbID);
+  } else {
+    fetchHeaders.delete('x-kb-id');
+  }
 
   const hasBody = !['GET', 'HEAD'].includes(request.method);
   const fetchOptions: RequestInit = {
@@ -157,8 +160,13 @@ const proxyShare = async (request: NextRequest, pathname?: string) => {
 export async function proxy(request: NextRequest) {
   const url = request.nextUrl.clone();
   const pathname = url.pathname;
-  const kbDetail = await getShareV1AppWebInfo();
-  const basePath = getBasePath(kbDetail?.base_url || '');
+  let basePath = '';
+  try {
+    const kbDetail = await getShareV1AppWebInfo();
+    basePath = getBasePath(kbDetail?.base_url || '');
+  } catch {
+    // Allow the request flow to continue even when app info is temporarily unavailable.
+  }
   const appPathname = stripBasePath(pathname, basePath);
 
   if (appPathname.startsWith('/widget')) {
@@ -186,7 +194,7 @@ export async function proxy(request: NextRequest) {
 
   let response: NextResponse;
 
-  if (appPathname.startsWith('/share/')) {
+  if (appPathname.startsWith('/api/') || appPathname.startsWith('/share/')) {
     response = await proxyShare(request, appPathname);
   } else {
     response = await homeProxy(request, headers, sessionId, appPathname);
@@ -212,6 +220,8 @@ export const config = {
     '/:basePath/home',
     '/share/:path*',
     '/:basePath/share/:path*',
+    '/api/:path*',
+    '/:basePath/api/:path*',
     '/chat/:path*',
     '/:basePath/chat/:path*',
     '/widget',

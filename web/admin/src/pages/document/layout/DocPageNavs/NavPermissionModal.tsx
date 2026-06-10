@@ -1,0 +1,225 @@
+import { Form, FormItem } from '@/pages/setting/component/Common';
+import {
+  Department,
+  getApiV1EnterpriseDepartments,
+  getApiV1EnterprisePermissionLevels,
+} from '@/request/Enterprise';
+import {
+  getApiV1NavPermission,
+  patchApiV1NavPermission,
+} from '@/request/NavCompat';
+import { getApiV1UserListCompat } from '@/request/userCompat';
+import { V1NavListResp } from '@/request/types';
+import {
+  buildDepartmentTree,
+  flattenDepartmentTree,
+  formatDepartmentOptionLabel,
+} from '@/utils/enterprise';
+import { message, Modal } from '@ctzhian/ui';
+import { MenuItem, TextField } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+
+type FormValues = {
+  scope_type: string;
+  min_permission_level_id: string;
+  allowed_department_ids: string[];
+  allowed_user_ids: string[];
+};
+
+interface NavPermissionModalProps {
+  open: boolean;
+  nav: V1NavListResp | null;
+  kb_id: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const NavPermissionModal = ({
+  open,
+  nav,
+  kb_id,
+  onClose,
+  onSuccess,
+}: NavPermissionModalProps) => {
+  const [loading, setLoading] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [permissionLevels, setPermissionLevels] = useState<
+    { id: string; name: string; rank: number }[]
+  >([]);
+  const [users, setUsers] = useState<{ id: string; account: string }[]>([]);
+  const { control, handleSubmit, reset, setValue, watch } = useForm<FormValues>(
+    {
+      defaultValues: {
+        scope_type: 'public',
+        min_permission_level_id: '',
+        allowed_department_ids: [],
+        allowed_user_ids: [],
+      },
+    },
+  );
+
+  const scopeType = watch('scope_type');
+  const departmentTree = useMemo(
+    () => buildDepartmentTree(departments),
+    [departments],
+  );
+  const flatDepartments = useMemo(
+    () => flattenDepartmentTree(departmentTree),
+    [departmentTree],
+  );
+
+  useEffect(() => {
+    if (!open || !nav?.id) return;
+    Promise.all([
+      getApiV1EnterpriseDepartments(),
+      getApiV1EnterprisePermissionLevels(),
+      getApiV1UserListCompat(),
+      getApiV1NavPermission({ kb_id, id: nav.id }),
+    ]).then(([departmentResp, levelResp, userResp, permissionResp]) => {
+      setDepartments(departmentResp.departments || []);
+      setPermissionLevels(
+        (levelResp.levels || []).map(item => ({
+          id: item.id,
+          name: item.name,
+          rank: item.rank,
+        })),
+      );
+      setUsers(
+        (userResp.users || []).map(item => ({
+          id: item.id || '',
+          account: item.account || '',
+        })),
+      );
+      const permissions = permissionResp.permissions || {};
+      setValue('scope_type', permissions.scope_type || 'public');
+      setValue(
+        'min_permission_level_id',
+        permissions.min_permission_level_id || '',
+      );
+      setValue(
+        'allowed_department_ids',
+        permissions.allowed_department_ids || [],
+      );
+      setValue('allowed_user_ids', permissions.allowed_user_ids || []);
+    });
+  }, [open, nav?.id, kb_id, setValue]);
+
+  useEffect(() => {
+    if (!open) {
+      reset();
+    }
+  }, [open, reset]);
+
+  const submit = handleSubmit(values => {
+    if (!nav?.id) return;
+    setLoading(true);
+    patchApiV1NavPermission({
+      kb_id,
+      id: nav.id,
+      permissions: {
+        scope_type: values.scope_type,
+        min_permission_level_id: values.min_permission_level_id || undefined,
+        allowed_department_ids: values.allowed_department_ids,
+        allowed_user_ids: values.allowed_user_ids,
+      },
+    })
+      .then(() => {
+        message.success('栏目权限已更新');
+        onSuccess();
+      })
+      .finally(() => setLoading(false));
+  });
+
+  return (
+    <Modal
+      title='栏目权限'
+      open={open}
+      width={700}
+      okButtonProps={{ loading }}
+      onCancel={onClose}
+      onOk={submit}
+    >
+      <Form labelWidth={100} gap={3}>
+        <FormItem label='栏目类型'>
+          <Controller
+            name='scope_type'
+            control={control}
+            render={({ field }) => (
+              <TextField {...field} fullWidth select size='small'>
+                <MenuItem value='public'>公共栏目</MenuItem>
+                <MenuItem value='department'>部门栏目</MenuItem>
+              </TextField>
+            )}
+          />
+        </FormItem>
+        <FormItem label='最低权限等级'>
+          <Controller
+            name='min_permission_level_id'
+            control={control}
+            render={({ field }) => (
+              <TextField {...field} fullWidth select size='small'>
+                <MenuItem value=''>不限制</MenuItem>
+                {permissionLevels.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.name}（{item.rank}）
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+          />
+        </FormItem>
+        {scopeType === 'department' && (
+          <>
+            <FormItem label='允许部门'>
+              <Controller
+                name='allowed_department_ids'
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    fullWidth
+                    select
+                    size='small'
+                    SelectProps={{ multiple: true }}
+                    value={field.value || []}
+                  >
+                    {flatDepartments.map(item => (
+                      <MenuItem key={item.id} value={item.id}>
+                        {formatDepartmentOptionLabel(item)}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
+            </FormItem>
+            <FormItem label='允许用户'>
+              <Controller
+                name='allowed_user_ids'
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    fullWidth
+                    select
+                    size='small'
+                    SelectProps={{ multiple: true }}
+                    value={field.value || []}
+                  >
+                    {users.map(item => (
+                      <MenuItem key={item.id} value={item.id}>
+                        {item.account}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
+            </FormItem>
+          </>
+        )}
+      </Form>
+    </Modal>
+  );
+};
+
+export default NavPermissionModal;

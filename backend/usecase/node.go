@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
+	"time"
 
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/html"
@@ -35,6 +35,7 @@ type NodeUsecase struct {
 	modelRepo    *pg.ModelRepository
 	userRepo     *pg.UserRepository
 	authRepo     *pg.AuthRepo
+	enterprise   *EnterpriseUsecase
 	llmUsecase   *LLMUsecase
 	logger       *log.Logger
 	s3Client     *s3.MinioClient
@@ -56,6 +57,7 @@ func NewNodeUsecase(
 	modelRepo *pg.ModelRepository,
 	authRepo *pg.AuthRepo,
 	modelUsecase *ModelUsecase,
+	enterprise *EnterpriseUsecase,
 ) *NodeUsecase {
 	return &NodeUsecase{
 		nodeRepo:     nodeRepo,
@@ -65,6 +67,7 @@ func NewNodeUsecase(
 		ragRepo:      ragRepo,
 		kbRepo:       kbRepo,
 		authRepo:     authRepo,
+		enterprise:   enterprise,
 		userRepo:     userRepo,
 		llmUsecase:   llmUsecase,
 		modelRepo:    modelRepo,
@@ -91,6 +94,33 @@ func (u *NodeUsecase) GetList(ctx context.Context, req *domain.GetNodeListReq) (
 	}
 	if len(nodes) == 0 {
 		return nodes, nil
+	}
+
+	authInfo := domain.GetAuthInfoFromCtx(ctx)
+	if authInfo != nil && !authInfo.IsToken {
+		user, userErr := u.userRepo.GetUser(ctx, authInfo.UserId)
+		if userErr == nil && user.Role == consts.UserRoleManager {
+			access, accessErr := u.enterprise.GetUserAccessContext(ctx, authInfo.UserId)
+			if accessErr == nil {
+				filtered := make([]*domain.NodeListItemResp, 0, len(nodes))
+				for _, node := range nodes {
+					resolved := node.Permissions
+					if node.ParentID != "" {
+						parentNode, parentErr := u.nodeRepo.GetNodeByID(ctx, node.ParentID)
+						if parentErr == nil {
+							if parentResolved, resolveErr := u.enterprise.ResolveNodePermissions(ctx, parentNode); resolveErr == nil {
+								resolved = parentResolved
+							}
+						}
+					}
+					if u.enterprise.CanVisible(resolved, access) {
+						node.Permissions = resolved
+						filtered = append(filtered, node)
+					}
+				}
+				nodes = filtered
+			}
+		}
 	}
 
 	publisherMap, err := u.nodeRepo.GetNodeReleasePublisherMap(ctx, req.KBID)
@@ -180,38 +210,21 @@ func (u *NodeUsecase) ValidateNodePerm(ctx context.Context, kbID, nodeId string,
 	if err != nil {
 		return &domain.ErrCodeNotFound
 	}
-	switch node.Permissions.Visitable {
-	case consts.NodeAccessPermOpen:
-		return nil
-	case consts.NodeAccessPermClosed:
-		return &domain.ErrCodePermissionDenied
-	case consts.NodeAccessPermPartial:
-		authGroups, err := u.authRepo.GetAuthGroupWithParentsByAuthId(ctx, authId)
-		if err != nil {
-			return &domain.ErrCodeInternalError
+	resolvedPermissions, err := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
+	if err == nil {
+		node.Permissions = resolvedPermissions
+	}
+	if node.NavID != "" {
+		if nav, navErr := u.navRepo.GetById(ctx, node.NavID); navErr == nil {
+			node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
 		}
-
-		authGroupIds := lo.Map(authGroups, func(v domain.AuthGroup, i int) uint {
-			return v.ID
-		})
-
-		nodeGroupIds := make([]string, 0)
-		if len(authGroupIds) != 0 {
-			nodeGroups, err := u.nodeRepo.GetNodeGroupsByGroupIdsPerm(ctx, authGroupIds, consts.NodePermNameVisitable)
-			if err != nil {
-				return &domain.ErrCodeInternalError
-			}
-
-			nodeGroupIds = lo.Map(nodeGroups, func(v domain.NodeAuthGroup, i int) string {
-				return v.NodeID
-			})
-		}
-		if !slices.Contains(nodeGroupIds, nodeId) {
-			u.logger.Error("ValidateNodePerm failed", log.Any("node_group_ids", nodeGroupIds), log.Any("node_id", nodeId))
-			return &domain.ErrCodePermissionDenied
-		}
-	default:
+	}
+	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, authId)
+	if err != nil {
 		return &domain.ErrCodeInternalError
+	}
+	if !u.enterprise.CanVisitable(node.Permissions, shareAccess) {
+		return &domain.ErrCodePermissionDenied
 	}
 	return nil
 }
@@ -220,6 +233,14 @@ func (u *NodeUsecase) GetNodeReleaseDetailByKBIDAndID(ctx context.Context, kbID,
 	node, err := u.nodeRepo.GetNodeReleaseDetailByKBIDAndID(ctx, kbID, nodeId)
 	if err != nil {
 		return nil, err
+	}
+	if resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions); resolveErr == nil {
+		node.Permissions = resolvedPermissions
+	}
+	if node.NavID != "" {
+		if nav, navErr := u.navRepo.GetById(ctx, node.NavID); navErr == nil {
+			node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
+		}
 	}
 
 	userMap, err := u.userRepo.GetUsersAccountMap(ctx)
@@ -415,7 +436,7 @@ func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId string, authId 
 		return nil, err
 	}
 
-	nodeGroupIds, err := u.GetNodeIdsByAuthId(ctx, authId, consts.NodePermNameVisible)
+	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, authId)
 	if err != nil {
 		return nil, err
 	}
@@ -428,6 +449,9 @@ func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId string, authId 
 	result := make([]*shareV1.NodeListGroupNavResp, 0, len(navs))
 	navIndexMap := make(map[string]int, len(navs))
 	for _, nav := range navs {
+		if nav.Permissions.HasEnterpriseRule() && !u.enterprise.CanVisible(nav.Permissions, shareAccess) {
+			continue
+		}
 		navIndexMap[nav.ID] = len(result)
 		result = append(result, &shareV1.NodeListGroupNavResp{
 			NavID:    nav.ID,
@@ -437,19 +461,17 @@ func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId string, authId 
 		})
 	}
 
-	// O(1) auth group lookup
-	nodeGroupIdSet := lo.SliceToMap(nodeGroupIds, func(id string) (string, struct{}) {
-		return id, struct{}{}
-	})
-
 	for _, node := range nodes {
-		switch node.Permissions.Visible {
-		case consts.NodeAccessPermOpen:
-		case consts.NodeAccessPermPartial:
-			if _, ok := nodeGroupIdSet[node.ID]; !ok {
-				continue
+		resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
+		if resolveErr == nil {
+			node.Permissions = resolvedPermissions
+		}
+		if node.NavId != "" {
+			if nav, navErr := u.navRepo.GetById(ctx, node.NavId); navErr == nil {
+				node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
 			}
-		default:
+		}
+		if !u.enterprise.CanVisible(node.Permissions, shareAccess) {
 			continue
 		}
 		if idx, ok := navIndexMap[node.NavId]; ok {
@@ -468,7 +490,7 @@ func (u *NodeUsecase) GetNodeReleaseListByParentID(ctx context.Context, kbID, pa
 		return nil, err
 	}
 
-	nodeGroupIds, err := u.GetNodeIdsByAuthId(ctx, authId, consts.NodePermNameVisible)
+	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, authId)
 	if err != nil {
 		return nil, err
 	}
@@ -476,13 +498,17 @@ func (u *NodeUsecase) GetNodeReleaseListByParentID(ctx context.Context, kbID, pa
 	// 先过滤权限
 	visibleNodes := make([]*domain.ShareNodeListItemResp, 0)
 	for i, node := range allNodes {
-		switch node.Permissions.Visible {
-		case consts.NodeAccessPermOpen:
-			visibleNodes = append(visibleNodes, allNodes[i])
-		case consts.NodeAccessPermPartial:
-			if slices.Contains(nodeGroupIds, node.ID) {
-				visibleNodes = append(visibleNodes, allNodes[i])
+		resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
+		if resolveErr == nil {
+			node.Permissions = resolvedPermissions
+		}
+		if node.NavId != "" {
+			if nav, navErr := u.navRepo.GetById(ctx, node.NavId); navErr == nil {
+				node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
 			}
+		}
+		if u.enterprise.CanVisible(node.Permissions, shareAccess) {
+			visibleNodes = append(visibleNodes, allNodes[i])
 		}
 	}
 
@@ -559,47 +585,68 @@ func (u *NodeUsecase) GetNodePermissionsByID(ctx context.Context, id, kbID strin
 	if err != nil {
 		return nil, err
 	}
+	if resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions); resolveErr == nil {
+		node.Permissions = resolvedPermissions
+	}
 	resp := &v1.NodePermissionResp{
-		ID:               node.ID,
-		Permissions:      node.Permissions,
-		AnswerableGroups: make([]domain.NodeGroupDetail, 0),
-		VisitableGroups:  make([]domain.NodeGroupDetail, 0),
-		VisibleGroups:    make([]domain.NodeGroupDetail, 0),
+		ID:          node.ID,
+		Permissions: node.Permissions,
 	}
-
-	nodeGroupList, err := u.nodeRepo.GetNodeGroupByNodeId(ctx, node.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	for i, nodeGroup := range nodeGroupList {
-		switch nodeGroup.Perm {
-		case consts.NodePermNameAnswerable:
-			resp.AnswerableGroups = append(resp.AnswerableGroups, nodeGroupList[i])
-		case consts.NodePermNameVisitable:
-			resp.VisitableGroups = append(resp.VisitableGroups, nodeGroupList[i])
-		case consts.NodePermNameVisible:
-			resp.VisibleGroups = append(resp.VisibleGroups, nodeGroupList[i])
-		}
-	}
-
-	return resp, err
+	return resp, nil
 }
 
 func (u *NodeUsecase) ValidateNodePermissionsEdit(req v1.NodePermissionEditReq, edition consts.LicenseEdition) error {
-	if !slices.Contains([]consts.LicenseEdition{consts.LicenseEditionBusiness, consts.LicenseEditionEnterprise}, edition) {
-		if req.Permissions.Answerable == consts.NodeAccessPermPartial || req.Permissions.Visitable == consts.NodeAccessPermPartial || req.Permissions.Visible == consts.NodeAccessPermPartial {
-			return domain.ErrPermissionDenied
-		}
-		if req.AnswerableGroups != nil || req.VisitableGroups != nil || req.VisibleGroups != nil {
-			return domain.ErrPermissionDenied
-		}
+	if req.Permissions == nil {
+		return nil
 	}
 	return nil
 }
 
 func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermissionEditReq) error {
 	if req.Permissions != nil {
+		if len(req.IDs) == 1 {
+			node, err := u.nodeRepo.GetNodeByID(ctx, req.IDs[0])
+			if err != nil {
+				return err
+			}
+			if node.ParentID != "" {
+				parentPermissions, err := u.enterprise.ResolveParentNodePermissions(ctx, node)
+				if err != nil {
+					return err
+				}
+
+				if req.Permissions.ScopeType != "" && parentPermissions.ScopeType != "" && req.Permissions.ScopeType != parentPermissions.ScopeType {
+					return domain.ErrNodePermissionOutOfParentScope
+				}
+
+				if parentPermissions.MinPermissionLevelID != "" && req.Permissions.MinPermissionLevelID != "" {
+					parentLevel, err := u.enterprise.repo.GetPermissionLevelByID(ctx, parentPermissions.MinPermissionLevelID)
+					if err != nil {
+						return err
+					}
+					currentLevel, err := u.enterprise.repo.GetPermissionLevelByID(ctx, req.Permissions.MinPermissionLevelID)
+					if err != nil {
+						return err
+					}
+					if currentLevel.Rank < parentLevel.Rank {
+						return domain.ErrNodePermissionOutOfParentScope
+					}
+				}
+
+				if len(parentPermissions.AllowedDepartmentIDs) > 0 && len(req.Permissions.AllowedDepartmentIDs) > 0 {
+					allowedDepartmentIDs, err := u.enterprise.ListDescendantDepartmentIDs(ctx, parentPermissions.AllowedDepartmentIDs)
+					if err != nil {
+						return err
+					}
+					for _, departmentID := range req.Permissions.AllowedDepartmentIDs {
+						if _, ok := allowedDepartmentIDs[departmentID]; !ok {
+							return domain.ErrNodePermissionOutOfParentScope
+						}
+					}
+				}
+			}
+		}
+
 		updateMap := map[string]interface{}{
 			"permissions": req.Permissions,
 		}
@@ -614,18 +661,8 @@ func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermis
 		return fmt.Errorf("get latest node release failed: %w", err)
 	}
 
-	if len(nodeReleases) > 0 {
+	if req.Permissions != nil && len(nodeReleases) > 0 {
 		nodeVectorContentRequests := make([]*domain.NodeReleaseVectorRequest, 0)
-
-		var groupIds []int
-		switch req.Permissions.Answerable {
-		case consts.NodeAccessPermOpen:
-			groupIds = nil
-		case consts.NodeAccessPermPartial:
-			groupIds = *req.AnswerableGroups
-		case consts.NodeAccessPermClosed:
-			groupIds = make([]int, 0)
-		}
 		for _, nodeRelease := range nodeReleases {
 			if nodeRelease.DocID == "" {
 				continue
@@ -634,7 +671,7 @@ func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermis
 				KBID:     req.KbId,
 				DocID:    nodeRelease.DocID,
 				Action:   "update_group_ids",
-				GroupIds: groupIds,
+				GroupIds: nil,
 			})
 		}
 
@@ -642,24 +679,6 @@ func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermis
 			if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, nodeVectorContentRequests); err != nil {
 				return err
 			}
-		}
-	}
-
-	if req.AnswerableGroups != nil {
-		if err := u.nodeRepo.UpdateNodeGroupByKbIDAndNodeIds(ctx, req.IDs, *req.AnswerableGroups, consts.NodePermNameAnswerable); err != nil {
-			return err
-		}
-	}
-
-	if req.VisibleGroups != nil {
-		if err := u.nodeRepo.UpdateNodeGroupByKbIDAndNodeIds(ctx, req.IDs, *req.VisibleGroups, consts.NodePermNameVisible); err != nil {
-			return err
-		}
-	}
-
-	if req.VisitableGroups != nil {
-		if err := u.nodeRepo.UpdateNodeGroupByKbIDAndNodeIds(ctx, req.IDs, *req.VisitableGroups, consts.NodePermNameVisitable); err != nil {
-			return err
 		}
 	}
 
@@ -767,6 +786,34 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 	}
 
 	for _, nodeRelease := range nodeReleases {
+		ragStatus := consts.NodeRagStatusPending
+		node, getNodeErr := u.nodeRepo.GetNodeByID(ctx, nodeRelease.NodeID)
+		if getNodeErr != nil {
+			u.logger.Error("get node by id failed",
+				log.String("node_id", nodeRelease.NodeID),
+				log.Error(getNodeErr))
+			continue
+		}
+		if node.RagInfo.Status == consts.NodeRagStatusSucceeded ||
+			node.RagInfo.Status == consts.NodeRagStatusFailed ||
+			node.RagInfo.Status == consts.NodeRagStatusReindexing ||
+			node.RagInfo.Status == consts.NodeRagStatusRunning {
+			ragStatus = consts.NodeRagStatusReindexing
+		} else {
+			ragStatus = consts.NodeRagStatusRunning
+		}
+
+		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, domain.RagInfo{
+			Status:   ragStatus,
+			Message:  "",
+			SyncedAt: time.Now(),
+		}); err != nil {
+			u.logger.Error("update node rag info failed",
+				log.String("node_id", nodeRelease.NodeID),
+				log.Error(err))
+			continue
+		}
+
 		if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, []*domain.NodeReleaseVectorRequest{
 			{
 				KBID:          nodeRelease.KBID,
@@ -833,6 +880,44 @@ func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeList
 	navsReleasedMap := make(map[string]*navV1.NavListResp, len(navsReleased))
 	for _, nr := range navsReleased {
 		navsReleasedMap[nr.ID] = &nr
+	}
+
+	authInfo := domain.GetAuthInfoFromCtx(ctx)
+	if authInfo != nil && !authInfo.IsToken {
+		user, userErr := u.userRepo.GetUser(ctx, authInfo.UserId)
+		if userErr == nil && user.Role != consts.UserRoleAdmin {
+			access, accessErr := u.enterprise.GetUserAccessContext(ctx, authInfo.UserId)
+			if accessErr == nil {
+				filteredNavs := make([]navV1.NavListResp, 0, len(navs))
+				for _, nav := range navs {
+					if u.enterprise.CanVisible(nav.Permissions, access) {
+						filteredNavs = append(filteredNavs, nav)
+					}
+				}
+				navs = filteredNavs
+
+				filteredNodes := make([]*domain.NodeListItemResp, 0, len(nodes))
+				for _, node := range nodes {
+					resolved := node.Permissions
+					if resolveErr := func() error {
+						nodeForResolve := &domain.Node{
+							ID:          node.ID,
+							ParentID:    node.ParentID,
+							Permissions: node.Permissions,
+						}
+						var err error
+						resolved, err = u.enterprise.ResolveNodePermissions(ctx, nodeForResolve)
+						return err
+					}(); resolveErr == nil {
+						node.Permissions = resolved
+					}
+					if u.enterprise.CanVisible(node.Permissions, access) {
+						filteredNodes = append(filteredNodes, node)
+					}
+				}
+				nodes = filteredNodes
+			}
+		}
 	}
 
 	// 按 position 顺序预建分组，用 map 做 O(1) 索引

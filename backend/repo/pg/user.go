@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/samber/lo"
 	"golang.org/x/crypto/bcrypt"
@@ -53,23 +54,30 @@ func (r *UserRepository) UpsertDefaultUser(ctx context.Context, user *domain.Use
 	})
 }
 
-func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User, edition consts.LicenseEdition) error {
+func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User, departmentIDs []string, primaryDepartment string, edition consts.LicenseEdition, enterpriseRepo *EnterpriseRepository) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 	user.Password = string(hashedPassword)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&domain.User{}).Count(&count).Error; err != nil {
-			return err
-		}
-		if count >= domain.GetBaseEditionLimitation(ctx).MaxAdmin {
-			return fmt.Errorf("exceed max admin limit, current count: %d, max limit: %d", count, domain.GetBaseEditionLimitation(ctx).MaxAdmin)
+		if user.Role == consts.UserRoleAdmin {
+			var count int64
+			if err := tx.Model(&domain.User{}).Where("role = ?", consts.UserRoleAdmin).Count(&count).Error; err != nil {
+				return err
+			}
+			if count >= domain.GetBaseEditionLimitation(ctx).MaxAdmin {
+				return fmt.Errorf("exceed max admin limit, current count: %d, max limit: %d", count, domain.GetBaseEditionLimitation(ctx).MaxAdmin)
+			}
 		}
 
 		if err := tx.Create(user).Error; err != nil {
 			return err
+		}
+		if enterpriseRepo != nil {
+			if err := enterpriseRepo.UpdateUserEnterpriseAccess(ctx, user.ID, "", departmentIDs, primaryDepartment); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -98,16 +106,89 @@ func (r *UserRepository) GetUser(ctx context.Context, userID string) (*domain.Us
 	return &user, nil
 }
 
-func (r *UserRepository) ListUsers(ctx context.Context) ([]v1.UserListItemResp, error) {
+func (r *UserRepository) ListUsers(ctx context.Context, req *v1.UserListReq) ([]v1.UserListItemResp, error) {
 	var users []v1.UserListItemResp
-	err := r.db.WithContext(ctx).
+	query := r.db.WithContext(ctx).
 		Model(&domain.User{}).
-		Order("created_at DESC").
-		Find(&users).Error
+		Select("id, account, name, role, permission_level_id, last_access, created_at").
+		Order("created_at DESC")
+	if req != nil {
+		if req.Keyword != "" {
+			keyword := "%" + strings.TrimSpace(req.Keyword) + "%"
+			query = query.Where("account LIKE ? OR name LIKE ?", keyword, keyword)
+		}
+		if req.Role != "" {
+			query = query.Where("role = ?", req.Role)
+		}
+	}
+	err := query.Find(&users).Error
 	if err != nil {
 		return nil, err
 	}
 	return users, nil
+}
+
+func (r *UserRepository) ListUsersWithEnterpriseAccess(ctx context.Context, enterpriseRepo *EnterpriseRepository, authUserID string, req *v1.UserListReq) ([]v1.UserListItemResp, error) {
+	users, err := r.ListUsers(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	var authUser *domain.User
+	if authUserID != "" {
+		authUser, _ = r.GetUser(ctx, authUserID)
+	}
+	managerDepartmentIDs := make(map[string]struct{})
+	if authUser != nil && authUser.Role == consts.UserRoleManager {
+		departmentIDs, _, err := enterpriseRepo.GetUserDepartments(ctx, authUserID)
+		if err != nil {
+			return nil, err
+		}
+		for _, departmentID := range departmentIDs {
+			managerDepartmentIDs[departmentID] = struct{}{}
+		}
+	}
+	filtered := make([]v1.UserListItemResp, 0, len(users))
+	for i := range users {
+		departmentIDs, primaryDepartment, err := enterpriseRepo.GetUserDepartments(ctx, users[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		users[i].DepartmentIDs = departmentIDs
+		users[i].PrimaryDepartment = primaryDepartment
+		if req != nil && req.DepartmentID != "" {
+			matched := false
+			for _, departmentID := range departmentIDs {
+				if departmentID == req.DepartmentID {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+		if authUser != nil && authUser.Role == consts.UserRoleManager {
+			if users[i].Role == consts.UserRoleAdmin {
+				continue
+			}
+			if users[i].ID == authUserID {
+				filtered = append(filtered, users[i])
+				continue
+			}
+			matched := false
+			for _, departmentID := range departmentIDs {
+				if _, ok := managerDepartmentIDs[departmentID]; ok {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+		filtered = append(filtered, users[i])
+	}
+	return filtered, nil
 }
 
 func (r *UserRepository) GetUsersAccountMap(ctx context.Context) (map[string]string, error) {

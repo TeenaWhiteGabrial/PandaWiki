@@ -179,6 +179,13 @@ func (r *NavRepository) Update(ctx context.Context, kbId, id, name string) error
 		Update("name", name).Error
 }
 
+func (r *NavRepository) UpdatePermissions(ctx context.Context, kbId, id string, permissions domain.NodePermissions) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Nav{}).
+		Where("id = ? AND kb_id = ?", id, kbId).
+		Update("permissions", permissions).Error
+}
+
 func (r *NavRepository) GetReleaseList(ctx context.Context, kbId string) ([]v1.NavListResp, error) {
 	// get latest kb release
 	var kbRelease *domain.KBRelease
@@ -197,7 +204,7 @@ func (r *NavRepository) GetReleaseList(ctx context.Context, kbId string) ([]v1.N
 	if err := r.db.WithContext(ctx).
 		Model(&domain.NavRelease{}).
 		Where("release_id = ?", kbRelease.ID).
-		Select("nav_id as id, name, position").
+		Select("nav_id as id, name, position, permissions").
 		Order("position ASC").
 		Find(&navs).Error; err != nil {
 		return nil, err

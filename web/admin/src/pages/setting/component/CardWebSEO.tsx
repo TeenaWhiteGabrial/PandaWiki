@@ -1,12 +1,11 @@
 import { SEOSetting } from '@/api';
-import { Checkbox, TextField } from '@mui/material';
+import { TextField } from '@mui/material';
 import { message } from '@ctzhian/ui';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { DomainAppDetailResp } from '@/request/types';
 import { SettingCardItem, FormItem } from './Common';
-import { useAppSelector } from '@/store';
-import { putApiV1App } from '@/request/App';
+import { putApiV1AppCompat } from '@/request/appCompat';
 
 interface CardWebSEOProps {
   id: string;
@@ -16,7 +15,6 @@ interface CardWebSEOProps {
 
 const CardWebSEO = ({ data, id, refresh }: CardWebSEOProps) => {
   const [isEdit, setIsEdit] = useState(false);
-  const { kb_id } = useAppSelector(state => state.config);
   const {
     handleSubmit,
     control,
@@ -30,9 +28,9 @@ const CardWebSEO = ({ data, id, refresh }: CardWebSEOProps) => {
   });
 
   const onSubmit = handleSubmit((value: SEOSetting) => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id },
-      { kb_id, settings: { ...data.settings, ...value } },
+      { settings: { ...data.settings, ...value } },
     ).then(() => {
       message.success('保存成功');
       refresh(value);
@@ -43,7 +41,7 @@ const CardWebSEO = ({ data, id, refresh }: CardWebSEOProps) => {
   useEffect(() => {
     setValue('desc', data.settings?.desc || '');
     setValue('keyword', data.settings?.keyword || '');
-  }, [data]);
+  }, [data, setValue]);
 
   return (
     <SettingCardItem title='SEO' isEdit={isEdit} onSubmit={onSubmit}>

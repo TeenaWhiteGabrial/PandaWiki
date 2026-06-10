@@ -34,9 +34,11 @@ func NewNavHandler(
 
 	group := echo.Group("/api/v1/nav", h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.GET("/list", h.NavList)
+	group.GET("/permission", h.NavPermission)
 	group.POST("/add", h.NavAdd)
 	group.DELETE("/delete", h.NavDelete)
 	group.PATCH("/update", h.NavUpdate)
+	group.PATCH("/permission", h.NavPermissionEdit)
 	group.POST("/move", h.NavMove)
 
 	return h
@@ -68,6 +70,23 @@ func (h *NavHandler) NavList(c echo.Context) error {
 		return h.NewResponseWithError(c, "get nav list failed", err)
 	}
 	return h.NewResponseWithData(c, nodes)
+}
+
+func (h *NavHandler) NavPermission(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	var req v1.NavPermissionReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid request", err)
+	}
+	if err := c.Validate(req); err != nil {
+		return h.NewResponseWithError(c, "validate request params failed", err)
+	}
+	resp, err := h.usecase.GetPermission(ctx, req.KbId, req.ID)
+	if err != nil {
+		return h.NewResponseWithError(c, "get nav permission failed", err)
+	}
+	return h.NewResponseWithData(c, resp)
 }
 
 // NavAdd
@@ -177,6 +196,22 @@ func (h *NavHandler) NavUpdate(c echo.Context) error {
 
 	if err := h.usecase.Update(ctx, &req); err != nil {
 		return h.NewResponseWithError(c, "update nav failed", err)
+	}
+	return h.NewResponseWithData(c, nil)
+}
+
+func (h *NavHandler) NavPermissionEdit(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	var req v1.NavPermissionEditReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid request", err)
+	}
+	if err := c.Validate(req); err != nil {
+		return h.NewResponseWithError(c, "validate request params failed", err)
+	}
+	if err := h.usecase.UpdatePermission(ctx, &req); err != nil {
+		return h.NewResponseWithError(c, "update nav permission failed", err)
 	}
 	return h.NewResponseWithData(c, nil)
 }

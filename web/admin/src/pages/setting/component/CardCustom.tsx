@@ -1,13 +1,8 @@
 import documentPng from '@/assets/images/document.png';
 import welcomePng from '@/assets/images/welcome.png';
 import CustomModal from '@/components/CustomModal';
-import { putApiV1App } from '@/request/App';
-import {
-  ConstsHomePageSetting,
-  DomainAppDetailResp,
-  DomainKnowledgeBaseDetail,
-} from '@/request/types';
-import { useAppSelector } from '@/store';
+import { putApiV1AppCompat } from '@/request/appCompat';
+import { ConstsHomePageSetting, DomainAppDetailResp } from '@/request/types';
 import { message } from '@ctzhian/ui';
 import {
   Box,
@@ -22,23 +17,16 @@ import { Controller, useForm } from 'react-hook-form';
 import { FormItem, SettingCardItem } from './Common';
 
 interface CardCustomProps {
-  kb: DomainKnowledgeBaseDetail;
   refresh: (value: { home_page_setting: ConstsHomePageSetting }) => void;
   info: DomainAppDetailResp;
 }
 
-const CardCustom = ({ kb, refresh, info }: CardCustomProps) => {
+const CardCustom = ({ refresh, info }: CardCustomProps) => {
   const [curCustomType, setCurCustomType] = useState<
     'welcome' | 'header' | 'footer' | null
   >(null);
   const [customModalOpen, setCustomModalOpen] = useState(false);
-  const { kb_id } = useAppSelector(state => state.config);
-  const {
-    control,
-    setValue,
-    handleSubmit,
-    formState: { errors },
-  } = useForm({
+  const { control, setValue, handleSubmit } = useForm({
     defaultValues: {
       home_page_setting: ConstsHomePageSetting.HomePageSettingDoc,
     },
@@ -46,10 +34,9 @@ const CardCustom = ({ kb, refresh, info }: CardCustomProps) => {
   const [isEdit, setIsEdit] = useState(false);
 
   const onSubmit = handleSubmit(value => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id: info.id! },
       {
-        kb_id,
         settings: {
           ...info.settings,
           home_page_setting: value.home_page_setting,
@@ -68,7 +55,7 @@ const CardCustom = ({ kb, refresh, info }: CardCustomProps) => {
       info?.settings?.home_page_setting ||
         ConstsHomePageSetting.HomePageSettingDoc,
     );
-  }, [info]);
+  }, [info, setValue]);
 
   useEffect(() => {
     if (curCustomType) {

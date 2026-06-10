@@ -97,6 +97,8 @@ export enum ConstsWatermarkSetting {
 export enum ConstsUserRole {
   /** 管理员 */
   UserRoleAdmin = "admin",
+  /** 管理员 */
+  UserRoleManager = "manager",
   /** 普通用户 */
   UserRoleUser = "user",
 }
@@ -1674,9 +1676,12 @@ export interface V1CrawlerResultsResp {
 
 export interface V1CreateUserReq {
   account: string;
+  name: string;
+  department_ids: string[];
   /** @minLength 8 */
   password: string;
-  role: "admin" | "user";
+  primary_department: string;
+  role: "manager" | "user";
 }
 
 export interface V1CreateUserResp {
@@ -1772,28 +1777,16 @@ export interface V1NodeMoveNavReq {
 }
 
 export interface V1NodePermissionEditReq {
-  /** 可被问答 */
-  answerable_groups?: number[];
   ids: string[];
   kb_id: string;
   permissions?: DomainNodePermissions;
-  /** 导航内可见 */
-  visible_groups?: number[];
-  /** 可被访问 */
-  visitable_groups?: number[];
 }
 
 export type V1NodePermissionEditResp = Record<string, any>;
 
 export interface V1NodePermissionResp {
-  /** 可被问答 */
-  answerable_groups?: DomainNodeGroupDetail[];
   id?: string;
   permissions?: DomainNodePermissions;
-  /** 导航内可见 */
-  visible_groups?: DomainNodeGroupDetail[];
-  /** 可被访问 */
-  visitable_groups?: DomainNodeGroupDetail[];
 }
 
 export interface V1NodeRestudyReq {

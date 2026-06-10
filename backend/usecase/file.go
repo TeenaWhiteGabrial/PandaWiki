@@ -11,6 +11,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -26,6 +27,16 @@ import (
 	"github.com/chaitin/panda-wiki/store/s3"
 	"github.com/chaitin/panda-wiki/utils"
 )
+
+func buildInternalStaticFileURL(endpoint, key string) string {
+	if value := os.Getenv("ANYDOC_STATIC_FILE_BASE_URL"); value != "" {
+		return fmt.Sprintf("%s/%s", strings.TrimSuffix(value, "/"), key)
+	}
+	base := strings.TrimSpace(endpoint)
+	base = strings.TrimPrefix(base, "http://")
+	base = strings.TrimPrefix(base, "https://")
+	return fmt.Sprintf("http://%s/static-file/%s", strings.TrimSuffix(base, "/"), key)
+}
 
 type FileUsecase struct {
 	logger            *log.Logger
@@ -60,7 +71,7 @@ func (u *FileUsecase) UploadFileGetUrl(ctx context.Context, kbID string, file *m
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("http://panda-wiki-minio:9000/static-file/%s", key), nil
+	return buildInternalStaticFileURL(u.config.S3.Endpoint, key), nil
 }
 
 func (u *FileUsecase) UploadFile(ctx context.Context, kbID string, file *multipart.FileHeader) (string, error) {

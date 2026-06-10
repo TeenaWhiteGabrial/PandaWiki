@@ -1,5 +1,5 @@
 import { CatalogSetting } from '@/api/type';
-import { putApiV1App } from '@/request/App';
+import { putApiV1AppCompat } from '@/request/appCompat';
 import { DomainAppDetailResp } from '@/request/types';
 import {
   Box,
@@ -12,7 +12,6 @@ import { message } from '@ctzhian/ui';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { FormItem, SettingCardItem } from './Common';
-import { useAppSelector } from '@/store';
 
 interface CardCatalogProps {
   id: string;
@@ -22,7 +21,6 @@ interface CardCatalogProps {
 
 const CardCatalog = ({ id, data, refresh }: CardCatalogProps) => {
   const [isEdit, setIsEdit] = useState(false);
-  const { kb_id } = useAppSelector(state => state.config);
   const { control, handleSubmit, setValue } = useForm<CatalogSetting>({
     defaultValues: {
       catalog_visible: 1,
@@ -32,9 +30,9 @@ const CardCatalog = ({ id, data, refresh }: CardCatalogProps) => {
   });
 
   const onSubmit = handleSubmit(value => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id },
-      { settings: { ...data.settings, catalog_settings: value }, kb_id },
+      { settings: { ...data.settings, catalog_settings: value } },
     ).then(() => {
       refresh(value);
       message.success('保存成功');
@@ -55,7 +53,7 @@ const CardCatalog = ({ id, data, refresh }: CardCatalogProps) => {
       'catalog_width',
       data.settings?.catalog_settings?.catalog_width ?? 260,
     );
-  }, [data]);
+  }, [data, setValue]);
 
   return (
     <SettingCardItem title='左侧目录导航' isEdit={isEdit} onSubmit={onSubmit}>

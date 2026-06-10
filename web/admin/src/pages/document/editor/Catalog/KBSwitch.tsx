@@ -1,7 +1,6 @@
 import { useAppSelector } from '@/store';
 import { Ellipsis } from '@ctzhian/ui';
 import { Stack } from '@mui/material';
-import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IconZuzhi } from '@panda-wiki/icons';
 
@@ -9,11 +8,7 @@ const KBSwitch = () => {
   // const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
-  const { kbList, kb_id } = useAppSelector(state => state.config);
-
-  const currentKb = useMemo(() => {
-    return kbList?.find(item => item.id === kb_id);
-  }, [kbList, kb_id]);
+  const { kbDetail } = useAppSelector(state => state.config);
 
   // const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
@@ -50,7 +45,7 @@ const KBSwitch = () => {
         <IconZuzhi type='icon-zuzhi' sx={{ color: 'text.primary' }} />
       </Stack>
       <Ellipsis sx={{ flex: 1, width: 0, overflow: 'hidden' }}>
-        {currentKb?.name}
+        {kbDetail?.name}
       </Ellipsis>
       {/* <Popover
         id='editor-kb-switch'

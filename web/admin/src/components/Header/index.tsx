@@ -6,7 +6,6 @@ import { Button, IconButton, Stack, Tooltip } from '@mui/material';
 import { message, Modal } from '@ctzhian/ui';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import System from '../System';
 import Bread from './Bread';
 import { IconDengchu } from '@panda-wiki/icons';
 
@@ -79,7 +78,6 @@ const Header = () => {
         >
           访问 Wiki 网站
         </Button>
-        <System />
         <Tooltip arrow title='退出登录'>
           <IconButton
             size='small'

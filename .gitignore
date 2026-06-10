@@ -9,6 +9,7 @@
 *.dylib
 
 .cache
+.gocache/
 .local-data/
 # Test binary, built with `go test -c`
 *.test
@@ -47,5 +48,9 @@ __debug*
 .data/
 .logs/
 .pids/
+*.log
+*.pid
 backend/tmp_*.go
 backend/migration/migration
+
+.gocache/

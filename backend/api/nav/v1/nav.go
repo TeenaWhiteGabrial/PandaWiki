@@ -1,6 +1,10 @@
 package v1
 
-import "time"
+import (
+	"time"
+
+	"github.com/chaitin/panda-wiki/domain"
+)
 
 type NavListReq struct {
 	KbId string `json:"kb_id" query:"kb_id" validate:"required"`
@@ -16,6 +20,22 @@ type NavUpdateReq struct {
 	KbId string `json:"kb_id" query:"kb_id" validate:"required"`
 	ID   string `json:"id" validate:"required"`
 	Name string `json:"name" validate:"required"`
+}
+
+type NavPermissionReq struct {
+	KbId string `json:"kb_id" query:"kb_id" validate:"required"`
+	ID   string `json:"id" query:"id" validate:"required"`
+}
+
+type NavPermissionResp struct {
+	ID          string                 `json:"id"`
+	Permissions domain.NodePermissions `json:"permissions"`
+}
+
+type NavPermissionEditReq struct {
+	KbId        string                  `json:"kb_id" validate:"required"`
+	ID          string                  `json:"id" validate:"required"`
+	Permissions *domain.NodePermissions `json:"permissions" validate:"required"`
 }
 
 type NavDeleteReq struct {
@@ -34,6 +54,7 @@ type NavListResp struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Position  float64   `json:"position"`
+	Permissions domain.NodePermissions `json:"permissions"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

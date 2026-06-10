@@ -13,6 +13,7 @@ const (
 type UserRole string
 
 const (
-	UserRoleAdmin UserRole = "admin" // 管理员
-	UserRoleUser  UserRole = "user"  // 普通用户
+	UserRoleAdmin   UserRole = "admin"   // 超级管理员
+	UserRoleManager UserRole = "manager" // 管理员
+	UserRoleUser    UserRole = "user"    // 普通用户
 )

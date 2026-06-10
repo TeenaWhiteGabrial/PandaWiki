@@ -1,5 +1,5 @@
 import { ITreeItem } from '@/api';
-import { getApiV1AppDetail } from '@/request';
+import { getApiV1AppDetailCompat } from '@/request/appCompat';
 import { getApiV1KnowledgeBaseList } from '@/request/KnowledgeBase';
 import { getApiV1NodeListGroupNav, putApiV1NodeDetail } from '@/request/Node';
 import {
@@ -16,7 +16,7 @@ import {
 import { convertToTree } from '@/utils/drag';
 import { message } from '@ctzhian/ui';
 import { Box, Drawer, Stack, useMediaQuery } from '@mui/material';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Catalog from './Catalog';
 
@@ -59,27 +59,30 @@ const DocEditor = () => {
   }, [groups, nav_id]);
 
   const getInfo = async () => {
-    const res = await getApiV1AppDetail({ kb_id: kb_id!, type: '1' });
+    const res = await getApiV1AppDetailCompat({ type: '1' });
     setDocWidth(res.settings?.theme_and_style?.doc_width || 'full');
   };
 
-  const getKbList = (id?: string) => {
-    const kb_id = id || localStorage.getItem('kb_id') || '';
-    getApiV1KnowledgeBaseList().then(res => {
-      if (res.length > 0) {
-        dispatch(setKbList(res));
-        const kbDetail = res.find(item => item.id === kb_id);
-        if (kbDetail) {
-          dispatch(setKbId(kb_id));
-          dispatch(setKbDetail(kbDetail));
-        } else {
-          dispatch(setKbId(res[0]?.id || ''));
+  const getKbList = useCallback(
+    (id?: string) => {
+      const kb_id = id || localStorage.getItem('kb_id') || '';
+      getApiV1KnowledgeBaseList().then(res => {
+        if (res.length > 0) {
+          dispatch(setKbList(res));
+          const kbDetail = res.find(item => item.id === kb_id);
+          if (kbDetail) {
+            dispatch(setKbId(kb_id));
+            dispatch(setKbDetail(kbDetail));
+          } else {
+            dispatch(setKbId(res[0]?.id || ''));
+          }
         }
-      }
-    });
-  };
+      });
+    },
+    [dispatch],
+  );
 
-  const refreshCatalog = async (): Promise<
+  const refreshCatalog = useCallback(async (): Promise<
     GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
   > => {
     const params = {
@@ -101,7 +104,7 @@ const DocEditor = () => {
     } finally {
       setCatalogLoading(false);
     }
-  };
+  }, [dispatch, kb_id]);
 
   const onSave = async (content: string) => {
     if (!kb_id || !nodeDetail.id) return;
@@ -129,13 +132,13 @@ const DocEditor = () => {
     } else {
       getInfo();
     }
-  }, [kb_id]);
+  }, [getKbList, kb_id]);
 
   useEffect(() => {
     if (kb_id) {
       refreshCatalog();
     }
-  }, [kb_id]);
+  }, [kb_id, refreshCatalog]);
 
   useEffect(() => {
     if (nodeDetail.nav_id && groups.some(g => g.nav_id === nodeDetail.nav_id)) {

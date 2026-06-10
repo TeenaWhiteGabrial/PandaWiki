@@ -3,7 +3,6 @@ import { Box, Stack, useTheme } from '@mui/material';
 import { IconXiala } from '@panda-wiki/icons';
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import KBSelect from '../KB/KBSelect';
 
 const HomeBread = { title: '文档', to: '/' };
 const OtherBread = {
@@ -19,6 +18,7 @@ const Bread = () => {
   const { pathname } = useLocation();
   const [breads, setBreads] = useState<{ title: string; to: string }[]>([]);
   const { pageName } = useAppSelector(state => state.breadcrumb);
+  const { kbDetail } = useAppSelector(state => state.config);
 
   useEffect(() => {
     const curBreads: { title: string; to: string }[] = [];
@@ -52,7 +52,19 @@ const Bread = () => {
         lineHeight: '22px',
       }}
     >
-      <KBSelect />
+      <Box
+        sx={{
+          fontSize: '14px',
+          fontWeight: 'bold',
+          color: 'text.primary',
+          maxWidth: 240,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {kbDetail?.name || '知识库'}
+      </Box>
       {breads.map((it, idx) => {
         return (
           <Stack

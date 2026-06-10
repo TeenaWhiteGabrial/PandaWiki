@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	userV1 "github.com/chaitin/panda-wiki/api/user/v1"
 	"github.com/chaitin/panda-wiki/config"
 	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
@@ -383,7 +384,7 @@ func (c *Client) reportData() error {
 // 判断“昨日是否有管理员访问”。
 // 因为数据在每天 0–1 点上报，这里采用昨日 0:00 至今日 0:00 的时间窗口。
 func (c *Client) isAdminLoggedInYesterday() (bool, error) {
-	resp, err := c.userUsecase.ListUsers(context.Background())
+	resp, err := c.userUsecase.ListUsers(context.Background(), "", &userV1.UserListReq{})
 	if err != nil {
 		return false, err
 	}

@@ -2,8 +2,6 @@ import {
   DomainAppDetailResp,
   DomainKnowledgeBaseDetail,
 } from '@/request/types';
-import { useAppSelector } from '@/store';
-import { PROFESSION_VERSION_PERMISSION } from '@/constant/version';
 import {
   Box,
   Chip,
@@ -14,7 +12,10 @@ import {
   TextField,
 } from '@mui/material';
 
-import { getApiV1AppDetail, putApiV1App } from '@/request/App';
+import {
+  getApiV1AppDetailCompat,
+  putApiV1AppCompat,
+} from '@/request/appCompat';
 import { message } from '@ctzhian/ui';
 import Autocomplete from '@mui/material/Autocomplete';
 import { useEffect, useState } from 'react';
@@ -25,7 +26,7 @@ interface CardCommentProps {
   kb: DomainKnowledgeBaseDetail;
 }
 
-const StyledRadioLabel = styled(Box)(({ theme }) => ({
+const StyledRadioLabel = styled(Box)(() => ({
   width: 100,
 }));
 
@@ -36,7 +37,6 @@ const DocumentComments = ({
   data: DomainAppDetailResp;
   refresh: () => void;
 }) => {
-  const { kb_id } = useAppSelector(state => state.config);
   const [isEdit, setIsEdit] = useState(false);
   const { control, handleSubmit, setValue } = useForm({
     defaultValues: {
@@ -54,13 +54,12 @@ const DocumentComments = ({
       // @ts-expect-error 忽略类型错误
       +data?.settings?.web_app_comment_settings?.moderation_enable,
     );
-  }, [data]);
+  }, [data, setValue]);
 
   const onSubmit = handleSubmit(formData => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id: data.id! },
       {
-        kb_id,
         settings: {
           ...data.settings,
           web_app_comment_settings: {
@@ -105,7 +104,7 @@ const DocumentComments = ({
           )}
         />
       </FormItem>
-      <FormItem label='评论审核' permission={PROFESSION_VERSION_PERMISSION}>
+      <FormItem label='评论审核'>
         <Controller
           control={control}
           name='moderation_enable'
@@ -146,7 +145,6 @@ const AIQuestion = ({
   refresh: () => void;
 }) => {
   const [isEdit, setIsEdit] = useState(false);
-  const { kb_id } = useAppSelector(state => state.config);
   const { control, handleSubmit, setValue } = useForm({
     defaultValues: {
       is_enabled: true,
@@ -157,10 +155,9 @@ const AIQuestion = ({
   const [inputValue, setInputValue] = useState('');
 
   const onSubmit = handleSubmit(formData => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id: data.id! },
       {
-        kb_id,
         settings: {
           ...data.settings,
           ai_feedback_settings: {
@@ -194,7 +191,7 @@ const AIQuestion = ({
       'disclaimer',
       data.settings?.disclaimer_settings?.content as string,
     );
-  }, [data]);
+  }, [data, setValue]);
 
   return (
     <SettingCardItem title='AI 问答评价' isEdit={isEdit} onSubmit={onSubmit}>
@@ -268,7 +265,7 @@ const AIQuestion = ({
           )}
         />{' '}
       </FormItem>
-      <FormItem label='免责声明' permission={PROFESSION_VERSION_PERMISSION}>
+      <FormItem label='免责声明'>
         <Controller
           control={control}
           name='disclaimer'
@@ -298,7 +295,6 @@ const DocumentContribution = ({
   refresh: () => void;
 }) => {
   const [isEdit, setIsEdit] = useState(false);
-  const { kb_id } = useAppSelector(state => state.config);
   const { control, handleSubmit, setValue } = useForm({
     defaultValues: {
       is_enable: false,
@@ -306,10 +302,9 @@ const DocumentContribution = ({
   });
 
   const onSubmit = handleSubmit(formData => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id: data.id! },
       {
-        kb_id,
         settings: {
           ...data.settings,
           contribute_settings: {
@@ -330,11 +325,11 @@ const DocumentContribution = ({
       // @ts-expect-error 忽略类型错误
       data?.settings?.contribute_settings?.is_enable,
     );
-  }, [data]);
+  }, [data, setValue]);
 
   return (
     <SettingCardItem title='文档贡献' isEdit={isEdit} onSubmit={onSubmit}>
-      <FormItem label='文档贡献' permission={PROFESSION_VERSION_PERMISSION}>
+      <FormItem label='文档贡献'>
         <Controller
           control={control}
           name='is_enable'
@@ -370,7 +365,7 @@ const CardFeedback = ({ kb }: CardCommentProps) => {
   const [info, setInfo] = useState<DomainAppDetailResp | null>(null);
 
   const getInfo = async () => {
-    const res = await getApiV1AppDetail({ kb_id: kb.id!, type: '1' });
+    const res = await getApiV1AppDetailCompat({ type: '1' });
     setInfo(res);
   };
 

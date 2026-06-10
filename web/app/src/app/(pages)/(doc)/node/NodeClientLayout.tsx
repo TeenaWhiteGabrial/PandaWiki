@@ -11,10 +11,24 @@ import Catalog from '@/views/node/Catalog';
 import CatalogH5 from '@/views/node/CatalogH5';
 import NavBar from '@/views/node/NavBar';
 import { Box, Stack } from '@mui/material';
-import { useMemo } from 'react';
+import { usePathname } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+
+const useMounted = () => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return mounted;
+};
 
 const PCLayout = ({ children }: { children: React.ReactNode }) => {
   const { tree, kbDetail, catalogWidth = 260 } = useStore();
+  const pathname = usePathname();
+  const hasTree = !!tree?.length;
+  const isNodeDetailPage = pathname?.includes('/node/');
   const docWidth = useMemo(
     () => kbDetail?.settings?.theme_and_style?.doc_width || 'full',
     [kbDetail],
@@ -24,7 +38,7 @@ const PCLayout = ({ children }: { children: React.ReactNode }) => {
     <Stack sx={{ height: '100vh', overflow: 'auto' }} id='scroll-container'>
       <Header isDocPage={true} />
       <NavBar docWidth={docWidth} catalogWidth={catalogWidth} />
-      {tree?.length === 0 ? (
+      {!hasTree && !isNodeDetailPage ? (
         <EmptyDocPlaceholder />
       ) : (
         <Stack sx={{ flex: 1, px: 5, alignItems: 'center' }}>
@@ -40,7 +54,7 @@ const PCLayout = ({ children }: { children: React.ReactNode }) => {
               width: '100%',
             }}
           >
-            <Catalog />
+            {hasTree && <Catalog />}
             {children}
           </Stack>
         </Stack>
@@ -59,6 +73,9 @@ const MobileLayout = ({
   footerSetting?: FooterSetting | null;
 }) => {
   const { tree } = useStore();
+  const pathname = usePathname();
+  const hasTree = !!tree?.length;
+  const isNodeDetailPage = pathname?.includes('/node/');
   return (
     <Stack
       sx={{
@@ -71,11 +88,11 @@ const MobileLayout = ({
       <Box sx={{ flex: 1 }}>
         <Header />
         <NavBar />
-        {tree?.length === 0 ? (
+        {!hasTree && !isNodeDetailPage ? (
           <EmptyDocPlaceholder mobile />
         ) : (
           <>
-            <CatalogH5 />
+            {hasTree && <CatalogH5 />}
             {children}
           </>
         )}
@@ -104,7 +121,19 @@ export default function NodeClientLayout({
 }) {
   const { mobile, kbDetail } = useStore();
   const footerSetting = kbDetail?.settings?.footer_settings;
+  const mounted = useMounted();
   useSyncNavByDocId();
+
+  if (!mounted) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          bgcolor: 'background.paper',
+        }}
+      />
+    );
+  }
 
   return (
     <>

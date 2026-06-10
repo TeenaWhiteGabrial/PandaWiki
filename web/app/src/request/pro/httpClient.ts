@@ -90,6 +90,21 @@ const redirectToLogin = () => {
   window.location.href = [pathname, search]?.join("?");
 };
 
+const getClientTokenHeader = () => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const token = window.localStorage.getItem("panda_wiki_token");
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+};
+
 export class HttpClient<SecurityDataType = unknown> {
   public baseUrl: string = "";
   private securityData: SecurityDataType | null = null;
@@ -239,12 +254,15 @@ export class HttpClient<SecurityDataType = unknown> {
     let customHeaders = {};
     if (typeof window === "undefined") {
       customHeaders = await getServerHeader();
+    } else {
+      customHeaders = getClientTokenHeader();
     }
 
     return this.customFetch(
       `${baseUrl || this.baseUrl || (typeof window !== "undefined" ? window._BASE_PATH_ : "")}${path}${queryString ? `?${queryString}` : ""}`,
       {
         ...requestParams,
+        ...(typeof window === "undefined" ? { cache: "no-store" as const } : {}),
         headers: {
           ...customHeaders,
           ...(requestParams.headers || {}),

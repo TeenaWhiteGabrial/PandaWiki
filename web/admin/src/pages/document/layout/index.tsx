@@ -23,14 +23,14 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Stack } from '@mui/material';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import RagErrorReStart from '../component/RagErrorReStart';
 import DocPageHeader from './DocPageHeader';
 import DocPageList from './DocPageList';
 import DocPageNavs from './DocPageNavs';
 
 const Content = () => {
-  const { kb_id, isRefreshDocList, kbList } = useAppSelector(
+  const { kb_id, isRefreshDocList, kbDetail } = useAppSelector(
     state => state.config,
   );
   const dispatch = useAppDispatch();
@@ -92,10 +92,6 @@ const Content = () => {
     getData();
     setRefreshTrigger(t => t + 1);
   }, [getData]);
-
-  const currentKb = useMemo(() => {
-    return kbList?.find(item => item.id === kb_id);
-  }, [kbList, kb_id]);
 
   const [wikiUrl, setWikiUrl] = useState<string>('');
   const treeDragHandlersRef = useRef<TreeDragHandlers | null>(null);
@@ -199,13 +195,13 @@ const Content = () => {
   }, [getData, kb_id]);
 
   useEffect(() => {
-    if (currentKb?.access_settings?.base_url) {
-      setWikiUrl(currentKb.access_settings.base_url);
+    if (kbDetail?.access_settings?.base_url) {
+      setWikiUrl(kbDetail.access_settings.base_url);
       return;
     }
-    const host = currentKb?.access_settings?.hosts?.[0] || '';
+    const host = kbDetail?.access_settings?.hosts?.[0] || '';
     if (host === '') return;
-    const { ssl_ports = [], ports = [] } = currentKb?.access_settings || {};
+    const { ssl_ports = [], ports = [] } = kbDetail?.access_settings || {};
 
     if (ssl_ports) {
       if (ssl_ports.includes(443)) setWikiUrl(`https://${host}`);
@@ -215,7 +211,7 @@ const Content = () => {
       if (ports.includes(80)) setWikiUrl(`http://${host}`);
       else if (ports.length > 0) setWikiUrl(`http://${host}:${ports[0]}`);
     }
-  }, [currentKb]);
+  }, [kbDetail]);
 
   useEffect(() => {
     if (kb_id) getData();

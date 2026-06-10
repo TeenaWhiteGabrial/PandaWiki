@@ -10,7 +10,6 @@ import { DomainSocialMediaAccount } from '@/request/types';
 import Switch from '../basicComponents/Switch';
 import DragSocialInfo from '../basicComponents/DragSocialInfo';
 import VersionMask from '@/components/VersionMask';
-import { PROFESSION_VERSION_PERMISSION } from '@/constant/version';
 import { IconTianjia } from '@panda-wiki/icons';
 import {
   IconWeixingongzhonghao,
@@ -51,7 +50,7 @@ export const options: Option[] = [
   },
 ];
 const FooterConfig = ({ data, setIsEdit, isEdit }: FooterConfigProps) => {
-  const { appPreviewData, license } = useAppSelector(state => state.config);
+  const { appPreviewData } = useAppSelector(state => state.config);
   const dispatch = useAppDispatch();
   const {
     control,
@@ -502,11 +501,7 @@ const FooterConfig = ({ data, setIsEdit, isEdit }: FooterConfigProps) => {
           >
             平台版权信息
           </Box>
-          <VersionMask
-            permission={PROFESSION_VERSION_PERMISSION}
-            wrapperSx={{ px: 2 }}
-            sx={{ inset: '-8px 0' }}
-          >
+          <VersionMask wrapperSx={{ px: 2 }} sx={{ inset: '-8px 0' }}>
             <Controller
               control={control}
               name='show_brand_info'

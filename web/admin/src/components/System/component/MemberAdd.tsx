@@ -1,58 +1,28 @@
 import { postApiV1UserCreate } from '@/request/User';
-import { postApiV1KnowledgeBaseUserInvite } from '@/request/KnowledgeBase';
 import Card from '@/components/Card';
-import { copyText, generatePassword } from '@/utils';
-import { CheckCircle } from '@mui/icons-material';
-import { Box, Button, MenuItem, Select, Stack, TextField } from '@mui/material';
 import { FormItem } from '@/components/Form';
-import { Modal, message } from '@ctzhian/ui';
-import { useState, useMemo, useEffect } from 'react';
-import { Controller, useForm } from 'react-hook-form';
-import { useAppSelector } from '@/store';
-import { PROFESSION_VERSION_PERMISSION } from '@/constant/version';
-import { VersionCanUse } from '@/components/VersionMask';
+import { getApiV1EnterpriseDepartments } from '@/request/Enterprise';
+import type { Department } from '@/request/Enterprise';
+import { copyText, generatePassword } from '@/utils';
 import {
-  ConstsLicenseEdition,
-  ConstsUserKBPermission,
-  V1KBUserInviteReq,
-} from '@/request/types';
+  buildDepartmentTree,
+  flattenDepartmentTree,
+  formatDepartmentOptionLabel,
+} from '@/utils/enterprise';
+import { CheckCircle } from '@mui/icons-material';
+import { Box, Button, MenuItem, Stack, TextField } from '@mui/material';
+import { Modal } from '@ctzhian/ui';
+import { useEffect, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import type { V1CreateUserReq } from '@/request/types';
 
-type Role = 'admin' | 'user';
+type Role = 'manager' | 'user';
 
-const PERM_MAP = {
-  [ConstsUserKBPermission.UserKBPermissionFullControl]: '完全控制',
-  [ConstsUserKBPermission.UserKBPermissionDocManage]: '文档管理',
-  [ConstsUserKBPermission.UserKBPermissionDataOperate]: '数据运营',
-};
-
-const VERSION_MAP = {
-  [ConstsLicenseEdition.LicenseEditionFree]: {
-    message: '当前配置只支持 1 个管理员',
-    max: 1,
-  },
-  [ConstsLicenseEdition.LicenseEditionProfession]: {
-    message: '当前配置最多支持 20 个管理员',
-    max: 20,
-  },
-  [ConstsLicenseEdition.LicenseEditionBusiness]: {
-    message: '当前配置最多支持 50 个管理员',
-    max: 50,
-  },
-};
-
-const MemberAdd = ({
-  refresh,
-  userLen,
-}: {
-  refresh: () => void;
-  userLen: number;
-}) => {
+const MemberAdd = ({ refresh }: { refresh: () => void }) => {
   const [addMember, setAddMember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [password, setPassword] = useState('');
-  const { kbList, license, refreshAdminRequest } = useAppSelector(
-    state => state.config,
-  );
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   const {
     control,
@@ -60,25 +30,28 @@ const MemberAdd = ({
     formState: { errors },
     reset,
     watch,
-    setValue,
   } = useForm({
     defaultValues: {
       account: '',
+      name: '',
       role: 'user' as Role,
-      kb_id: '',
-      perm: '' as V1KBUserInviteReq['perm'],
+      department_ids: [] as string[],
+      primary_department: '',
     },
   });
 
   const account = watch('account');
-  const watchRole = watch('role');
-  const watchKbId = watch('kb_id');
+  const departmentIDs = watch('department_ids');
+  const flatDepartments = flattenDepartmentTree(
+    buildDepartmentTree(departments),
+  );
 
   useEffect(() => {
-    if (watchKbId) {
-      setValue('perm', ConstsUserKBPermission.UserKBPermissionFullControl);
-    }
-  }, [watchKbId]);
+    if (!addMember) return;
+    getApiV1EnterpriseDepartments().then(res => {
+      setDepartments(res.departments || []);
+    });
+  }, [addMember]);
 
   const copyUserInfo = ({
     account,
@@ -87,7 +60,7 @@ const MemberAdd = ({
     account: string;
     password: string;
   }) => {
-    copyText(`用户名: ${account}\n密码: ${password}`, () => {
+    copyText(`账号: ${account}\n密码: ${password}`, () => {
       setPassword('');
       reset();
     });
@@ -96,26 +69,21 @@ const MemberAdd = ({
   const onSubmit = handleSubmit(data => {
     setLoading(true);
     const password = generatePassword();
+    const payload: V1CreateUserReq = {
+      account: data.account,
+      name: data.name,
+      department_ids: data.department_ids,
+      password,
+      primary_department: data.primary_department,
+      role: data.role,
+    };
     const onSuccess = () => {
       setPassword(password);
       setAddMember(false);
       refresh();
     };
-    postApiV1UserCreate({ account: data.account, password, role: data.role })
-      .then(res => {
-        if (data.kb_id && data.role === 'user') {
-          postApiV1KnowledgeBaseUserInvite({
-            kb_id: data.kb_id,
-            // @ts-expect-error 类型错误
-            user_id: res.id,
-            perm: data.perm,
-          }).then(() => {
-            onSuccess();
-            if (location.pathname.startsWith('/setting')) {
-              refreshAdminRequest();
-            }
-          });
-        }
+    postApiV1UserCreate(payload)
+      .then(() => {
         onSuccess();
       })
       .finally(() => {
@@ -123,26 +91,14 @@ const MemberAdd = ({
       });
   });
 
-  const isPro = useMemo(() => {
-    return PROFESSION_VERSION_PERMISSION.includes(license.edition!);
-  }, [license.edition]);
-
   return (
     <>
       <Button
         size='small'
         variant='outlined'
-        onClick={() => {
-          const versionLimit =
-            VERSION_MAP[license.edition as keyof typeof VERSION_MAP];
-          if (versionLimit && userLen >= versionLimit.max) {
-            message.error(versionLimit.message);
-            return;
-          }
-          setAddMember(true);
-        }}
+        onClick={() => setAddMember(true)}
       >
-        添加新管理员
+        添加用户
       </Button>
       <Modal
         title={
@@ -166,7 +122,7 @@ const MemberAdd = ({
       >
         <Card sx={{ p: 2, fontSize: 14, bgcolor: 'background.paper3' }}>
           <Stack direction={'row'}>
-            <Box sx={{ width: 80 }}>用户名</Box>
+            <Box sx={{ width: 80 }}>账号</Box>
             <Box sx={{ fontWeight: 700 }}>{account}</Box>
           </Stack>
           <Stack direction={'row'} sx={{ mt: 1 }}>
@@ -176,7 +132,7 @@ const MemberAdd = ({
         </Card>
       </Modal>
       <Modal
-        title='添加新管理员'
+        title='添加用户'
         open={addMember}
         onCancel={() => {
           setAddMember(false);
@@ -187,14 +143,18 @@ const MemberAdd = ({
           loading,
         }}
       >
-        <FormItem label='用户名' required>
+        <FormItem label='账号' required>
           <Controller
             control={control}
             name='account'
             rules={{
               required: {
                 value: true,
-                message: '用户名不能为空',
+                message: '账号不能为空',
+              },
+              pattern: {
+                value: /^[A-Za-z0-9]+$/,
+                message: '账号只允许英文和数字',
               },
             }}
             render={({ field }) => (
@@ -202,9 +162,30 @@ const MemberAdd = ({
                 {...field}
                 fullWidth
                 autoFocus
-                placeholder='输入用户名'
+                placeholder='输入账号，仅支持英文和数字'
                 error={!!errors.account}
                 helperText={errors.account?.message}
+              />
+            )}
+          />
+        </FormItem>
+        <FormItem label='姓名' required sx={{ mt: 2 }}>
+          <Controller
+            control={control}
+            name='name'
+            rules={{
+              required: {
+                value: true,
+                message: '姓名不能为空',
+              },
+            }}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                fullWidth
+                placeholder='输入姓名'
+                error={!!errors.name}
+                helperText={errors.name?.message}
               />
             )}
           />
@@ -216,99 +197,64 @@ const MemberAdd = ({
             name='role'
             render={({ field }) => (
               <TextField {...field} fullWidth select>
-                <MenuItem value='user'>普通管理员</MenuItem>
-                <MenuItem value='admin'>超级管理员</MenuItem>
+                <MenuItem value='manager'>管理员</MenuItem>
+                <MenuItem value='user'>普通用户</MenuItem>
               </TextField>
             )}
           />
         </FormItem>
-
-        {watchRole === 'user' && (
-          <>
-            <FormItem label='wiki 站' sx={{ mt: 2 }}>
-              <Controller
-                control={control}
-                name='kb_id'
-                render={({ field }) => (
-                  <Select
-                    {...field}
-                    fullWidth
-                    displayEmpty
-                    renderValue={(value: string) =>
-                      value ? (
-                        kbList?.find(i => i.id === value)?.name || value
-                      ) : (
-                        <Box sx={{ color: '#9e9fa3' }}>请选择</Box>
-                      )
-                    }
-                    sx={{ height: 52 }}
-                  >
-                    {kbList?.map(item => (
-                      <MenuItem key={item.id} value={item.id}>
-                        {item.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                )}
-              />
-            </FormItem>
-            <FormItem label='权限' sx={{ mt: 2 }}>
-              <Controller
-                control={control}
-                name='perm'
-                render={({ field }) => (
-                  <Select
-                    {...field}
-                    fullWidth
-                    displayEmpty
-                    sx={{ height: 52 }}
-                    MenuProps={{
-                      sx: {
-                        '.Mui-disabled': {
-                          opacity: '1 !important',
-                          color: 'text.disabled',
-                        },
-                      },
-                    }}
-                    renderValue={(value: V1KBUserInviteReq['perm']) => {
-                      return value ? (
-                        PERM_MAP[value]
-                      ) : (
-                        <Box sx={{ color: '#9e9fa3' }}>请选择</Box>
-                      );
-                    }}
-                  >
-                    <MenuItem
-                      value={ConstsUserKBPermission.UserKBPermissionFullControl}
-                    >
-                      完全控制
+        <FormItem label='所属部门' required sx={{ mt: 2 }}>
+          <Controller
+            control={control}
+            name='department_ids'
+            rules={{
+              validate: value => (value?.length ? true : '请选择所属部门'),
+            }}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                fullWidth
+                select
+                SelectProps={{ multiple: true }}
+                value={field.value || []}
+                error={!!errors.department_ids}
+                helperText={errors.department_ids?.message as string}
+              >
+                {flatDepartments.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {formatDepartmentOptionLabel(item)}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+          />
+        </FormItem>
+        <FormItem label='主部门' required sx={{ mt: 2 }}>
+          <Controller
+            control={control}
+            name='primary_department'
+            rules={{
+              required: '请选择主部门',
+            }}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                fullWidth
+                select
+                error={!!errors.primary_department}
+                helperText={errors.primary_department?.message}
+              >
+                {flatDepartments
+                  .filter(item => departmentIDs?.includes(item.id))
+                  .map(item => (
+                    <MenuItem key={item.id} value={item.id}>
+                      {formatDepartmentOptionLabel(item)}
                     </MenuItem>
-
-                    <MenuItem
-                      value={ConstsUserKBPermission.UserKBPermissionDocManage}
-                      disabled={!isPro}
-                    >
-                      文档管理{' '}
-                      <VersionCanUse
-                        permission={PROFESSION_VERSION_PERMISSION}
-                      />
-                    </MenuItem>
-
-                    <MenuItem
-                      value={ConstsUserKBPermission.UserKBPermissionDataOperate}
-                      disabled={!isPro}
-                    >
-                      数据运营{' '}
-                      <VersionCanUse
-                        permission={PROFESSION_VERSION_PERMISSION}
-                      />
-                    </MenuItem>
-                  </Select>
-                )}
-              />
-            </FormItem>
-          </>
-        )}
+                  ))}
+              </TextField>
+            )}
+          />
+        </FormItem>
       </Modal>
     </>
   );

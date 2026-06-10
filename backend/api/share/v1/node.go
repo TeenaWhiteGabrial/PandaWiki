@@ -9,6 +9,7 @@ import (
 type ShareNodeDetailResp struct {
 	ID               string                        `json:"id"`
 	KbID             string                        `json:"kb_id"`
+	NavID            string                        `json:"nav_id"`
 	Type             domain.NodeType               `json:"type"`
 	Status           domain.NodeStatus             `json:"status"`
 	Name             string                        `json:"name"`

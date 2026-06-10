@@ -1,7 +1,5 @@
-import Login from '@/views/auth/login';
+import LoginClientShell from './LoginClientShell';
 
-const LoginPage = async () => {
-  return <Login />;
-};
-
-export default LoginPage;
+export default function LoginPage() {
+  return <LoginClientShell />;
+}

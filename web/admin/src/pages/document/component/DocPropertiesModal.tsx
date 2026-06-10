@@ -1,6 +1,13 @@
 import Card from '@/components/Card';
 import DragTree from '@/components/Drag/DragTree';
 import { Form, FormItem } from '@/pages/setting/component/Common';
+import {
+  Department,
+  getApiV1EnterpriseDepartments,
+  getApiV1EnterprisePermissionLevels,
+} from '@/request/Enterprise';
+import { getApiV1NavPermission } from '@/request/NavCompat';
+import { getApiV1UserListCompat } from '@/request/userCompat';
 import { putApiV1NodeDetail } from '@/request/Node';
 import {
   getApiV1NodePermission,
@@ -11,25 +18,17 @@ import {
   subscribeNodeSummaryStream,
   type StreamSummaryEvent,
 } from '@/request/nodeStream';
-import {
-  ConstsNodeAccessPerm,
-  DomainNodeListItemResp,
-  DomainNodeType,
-} from '@/request/types';
+import { DomainNodeListItemResp, DomainNodeType } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { convertToTree } from '@/utils/drag';
-import { filterEmptyFolders } from '@/utils/tree';
-import { Icon, Modal, message } from '@ctzhian/ui';
 import {
-  Box,
-  Button,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-  Stack,
-  TextField,
-  styled,
-} from '@mui/material';
+  buildDepartmentTree,
+  flattenDepartmentTree,
+  formatDepartmentOptionLabel,
+} from '@/utils/enterprise';
+import { filterEmptyFolders } from '@/utils/tree';
+import { Modal, message } from '@ctzhian/ui';
+import { Box, Button, MenuItem, Stack, TextField, styled } from '@mui/material';
 import dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -49,21 +48,6 @@ const StyledText = styled('div')(({ theme }) => ({
   fontSize: 16,
 }));
 
-const PER_OPTIONS = [
-  {
-    label: '完全开放',
-    value: ConstsNodeAccessPerm.NodeAccessPermOpen,
-  },
-  {
-    label: '部分开放',
-    value: ConstsNodeAccessPerm.NodeAccessPermPartial,
-  },
-  {
-    label: '完全禁止',
-    value: ConstsNodeAccessPerm.NodeAccessPermClosed,
-  },
-];
-
 const DocPropertiesModal = ({
   open,
   onCancel,
@@ -74,6 +58,23 @@ const DocPropertiesModal = ({
   const { kb_id, nav_id } = useAppSelector(state => state.config);
   const [loading, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [permissionLevels, setPermissionLevels] = useState<
+    { id: string; name: string; rank: number }[]
+  >([]);
+  const [users, setUsers] = useState<{ id: string; account: string }[]>([]);
+  const [navScopeType, setNavScopeType] = useState<'public' | 'department'>(
+    'public',
+  );
+  const [parentPermissionSummary, setParentPermissionSummary] = useState<{
+    departmentIds: string[];
+    departmentNames: string[];
+    minPermissionLevelId: string;
+  }>({
+    departmentIds: [],
+    departmentNames: [],
+    minPermissionLevelId: '',
+  });
   const sseClientRef = useRef<SSEClient<StreamSummaryEvent> | null>(null);
   const {
     control,
@@ -81,16 +82,42 @@ const DocPropertiesModal = ({
     setValue,
     reset,
     formState: { errors },
-    watch,
   } = useForm({
     defaultValues: {
       name: '',
-      answerable: null as ConstsNodeAccessPerm | null,
-      visitable: null as ConstsNodeAccessPerm | null,
-      visible: null as ConstsNodeAccessPerm | null,
+      scope_type: 'public',
+      inherit: true,
+      min_permission_level_id: '',
+      allowed_department_ids: [] as string[],
+      allowed_user_ids: [] as string[],
       summary: '',
     },
   });
+
+  const scopeType = navScopeType;
+  const departmentTree = buildDepartmentTree(departments);
+  const flatDepartments = flattenDepartmentTree(departmentTree);
+  const selectedLevel = permissionLevels.find(
+    item => item.id === parentPermissionSummary.minPermissionLevelId,
+  );
+  const availablePermissionLevels = parentPermissionSummary.minPermissionLevelId
+    ? permissionLevels.filter(item =>
+        selectedLevel ? item.rank >= selectedLevel.rank : true,
+      )
+    : permissionLevels;
+  const availableDepartments =
+    scopeType === 'department' &&
+    parentPermissionSummary.departmentIds.length > 0
+      ? flatDepartments.filter(item =>
+          parentPermissionSummary.departmentIds.includes(item.id),
+        )
+      : flatDepartments;
+  const isFolder = data[0]?.type === DomainNodeType.NodeTypeFolder;
+  const modalTitle = isBatch
+    ? '批量设置权限'
+    : isFolder
+      ? '目录权限'
+      : '文档权限';
 
   const onGenerateSummary = () => {
     setSummaryLoading(true);
@@ -126,18 +153,19 @@ const DocPropertiesModal = ({
   };
 
   const onSubmit = handleSubmit(values => {
+    setLoading(true);
     Promise.all([
       patchApiV1NodePermissionEdit({
         kb_id: kb_id!,
-        ids: data
-          .filter(item => item.type === DomainNodeType.NodeTypeDocument)
-          .map(item => item.id!),
+        ids: data.map(item => item.id!),
         permissions: {
-          answerable: values.answerable as ConstsNodeAccessPerm,
-          visitable: values.visitable as ConstsNodeAccessPerm,
-          visible: values.visible as ConstsNodeAccessPerm,
+          scope_type: navScopeType,
+          inherit: values.inherit,
+          min_permission_level_id: values.min_permission_level_id || undefined,
+          allowed_department_ids: values.allowed_department_ids || [],
+          allowed_user_ids: values.allowed_user_ids || [],
         },
-      }),
+      } as never),
 
       !isBatch
         ? putApiV1NodeDetail({
@@ -148,16 +176,72 @@ const DocPropertiesModal = ({
             nav_id: data[0].nav_id || nav_id || '',
           })
         : undefined,
-    ]).then(() => {
-      message.success('编辑成功');
-      onOk();
-    });
+    ])
+      .then(() => {
+        message.success('编辑成功');
+        onOk();
+      })
+      .finally(() => setLoading(false));
   });
 
   const tree = filterEmptyFolders(convertToTree(data));
 
   useEffect(() => {
     if (open && data) {
+      Promise.all([
+        getApiV1EnterpriseDepartments(),
+        getApiV1EnterprisePermissionLevels(),
+        getApiV1UserListCompat(),
+        !isBatch && data[0]?.nav_id
+          ? getApiV1NavPermission({ kb_id: kb_id!, id: data[0].nav_id })
+          : Promise.resolve(null),
+        !isBatch && data[0]?.parent_id
+          ? getApiV1NodePermission({ kb_id: kb_id!, id: data[0].parent_id })
+          : Promise.resolve(null),
+      ]).then(
+        ([
+          departmentResp,
+          levelResp,
+          userResp,
+          navPermissionResp,
+          parentNodePermissionResp,
+        ]) => {
+          setDepartments(departmentResp.departments || []);
+          setPermissionLevels(
+            (levelResp.levels || []).map(item => ({
+              id: item.id,
+              name: item.name,
+              rank: item.rank,
+            })),
+          );
+          setUsers(
+            (userResp.users || []).map(item => ({
+              id: item.id || '',
+              account: item.account || '',
+            })),
+          );
+          const parentPermissions =
+            parentNodePermissionResp?.permissions ||
+            navPermissionResp?.permissions ||
+            {};
+          const scope =
+            parentPermissions?.scope_type === 'department'
+              ? 'department'
+              : 'public';
+          const parentDepartmentIDs =
+            parentPermissions?.allowed_department_ids || [];
+          setNavScopeType(scope);
+          setValue('scope_type', scope);
+          setParentPermissionSummary({
+            departmentIds: parentDepartmentIDs,
+            departmentNames: (departmentResp.departments || [])
+              .filter(item => parentDepartmentIDs.includes(item.id))
+              .map(item => item.name),
+            minPermissionLevelId:
+              parentPermissions?.min_permission_level_id || '',
+          });
+        },
+      );
       if (isBatch) return;
       setValue('name', data[0].name!);
       setValue('summary', data[0].summary!);
@@ -165,11 +249,25 @@ const DocPropertiesModal = ({
         kb_id: kb_id!,
         id: data[0].id!,
       }).then(res => {
-        const permissions = res.permissions!;
+        const permissions = res.permissions as
+          | {
+              inherit?: boolean;
+              min_permission_level_id?: string;
+              allowed_department_ids?: string[];
+              allowed_user_ids?: string[];
+            }
+          | undefined;
         if (permissions) {
-          setValue('answerable', permissions.answerable!);
-          setValue('visitable', permissions.visitable!);
-          setValue('visible', permissions.visible!);
+          setValue('inherit', true);
+          setValue(
+            'min_permission_level_id',
+            permissions.min_permission_level_id || '',
+          );
+          setValue(
+            'allowed_department_ids',
+            permissions.allowed_department_ids || [],
+          );
+          setValue('allowed_user_ids', permissions.allowed_user_ids || []);
         }
       });
     }
@@ -189,7 +287,7 @@ const DocPropertiesModal = ({
 
   return (
     <Modal
-      title={isBatch ? '批量设置权限' : '文档属性'}
+      title={modalTitle}
       open={open}
       onCancel={() => {
         sseClientRef.current?.unsubscribe();
@@ -209,13 +307,9 @@ const DocPropertiesModal = ({
               component={'span'}
               sx={{ fontWeight: 700, color: 'primary.main', px: 0.5 }}
             >
-              {
-                data.filter(
-                  item => item.type === DomainNodeType.NodeTypeDocument,
-                ).length
-              }
+              {data.length}
             </Box>
-            个文档，设置权限
+            个节点，设置权限
           </Box>
           <Card
             sx={{
@@ -273,62 +367,105 @@ const DocPropertiesModal = ({
             </FormItem>
           </>
         )}
-        <FormItem label='可被问答' sx={{ mt: isBatch ? 2 : 0 }}>
+        <FormItem label='目录类型'>
           <Controller
-            name='answerable'
+            name='scope_type'
             control={control}
             render={({ field }) => (
-              <RadioGroup row {...field} sx={{ gap: 2 }}>
-                {PER_OPTIONS.map(option => (
-                  <FormControlLabel
-                    key={option.value}
-                    value={option.value}
-                    control={<Radio size='small' />}
-                    label={option.label}
-                  />
-                ))}
-              </RadioGroup>
+              <TextField {...field} fullWidth select size='small' disabled>
+                <MenuItem value='public'>公共目录</MenuItem>
+                <MenuItem value='department'>部门目录</MenuItem>
+              </TextField>
             )}
           />
         </FormItem>
 
-        <FormItem label='可被访问'>
+        <FormItem label='父级规则'>
+          <Stack gap={0.5}>
+            <StyledText>
+              {scopeType === 'department'
+                ? `部门权限：${
+                    parentPermissionSummary.departmentNames.length > 0
+                      ? parentPermissionSummary.departmentNames.join(' / ')
+                      : '未限制部门'
+                  }`
+                : '公共权限：全员可见'}
+            </StyledText>
+            <StyledText>
+              等级权限：
+              {selectedLevel
+                ? `${selectedLevel.name}（${selectedLevel.rank}）及以上`
+                : '不限制'}
+            </StyledText>
+          </Stack>
+        </FormItem>
+
+        <FormItem label='最低权限等级'>
           <Controller
-            name='visitable'
+            name='min_permission_level_id'
             control={control}
             render={({ field }) => (
-              <RadioGroup row {...field} sx={{ gap: 2 }}>
-                {PER_OPTIONS.map(option => (
-                  <FormControlLabel
-                    key={option.value}
-                    value={option.value}
-                    control={<Radio size='small' />}
-                    label={option.label}
-                  />
+              <TextField {...field} fullWidth select size='small'>
+                <MenuItem value=''>不限制</MenuItem>
+                {availablePermissionLevels.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.name}（{item.rank}）
+                  </MenuItem>
                 ))}
-              </RadioGroup>
+              </TextField>
             )}
           />
         </FormItem>
 
-        <FormItem label='导航内可见'>
-          <Controller
-            name='visible'
-            control={control}
-            render={({ field }) => (
-              <RadioGroup row {...field} sx={{ gap: 2 }}>
-                {PER_OPTIONS.map(option => (
-                  <FormControlLabel
-                    key={option.value}
-                    value={option.value}
-                    control={<Radio size='small' />}
-                    label={option.label}
-                  />
-                ))}
-              </RadioGroup>
-            )}
-          />
-        </FormItem>
+        {scopeType === 'department' && (
+          <>
+            <FormItem label='允许部门'>
+              <Controller
+                name='allowed_department_ids'
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    fullWidth
+                    select
+                    size='small'
+                    SelectProps={{ multiple: true }}
+                    value={field.value || []}
+                  >
+                    {availableDepartments.map(item => (
+                      <MenuItem key={item.id} value={item.id}>
+                        {formatDepartmentOptionLabel(item)}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
+            </FormItem>
+
+            <FormItem label='允许用户'>
+              <Controller
+                name='allowed_user_ids'
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    fullWidth
+                    select
+                    size='small'
+                    SelectProps={{ multiple: true }}
+                    value={field.value || []}
+                  >
+                    {users.map(item => (
+                      <MenuItem key={item.id} value={item.id}>
+                        {item.account}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
+            </FormItem>
+          </>
+        )}
 
         {!isBatch && (
           <FormItem label='内容摘要' sx={{ alignItems: 'flex-start' }}>

@@ -1,4 +1,4 @@
-import { putApiV1App } from '@/request/App';
+import { putApiV1AppCompat } from '@/request/appCompat';
 
 import { FormItem, SettingCardItem } from './Common';
 import {
@@ -15,7 +15,6 @@ import {
 import { message } from '@ctzhian/ui';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { useAppSelector } from '@/store';
 
 const CardQaCopyright = ({
   data,
@@ -25,11 +24,9 @@ const CardQaCopyright = ({
   refresh: (value: DomainConversationSetting) => void;
 }) => {
   const [isEdit, setIsEdit] = useState<boolean>(false);
-  const { kb_id } = useAppSelector(state => state.config);
   const {
     control,
     handleSubmit,
-    reset,
     watch,
     setValue,
     formState: { errors },
@@ -43,9 +40,9 @@ const CardQaCopyright = ({
   const copyright_hide_enabled = watch('copyright_hide_enabled');
 
   const onSubmit = handleSubmit(value => {
-    putApiV1App(
+    putApiV1AppCompat(
       { id: data.id! },
-      { settings: { ...data.settings, conversation_setting: value }, kb_id },
+      { settings: { ...data.settings, conversation_setting: value } },
     ).then(() => {
       refresh(value);
       message.success('保存成功');
@@ -62,7 +59,7 @@ const CardQaCopyright = ({
       'copyright_info',
       data.settings?.conversation_setting?.copyright_info ?? '',
     );
-  }, [data]);
+  }, [data, setValue]);
 
   return (
     <SettingCardItem

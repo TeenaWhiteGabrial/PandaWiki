@@ -1,6 +1,7 @@
 package share
 
 import (
+	"context"
 	"net/http"
 
 	gocap "github.com/ackcoder/go-cap"
@@ -8,23 +9,27 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/chaitin/panda-wiki/consts"
+	"github.com/chaitin/panda-wiki/usecase"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
 )
 
 type ShareCaptchaHandler struct {
 	*handler.BaseHandler
-	logger *log.Logger
+	logger    *log.Logger
+	kbUsecase *usecase.KnowledgeBaseUsecase
 }
 
 func NewShareCaptchaHandler(
 	baseHandler *handler.BaseHandler,
 	echo *echo.Echo,
 	logger *log.Logger,
+	kbUsecase *usecase.KnowledgeBaseUsecase,
 ) *ShareCaptchaHandler {
 	h := &ShareCaptchaHandler{
 		BaseHandler: baseHandler,
 		logger:      logger.WithModule("handler.share.captcha"),
+		kbUsecase:   kbUsecase,
 	}
 
 	group := echo.Group("share/v1/captcha")
@@ -32,6 +37,17 @@ func NewShareCaptchaHandler(
 	group.POST("/redeem", h.RedeemCaptcha)
 
 	return h
+}
+
+func (h *ShareCaptchaHandler) resolveKBID(ctx context.Context, kbID string) (string, error) {
+	if kbID != "" {
+		return kbID, nil
+	}
+	kb, err := h.kbUsecase.GetDefaultKnowledgeBase(ctx)
+	if err != nil {
+		return "", err
+	}
+	return kb.ID, nil
 }
 
 // CreateCaptcha
@@ -45,10 +61,11 @@ func NewShareCaptchaHandler(
 //	@Success		200		{object}	gocap.ChallengeData
 //	@Router			/share/v1/captcha/challenge [post]
 func (h *ShareCaptchaHandler) CreateCaptcha(c echo.Context) error {
-	kbID := c.Request().Header.Get("X-KB-ID")
-	if kbID == "" {
-		return h.NewResponseWithError(c, "kb_id is required", nil)
+	kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))
+	if err != nil {
+		return h.NewResponseWithError(c, "kb_id is required", err)
 	}
+	c.Request().Header.Set("X-KB-ID", kbID)
 	data, err := h.Captcha.CreateChallenge(c.Request().Context())
 	if err != nil {
 		return h.NewResponseWithError(c, "create captcha failed", err)
@@ -68,10 +85,11 @@ func (h *ShareCaptchaHandler) CreateCaptcha(c echo.Context) error {
 //	@Success		200		{object}	gocap.VerificationResult
 //	@Router			/share/v1/captcha/redeem [post]
 func (h *ShareCaptchaHandler) RedeemCaptcha(c echo.Context) error {
-	kbID := c.Request().Header.Get("X-KB-ID")
-	if kbID == "" {
-		return h.NewResponseWithError(c, "kb_id is required", nil)
+	kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))
+	if err != nil {
+		return h.NewResponseWithError(c, "kb_id is required", err)
 	}
+	c.Request().Header.Set("X-KB-ID", kbID)
 	var req consts.RedeemCaptchaReq
 	if err := c.Bind(&req); err != nil {
 		return h.NewResponseWithError(c, "request is invalid", err)

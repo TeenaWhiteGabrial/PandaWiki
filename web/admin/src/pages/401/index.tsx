@@ -30,6 +30,10 @@ const StyledActions = styled(Box)(({ theme }) => ({
 
 const Index = () => {
   const navigate = useNavigate();
+  const handleLogout = () => {
+    localStorage.removeItem('panda_wiki_token');
+    navigate('/login');
+  };
 
   return (
     <StyledContainer>
@@ -44,9 +48,9 @@ const Index = () => {
         <Button variant='contained' onClick={() => navigate('/')}>
           返回首页
         </Button>
-        {/* <Button variant='outlined' onClick={() => navigate('/login')}>
-          去登录
-        </Button> */}
+        <Button variant='outlined' onClick={handleLogout}>
+          退出登录
+        </Button>
       </StyledActions>
     </StyledContainer>
   );

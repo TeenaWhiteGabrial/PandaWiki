@@ -98,7 +98,6 @@ export const copyText = (
   duration?: number,
   msgText?: string,
 ) => {
-  const isNotHttps = !/^https:\/\//.test(window.location.origin);
   const dur = duration ?? 1.5;
 
   if (msgText) {
@@ -107,44 +106,47 @@ export const copyText = (
     msgText = '';
   }
 
-  if (isNotHttps) {
-    message.error(
-      '非 https 协议下不支持复制，请使用 https 协议' + msgText,
-      dur,
-    );
-    return;
-  }
+  const fallbackCopy = () => {
+    const textArea = document.createElement('textarea');
+    textArea.style.position = 'fixed';
+    textArea.style.opacity = '0';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '-9999px';
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        message.success('复制成功' + msgText, dur);
+        callback?.();
+      } else {
+        message.error('复制失败，请手动复制' + msgText, dur);
+      }
+    } catch {
+      message.error('复制失败，请手动复制' + msgText, dur);
+    } finally {
+      document.body.removeChild(textArea);
+    }
+  };
 
   try {
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text);
-      message.success('复制成功' + msgText, dur);
-      callback?.();
-    } else {
-      const textArea = document.createElement('textarea');
-      textArea.style.position = 'fixed';
-      textArea.style.opacity = '0';
-      textArea.style.left = '-9999px';
-      textArea.style.top = '-9999px';
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      try {
-        const successful = document.execCommand('copy');
-        if (successful) {
-          message.success('复制成功' + msgText, duration ?? 1500);
+      navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          message.success('复制成功' + msgText, dur);
           callback?.();
-        } else {
-          message.error('复制失败，请手动复制' + msgText, duration ?? 1500);
-        }
-      } catch (err) {
-        message.error('复制失败，请手动复制' + msgText, duration ?? 1500);
-      }
-      document.body.removeChild(textArea);
+        })
+        .catch(() => {
+          fallbackCopy();
+        });
+      return;
     }
-  } catch (err) {
-    message.error('复制失败，请手动复制' + msgText, duration ?? 1500);
+    fallbackCopy();
+  } catch {
+    fallbackCopy();
   }
 };
 

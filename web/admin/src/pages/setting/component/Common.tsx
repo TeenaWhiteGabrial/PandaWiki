@@ -15,7 +15,6 @@ import {
   Tooltip,
 } from '@mui/material';
 import { createContext, useContext, useState } from 'react';
-import VersionMask from '@/components/VersionMask';
 
 export const SecretTextField = (props: TextFieldProps) => {
   const [show, setShow] = useState(false);
@@ -124,7 +123,7 @@ export const FormItem = ({
   extra,
   sx,
   labelSx,
-  permission,
+  permission: _permission,
 }: {
   label?: string | React.ReactNode;
   children?: React.ReactNode;
@@ -139,33 +138,30 @@ export const FormItem = ({
 }) => {
   const { vertical: verticalContext, labelWidth: labelWidthContext } =
     useContext(FormContext);
+  void _permission;
 
   return (
-    <VersionMask permission={permission}>
-      <StyledFormItem vertical={vertical || verticalContext} sx={sx}>
-        <StyledFormLabelWrapper
-          vertical={vertical || verticalContext}
-          labelWidth={labelWidth || labelWidthContext}
-          sx={labelSx}
-        >
-          <Stack direction='row' alignItems='center' flex={1}>
-            <StyledFormLabel required={required}>{label}</StyledFormLabel>
-            {tooltip && typeof tooltip === 'string' ? (
-              <Tooltip title={tooltip} placement='top' arrow>
-                <InfoIcon
-                  sx={{ color: 'text.secondary', fontSize: 14, ml: 1 }}
-                />
-              </Tooltip>
-            ) : (
-              tooltip
-            )}
-          </Stack>
+    <StyledFormItem vertical={vertical || verticalContext} sx={sx}>
+      <StyledFormLabelWrapper
+        vertical={vertical || verticalContext}
+        labelWidth={labelWidth || labelWidthContext}
+        sx={labelSx}
+      >
+        <Stack direction='row' alignItems='center' flex={1}>
+          <StyledFormLabel required={required}>{label}</StyledFormLabel>
+          {tooltip && typeof tooltip === 'string' ? (
+            <Tooltip title={tooltip} placement='top' arrow>
+              <InfoIcon sx={{ color: 'text.secondary', fontSize: 14, ml: 1 }} />
+            </Tooltip>
+          ) : (
+            tooltip
+          )}
+        </Stack>
 
-          {extra}
-        </StyledFormLabelWrapper>
-        {children}
-      </StyledFormItem>
-    </VersionMask>
+        {extra}
+      </StyledFormLabelWrapper>
+      {children}
+    </StyledFormItem>
   );
 };
 
@@ -254,7 +250,7 @@ export const SettingCardItem = ({
   extra,
   more,
   sx,
-  permission = [
+  permission: _permission = [
     ConstsLicenseEdition.LicenseEditionFree,
     ConstsLicenseEdition.LicenseEditionProfession,
     ConstsLicenseEdition.LicenseEditionBusiness,
@@ -270,6 +266,8 @@ export const SettingCardItem = ({
   sx?: SxProps;
   permission?: number[];
 }) => {
+  void _permission;
+
   const renderMore = (more: SettingCardItemMore) => {
     if (more && typeof more === 'object' && 'type' in more) {
       const linkMore = more as {
@@ -296,21 +294,19 @@ export const SettingCardItem = ({
   };
 
   return (
-    <VersionMask permission={permission}>
-      <StyledSettingCardItem sx={sx}>
-        <StyledSettingCardItemTitleWrapper>
-          <StyledSettingCardItemTitle>
-            {title} {renderMore(more)}
-          </StyledSettingCardItemTitle>
-          {isEdit && (
-            <Button variant='contained' size='small' onClick={onSubmit}>
-              保存
-            </Button>
-          )}
-          {extra}
-        </StyledSettingCardItemTitleWrapper>
-        <StyledSettingCardItemContent>{children}</StyledSettingCardItemContent>
-      </StyledSettingCardItem>
-    </VersionMask>
+    <StyledSettingCardItem sx={sx}>
+      <StyledSettingCardItemTitleWrapper>
+        <StyledSettingCardItemTitle>
+          {title} {renderMore(more)}
+        </StyledSettingCardItemTitle>
+        {isEdit && (
+          <Button variant='contained' size='small' onClick={onSubmit}>
+            保存
+          </Button>
+        )}
+        {extra}
+      </StyledSettingCardItemTitleWrapper>
+      <StyledSettingCardItemContent>{children}</StyledSettingCardItemContent>
+    </StyledSettingCardItem>
   );
 };

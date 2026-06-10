@@ -30,6 +30,7 @@ type LLMUsecase struct {
 	conversationRepo *pg.ConversationRepository
 	kbRepo           *pg.KnowledgeBaseRepository
 	nodeRepo         *pg.NodeRepository
+	enterprise       *EnterpriseUsecase
 	modelRepo        *pg.ModelRepository
 	promptRepo       *pg.PromptRepo
 	config           *config.Config
@@ -42,7 +43,7 @@ const (
 	summaryMaxChunks       = 4     // max chunks to process for summary
 )
 
-func NewLLMUsecase(config *config.Config, rag rag.RAGService, conversationRepo *pg.ConversationRepository, kbRepo *pg.KnowledgeBaseRepository, nodeRepo *pg.NodeRepository, modelRepo *pg.ModelRepository, promptRepo *pg.PromptRepo, logger *log.Logger) *LLMUsecase {
+func NewLLMUsecase(config *config.Config, rag rag.RAGService, conversationRepo *pg.ConversationRepository, kbRepo *pg.KnowledgeBaseRepository, nodeRepo *pg.NodeRepository, enterprise *EnterpriseUsecase, modelRepo *pg.ModelRepository, promptRepo *pg.PromptRepo, logger *log.Logger) *LLMUsecase {
 	tiktoken.SetBpeLoader(&utils.Localloader{})
 	modelkit := modelkit.NewModelKit(logger.Logger)
 	return &LLMUsecase{
@@ -51,6 +52,7 @@ func NewLLMUsecase(config *config.Config, rag rag.RAGService, conversationRepo *
 		conversationRepo: conversationRepo,
 		kbRepo:           kbRepo,
 		nodeRepo:         nodeRepo,
+		enterprise:       enterprise,
 		modelRepo:        modelRepo,
 		promptRepo:       promptRepo,
 		logger:           logger.WithModule("usecase.llm"),
@@ -63,6 +65,7 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 	conversationID string,
 	kbID string,
 	groupIDs []int,
+	accessCtx *domain.EnterpriseAccessContext,
 	systemPrompt string,
 ) ([]*schema.Message, []*domain.RankedNodeChunks, error) {
 	messages := make([]*schema.Message, 0)
@@ -121,6 +124,11 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 				u.logger.Error("get rank nodes failed", log.Error(err))
 				return nil, nil, errors.New("get rank nodes failed")
 			}
+			rankedNodes, err = u.filterRankedNodesByEnterpriseAccess(ctx, rankedNodes, accessCtx)
+			if err != nil {
+				u.logger.Error("filter rank nodes by enterprise access failed", log.Error(err))
+				return nil, nil, errors.New("filter rank nodes failed")
+			}
 			documents := domain.FormatNodeChunks(rankedNodes, kb.AccessSettings.BaseURL)
 			u.logger.Debug("documents", log.String("documents", documents))
 
@@ -137,6 +145,44 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 		}
 	}
 	return messages, rankedNodes, nil
+}
+
+func (u *LLMUsecase) filterRankedNodesByEnterpriseAccess(ctx context.Context, rankedNodes []*domain.RankedNodeChunks, accessCtx *domain.EnterpriseAccessContext) ([]*domain.RankedNodeChunks, error) {
+	if u.enterprise == nil || accessCtx == nil || len(rankedNodes) == 0 {
+		return rankedNodes, nil
+	}
+
+	nodeIDs := lo.Map(rankedNodes, func(node *domain.RankedNodeChunks, _ int) string {
+		return node.NodeID
+	})
+	nodesMap, err := u.nodeRepo.GetNodesByIDs(ctx, nodeIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, nodeInfo := range nodesMap {
+		resolvedPermissions, resolveErr := u.enterprise.ResolveNodePermissions(ctx, nodeInfo)
+		if resolveErr == nil {
+			nodeInfo.Permissions = resolvedPermissions
+		}
+		if nodeInfo.NavId != "" && u.enterprise != nil && u.enterprise.navRepo != nil {
+			if nav, navErr := u.enterprise.navRepo.GetById(ctx, nodeInfo.NavId); navErr == nil {
+				nodeInfo.Permissions = u.enterprise.MergeNodeAndNavPermissions(nodeInfo.Permissions, nav.Permissions)
+			}
+		}
+	}
+
+	filtered := make([]*domain.RankedNodeChunks, 0, len(rankedNodes))
+	for _, rankedNode := range rankedNodes {
+		nodeInfo, ok := nodesMap[rankedNode.NodeID]
+		if !ok {
+			continue
+		}
+		if !u.enterprise.CanAnswerable(nodeInfo.Permissions, accessCtx) {
+			continue
+		}
+		filtered = append(filtered, rankedNode)
+	}
+	return filtered, nil
 }
 
 func (u *LLMUsecase) ChatWithAgent(

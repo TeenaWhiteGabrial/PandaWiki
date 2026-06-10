@@ -47,6 +47,21 @@ func (s *CTRAG) CreateKnowledgeBase(ctx context.Context) (string, error) {
 	return dataset.ID, nil
 }
 
+func (s *CTRAG) ListKnowledgeBases(ctx context.Context) ([]Dataset, error) {
+	res, err := s.client.Datasets.List(ctx, &raglite.ListDatasetsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	datasets := make([]Dataset, 0, len(res.Datasets))
+	for _, item := range res.Datasets {
+		datasets = append(datasets, Dataset{
+			ID:   item.ID,
+			Name: item.Name,
+		})
+	}
+	return datasets, nil
+}
+
 func (s *CTRAG) QueryRecords(ctx context.Context, req *QueryRecordsRequest) (string, []*domain.NodeContentChunk, error) {
 	var chatMsgs []raglite.ChatMessage
 	for _, msg := range req.HistoryMsgs {

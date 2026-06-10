@@ -58,7 +58,11 @@ func NewAppHandler(e *echo.Echo, baseHandler *handler.BaseHandler, logger *log.L
 func (h *AppHandler) GetAppDetail(c echo.Context) error {
 	kbID := c.QueryParam("kb_id")
 	if kbID == "" {
-		return h.NewResponseWithError(c, "kb id is required", nil)
+		kb, err := h.usecase.GetDefaultKnowledgeBaseByUser(c.Request().Context())
+		if err != nil {
+			return h.NewResponseWithError(c, "failed to resolve knowledge base", err)
+		}
+		kbID = kb.ID
 	}
 	appType := c.QueryParam("type")
 	if appType == "" {
@@ -134,7 +138,11 @@ func (h *AppHandler) DeleteApp(c echo.Context) error {
 
 	kbID := c.QueryParam("kb_id")
 	if kbID == "" {
-		return h.NewResponseWithError(c, "kb id is required", nil)
+		kb, err := h.usecase.GetDefaultKnowledgeBaseByUser(c.Request().Context())
+		if err != nil {
+			return h.NewResponseWithError(c, "failed to resolve knowledge base", err)
+		}
+		kbID = kb.ID
 	}
 
 	if err := h.usecase.DeleteApp(c.Request().Context(), id, kbID); err != nil {

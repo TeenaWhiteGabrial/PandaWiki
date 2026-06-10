@@ -153,7 +153,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL}
       CADDY_API: ''
       FILE_BASE_URL: http://${SERVER_IP}:${API_PORT}/static-file
-      ANYDOC_BASE_URL: http://${PROJECT_NAME}-crawler:8080
+      ANYDOC_CRAWLER_BASE_URL: http://${PROJECT_NAME}-crawler:8080
     ports:
       - '${API_PORT}:8000'
     depends_on:
@@ -187,7 +187,7 @@ services:
       SENTRY_ENABLED: ${SENTRY_ENABLED}
       LOG_LEVEL: ${LOG_LEVEL}
       FILE_BASE_URL: http://${SERVER_IP}:${API_PORT}/static-file
-      ANYDOC_BASE_URL: http://${PROJECT_NAME}-crawler:8080
+      ANYDOC_CRAWLER_BASE_URL: http://${PROJECT_NAME}-crawler:8080
     depends_on:
       api:
         condition: service_started

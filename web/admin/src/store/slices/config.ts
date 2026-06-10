@@ -1,33 +1,23 @@
 import { KnowledgeBaseListItem } from '@/api';
 import {
-  ConstsLicenseEdition,
   DomainAppDetailResp,
   DomainKnowledgeBaseDetail,
   GithubComChaitinPandaWikiDomainModelListItem,
-  V1UserInfoResp,
 } from '@/request/types';
+import { UserInfoCompat } from '@/request/userCompat';
 import { createSlice } from '@reduxjs/toolkit';
 
-export interface LocalLicenseConfig {
-  edition?: ConstsLicenseEdition;
-  expired_at?: number;
-  started_at?: number;
-}
-
 export interface config {
-  user: V1UserInfoResp;
+  user: UserInfoCompat;
   kb_id: string;
   nav_id: string;
-  license: LocalLicenseConfig;
   kbList: KnowledgeBaseListItem[] | null;
   modelList: GithubComChaitinPandaWikiDomainModelListItem[] | null;
-  kb_c: boolean;
   modelStatus: boolean;
   kbDetail: DomainKnowledgeBaseDetail;
   appPreviewData: DomainAppDetailResp | null;
   refreshAdminRequest: () => void;
   isRefreshDocList: boolean;
-  isCreateWikiModalOpen: boolean;
 }
 
 const initialState: config = {
@@ -36,22 +26,15 @@ const initialState: config = {
     account: '',
     created_at: '',
   },
-  license: {
-    edition: 0,
-    expired_at: 0,
-    started_at: 0,
-  },
   kb_id: '',
   nav_id: '',
   kbList: null,
   modelList: null,
-  kb_c: false,
   modelStatus: false,
   kbDetail: {} as DomainKnowledgeBaseDetail,
   appPreviewData: null,
   refreshAdminRequest: () => {},
   isRefreshDocList: false,
-  isCreateWikiModalOpen: false,
 };
 
 const configSlice = createSlice({
@@ -78,17 +61,11 @@ const configSlice = createSlice({
     setKbList(state, { payload }) {
       state.kbList = payload;
     },
-    setKbC(state, { payload }) {
-      state.kb_c = payload;
-    },
     setModelList(state, { payload }) {
       state.modelList = payload;
     },
     setModelStatus(state, { payload }) {
       state.modelStatus = payload;
-    },
-    setLicense(state, { payload }) {
-      state.license = payload;
     },
     setAppPreviewData(state, { payload }) {
       state.appPreviewData = payload;
@@ -102,9 +79,6 @@ const configSlice = createSlice({
     setIsRefreshDocList(state, { payload }) {
       state.isRefreshDocList = payload;
     },
-    setIsCreateWikiModalOpen(state, { payload }) {
-      state.isCreateWikiModalOpen = payload;
-    },
   },
 });
 
@@ -113,14 +87,11 @@ export const {
   setKbId,
   setNavId,
   setKbList,
-  setKbC,
   setModelStatus,
-  setLicense,
   setAppPreviewData,
   setKbDetail,
   setRefreshAdminRequest,
   setModelList,
   setIsRefreshDocList,
-  setIsCreateWikiModalOpen,
 } = configSlice.actions;
 export default configSlice.reducer;

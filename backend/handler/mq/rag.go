@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/mq"
@@ -78,12 +77,6 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			return nil
 		}
 
-		groupIds, err := h.nodeRepo.GetNodeAuthGroupIdsByNodeId(ctx, nodeRelease.NodeID, consts.NodePermNameAnswerable)
-		if err != nil {
-			h.logger.Error("get groupIds failed", log.Error(err), log.String("kb_id", request.KBID))
-			return nil
-		}
-
 		// upsert node content chunks
 		docID, err := h.rag.UpsertRecords(ctx, &rag.UpsertRecordsRequest{
 			ID:        nodeRelease.ID,
@@ -91,7 +84,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			DatasetID: kb.DatasetID,
 			DocID:     nodeRelease.DocID,
 			Content:   nodeRelease.Content,
-			GroupIDs:  groupIds,
+			GroupIDs:  nil,
 		})
 		if err != nil {
 			h.logger.Error("upsert node content vector failed", log.Error(err))

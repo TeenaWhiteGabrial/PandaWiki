@@ -125,6 +125,12 @@ func (h *KnowledgeBaseHandler) GetKnowledgeBaseList(c echo.Context) error {
 		return h.NewResponseWithError(c, "failed to get knowledge base list", err)
 	}
 
+	// 第一阶段单知识库模式：对外仍保持数组结构，避免前端协议大改，
+	// 但只返回当前用户可见的第一个知识库，收敛多库语义。
+	if len(knowledgeBases) > 1 {
+		knowledgeBases = knowledgeBases[:1]
+	}
+
 	return h.NewResponseWithData(c, knowledgeBases)
 }
 
@@ -142,6 +148,14 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c echo.Context) error {
 	var req domain.UpdateKnowledgeBaseReq
 	if err := c.Bind(&req); err != nil {
 		return h.NewResponseWithError(c, "invalid request", err)
+	}
+
+	if req.ID == "" {
+		kb, err := h.usecase.GetDefaultKnowledgeBaseByUser(c.Request().Context())
+		if err != nil {
+			return h.NewResponseWithError(c, "failed to resolve knowledge base", err)
+		}
+		req.ID = kb.ID
 	}
 
 	if err := c.Validate(&req); err != nil {
@@ -176,7 +190,11 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c echo.Context) error {
 func (h *KnowledgeBaseHandler) GetKnowledgeBaseDetail(c echo.Context) error {
 	kbID := c.QueryParam("id")
 	if kbID == "" {
-		return h.NewResponseWithError(c, "kb id is required", nil)
+		kb, err := h.usecase.GetDefaultKnowledgeBaseByUser(c.Request().Context())
+		if err != nil {
+			return h.NewResponseWithError(c, "failed to resolve knowledge base", err)
+		}
+		kbID = kb.ID
 	}
 
 	kb, err := h.usecase.GetKnowledgeBase(c.Request().Context(), kbID)

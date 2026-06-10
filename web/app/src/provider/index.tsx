@@ -1,6 +1,8 @@
 'use client';
 
 import { ITreeItem, KBDetail, NodeListItem, WidgetInfo } from '@/assets/type';
+import { getApiV1User } from '@/request/User';
+import { V1UserInfoResp } from '@/request/types';
 import { useMediaQuery } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
@@ -22,7 +24,8 @@ import {
 } from '@/utils/tree';
 
 interface StoreContextType {
-  authInfo?: Record<string, unknown>;
+  authInfo?: V1UserInfoResp;
+  setAuthInfo?: Dispatch<SetStateAction<V1UserInfoResp | undefined>>;
   widget?: WidgetInfo;
   kbDetail?: KBDetail;
   catalogShow?: boolean;
@@ -100,6 +103,9 @@ export default function StoreProvider({
     return initialTree;
   });
   const [qaModalOpen, setQaModalOpen] = useState(false);
+  const [authInfoState, setAuthInfo] = useState<V1UserInfoResp | undefined>(
+    authInfo,
+  );
   const [navList] = useState<NavItem[]>(initialNavList);
   const [navDataMap] =
     useState<Record<string, NodeListItem[]>>(initialNavDataMap);
@@ -145,6 +151,39 @@ export default function StoreProvider({
     setIsMobile(mediaQueryResult);
   }, [mediaQueryResult]);
 
+  useEffect(() => {
+    setAuthInfo(authInfo);
+  }, [authInfo]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const token = window.localStorage.getItem('panda_wiki_token');
+    if (!token) {
+      setAuthInfo(undefined);
+      return;
+    }
+
+    if (authInfoState?.id) return;
+
+    let disposed = false;
+    getApiV1User({ isAlert: false })
+      .then(user => {
+        if (!disposed) {
+          setAuthInfo(user);
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setAuthInfo(undefined);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [authInfoState?.id]);
+
   const params = useParams();
   const docId = (params?.id as string) || undefined;
   const catalogFolderExpand = catalogSettings?.catalog_folder !== 2;
@@ -180,7 +219,8 @@ export default function StoreProvider({
         catalogShow,
         setCatalogShow,
         mobile: isMobile,
-        authInfo,
+        authInfo: authInfoState,
+        setAuthInfo,
         setNodeList,
         catalogWidth,
         tree,

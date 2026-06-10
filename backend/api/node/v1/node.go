@@ -40,20 +40,14 @@ type NodePermissionReq struct {
 }
 
 type NodePermissionResp struct {
-	ID               string                   `json:"id"`
-	Permissions      domain.NodePermissions   `json:"permissions"`
-	AnswerableGroups []domain.NodeGroupDetail `json:"answerable_groups"` // 可被问答
-	VisitableGroups  []domain.NodeGroupDetail `json:"visitable_groups"`  // 可被访问
-	VisibleGroups    []domain.NodeGroupDetail `json:"visible_groups"`    // 导航内可见
+	ID          string                 `json:"id"`
+	Permissions domain.NodePermissions `json:"permissions"`
 }
 
 type NodePermissionEditReq struct {
-	KbId             string                  `query:"kb_id" json:"kb_id" validate:"required"`
-	IDs              []string                `query:"ids" json:"ids" validate:"required"`
-	Permissions      *domain.NodePermissions `json:"permissions"`
-	AnswerableGroups *[]int                  `json:"answerable_groups"` // 可被问答
-	VisitableGroups  *[]int                  `json:"visitable_groups"`  // 可被访问
-	VisibleGroups    *[]int                  `json:"visible_groups"`    // 导航内可见
+	KbId        string                  `query:"kb_id" json:"kb_id" validate:"required"`
+	IDs         []string                `query:"ids" json:"ids" validate:"required"`
+	Permissions *domain.NodePermissions `json:"permissions"`
 }
 
 type NodePermissionEditResp struct {

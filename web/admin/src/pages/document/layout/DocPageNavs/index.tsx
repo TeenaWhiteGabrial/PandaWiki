@@ -32,12 +32,14 @@ import {
 } from '@panda-wiki/icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import NavEditModal from './NavEditModal';
+import NavPermissionModal from './NavPermissionModal';
 
 const SortableNavItem = ({
   nav,
   selected,
   onSelect,
   onEdit,
+  onPermission,
   onDelete,
   showDelete,
   isLast,
@@ -47,6 +49,7 @@ const SortableNavItem = ({
   selected: boolean;
   onSelect: () => void;
   onEdit: () => void;
+  onPermission: () => void;
   onDelete: () => void;
   showDelete: boolean;
   isLast: boolean;
@@ -101,10 +104,34 @@ const SortableNavItem = ({
             },
           }}
         >
-          修改目录
+          修改栏目
         </Stack>
       ),
       onClick: onEdit,
+    },
+    {
+      key: 'permission',
+      label: (
+        <Stack
+          direction='row'
+          alignItems='center'
+          sx={{
+            fontSize: 14,
+            px: 2,
+            lineHeight: '40px',
+            height: 40,
+            width: 140,
+            borderRadius: '5px',
+            cursor: 'pointer',
+            '&:hover': {
+              bgcolor: addOpacityToColor(theme.palette.primary.main, 0.1),
+            },
+          }}
+        >
+          栏目权限
+        </Stack>
+      ),
+      onClick: onPermission,
     },
     ...(showDelete
       ? [
@@ -128,7 +155,7 @@ const SortableNavItem = ({
                   },
                 }}
               >
-                删除目录
+                删除栏目
               </Stack>
             ),
             onClick: onDelete,
@@ -243,6 +270,10 @@ const DocPageNavs = ({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingNav, setEditingNav] = useState<V1NavListResp | null>(null);
+  const [permissionOpen, setPermissionOpen] = useState(false);
+  const [permissionNav, setPermissionNav] = useState<V1NavListResp | null>(
+    null,
+  );
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingNav, setDeletingNav] = useState<V1NavListResp | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
@@ -334,6 +365,11 @@ const DocPageNavs = ({
   const handleAdd = useCallback(() => {
     setEditingNav(null);
     setEditOpen(true);
+  }, []);
+
+  const handlePermission = useCallback((nav: V1NavListResp) => {
+    setPermissionNav(nav);
+    setPermissionOpen(true);
   }, []);
 
   const handleEditClose = useCallback(() => {
@@ -441,6 +477,7 @@ const DocPageNavs = ({
                     selected={selectedId === nav.id}
                     onSelect={() => handleSelect(nav.id!)}
                     onEdit={() => handleEdit(nav)}
+                    onPermission={() => handlePermission(nav)}
                     onDelete={() => handleDeleteClick(nav)}
                     showDelete={sortedNavs.length > 1}
                     isLast={i === sortedNavs.length - 1}
@@ -512,11 +549,25 @@ const DocPageNavs = ({
         nav={editingNav}
         kb_id={kb_id}
       />
+      <NavPermissionModal
+        open={permissionOpen}
+        nav={permissionNav}
+        kb_id={kb_id}
+        onClose={() => {
+          setPermissionOpen(false);
+          setPermissionNav(null);
+        }}
+        onSuccess={() => {
+          setPermissionOpen(false);
+          setPermissionNav(null);
+          refresh?.();
+        }}
+      />
       <Modal
         title={
           <Stack direction='row' alignItems='center' gap={1}>
             <ErrorOutlineIcon sx={{ color: 'warning.main' }} />
-            确认删除目录？
+            确认删除栏目？
           </Stack>
         }
         open={deleteConfirmOpen}
@@ -531,13 +582,13 @@ const DocPageNavs = ({
       >
         <Box sx={{ fontSize: 14, lineHeight: 1.6, color: 'text.secondary' }}>
           <Box component='p' sx={{ m: 0, mb: 1 }}>
-            删除目录「
+            删除栏目「
             <Box component='span' sx={{ fontWeight: 600 }}>
               {deletingNav?.name || '未命名'}
             </Box>
             」后，将
             <Box component='span' sx={{ color: 'error.main', fontWeight: 600 }}>
-              同步删除该目录下所有文档
+              同步删除该栏目下所有文档
             </Box>
             ，且
             <Box component='span' sx={{ color: 'error.main', fontWeight: 600 }}>
@@ -549,7 +600,7 @@ const DocPageNavs = ({
             <TextField
               fullWidth
               size='small'
-              placeholder={`请输入当前目录名称，并确认删除`}
+              placeholder={`请输入当前栏目名称，并确认删除`}
               value={deleteConfirmInput}
               onChange={e => setDeleteConfirmInput(e.target.value)}
               error={
@@ -559,7 +610,7 @@ const DocPageNavs = ({
               helperText={
                 deleteConfirmInput.length > 0 &&
                 deleteConfirmInput !== (deletingNav?.name || '未命名')
-                  ? '名称不正确，请输入正确的目录名称'
+                  ? '名称不正确，请输入正确的栏目名称'
                   : ''
               }
               sx={{ '& .MuiFormHelperText-root': { m: 0, mt: 0.5 } }}

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 
 	"github.com/google/uuid"
@@ -52,7 +53,7 @@ func (u *CrawlerUsecase) ParseUrl(ctx context.Context, req *v1.CrawlerParseReq) 
 
 	// 文件类型的解析会先走上传接口
 	if req.CrawlerSource.Type() == consts.CrawlerSourceTypeFile {
-		req.Key = fmt.Sprintf("http://panda-wiki-minio:9000/static-file/%s", req.Key)
+		req.Key = buildInternalStaticFileURL(os.Getenv("S3_ENDPOINT"), req.Key)
 	}
 
 	var (
@@ -164,9 +165,36 @@ func (u *CrawlerUsecase) ExportDoc(ctx context.Context, req *v1.CrawlerExportReq
 }
 
 func (u *CrawlerUsecase) ScrapeGetResult(ctx context.Context, taskId string) (*v1.CrawlerResultResp, error) {
+	if event, err := u.anydocClient.TaskWaitForCompletion(ctx, taskId); err == nil && event != nil {
+		switch anydoc.Status(event.Status) {
+		case anydoc.StatusCompleted:
+			fileBytes, downloadErr := u.anydocClient.DownloadDoc(ctx, event.Markdown)
+			if downloadErr != nil {
+				return nil, downloadErr
+			}
+			return &v1.CrawlerResultResp{
+				Status:  consts.CrawlerStatusCompleted,
+				Content: string(fileBytes),
+			}, nil
+		case anydoc.StatusFailed:
+			return &v1.CrawlerResultResp{
+				Status: consts.CrawlerStatusFailed,
+			}, fmt.Errorf("file crawl failed: %s", event.Err)
+		case anydoc.StatusPending, anydoc.StatusInProgress:
+			return &v1.CrawlerResultResp{
+				Status: consts.CrawlerStatusPending,
+			}, nil
+		}
+	}
+
 	taskRes, err := u.anydocClient.TaskList(ctx, []string{taskId})
 	if err != nil {
 		return nil, err
+	}
+	if len(taskRes.Data) == 0 {
+		return &v1.CrawlerResultResp{
+			Status: consts.CrawlerStatusPending,
+		}, nil
 	}
 	switch taskRes.Data[0].Status {
 	case anydoc.StatusPending, anydoc.StatusInProgress:
@@ -198,6 +226,12 @@ func (u *CrawlerUsecase) ScrapeGetResults(ctx context.Context, taskIds []string)
 	taskRes, err := u.anydocClient.TaskList(ctx, taskIds)
 	if err != nil {
 		return nil, err
+	}
+	if len(taskRes.Data) == 0 {
+		return &v1.CrawlerResultsResp{
+			Status: consts.CrawlerStatusPending,
+			List:   []v1.CrawlerResultItem{},
+		}, nil
 	}
 
 	list := make([]v1.CrawlerResultItem, 0)
