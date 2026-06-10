@@ -53,7 +53,7 @@ export interface DomainResponse {
   message?: string;
 }
 
-type ExtractDataProp<T> = T extends { data?: infer U } ? U : never;
+type ExtractDataProp<T> = T extends { data?: infer U } ? U : T;
 
 export interface ApiConfig<SecurityDataType = unknown> {
   baseUrl?: string;
