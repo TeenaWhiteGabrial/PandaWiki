@@ -236,7 +236,7 @@ const DocContent = ({
           onContentBlur={() => setContentFocused(false)}
           onImagesChange={setCommentImages}
           basePath={basePath}
-          showNameInput={!authInfo?.username}
+          showNameInput={!authInfo?.account}
         />
       )}
     </Box>

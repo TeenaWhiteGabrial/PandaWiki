@@ -17,7 +17,7 @@ const WaterMarkProvider = (props: WatermarkProps) => {
   if (!enable) {
     return children;
   }
-  const time = `${authInfo?.username ?? ''} ${dayjs().format('YYYY-MM-DD HH:mm:ss')}`;
+  const time = `${authInfo?.account ?? ''} ${dayjs().format('YYYY-MM-DD HH:mm:ss')}`;
   const contentLines = [time, ...(content?.split('\n') || [])];
   return (
     <Watermark
