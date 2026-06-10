@@ -29,6 +29,7 @@ const IMPORT_SOURCES: { key: ConstsCrawlerSource; label: string }[] = [
 
 export function useDocTreeMenu(
   handlers: DocTreeMenuHandlers,
+  readOnly = false,
 ): (opra: TreeMenuOptions) => TreeMenuItem[] {
   const {
     handleUrl,
@@ -44,7 +45,7 @@ export function useDocTreeMenu(
       const { item, createItem, renameItem, isEditing } = opra;
       const menuItems: TreeMenuItem[] = [];
 
-      if (item.type === 1) {
+      if (!readOnly && item.type === 1) {
         menuItems.push(
           { label: '创建文件夹', key: 'folder', onClick: () => createItem(1) },
           {
@@ -81,46 +82,48 @@ export function useDocTreeMenu(
       }
 
       if (item.type === 2) {
-        if (item.status === 1 || item.status === 0) {
+        if (!readOnly) {
+          if (item.status === 1 || item.status === 0) {
+            menuItems.push({
+              label: item.status === 1 ? '发布更新' : '发布文档',
+              key: 'update_publish',
+              onClick: () => handlePublish(item),
+            });
+          }
+          if (item.status !== 0) {
+            menuItems.push({
+              label:
+                item.rag_status === ConstsNodeRagInfoStatus.NodeRagStatusPending
+                  ? '学习文档'
+                  : '重新学习',
+              key: 'restudy',
+              onClick: () => handleRestudy(item),
+            });
+          }
           menuItems.push({
-            label: item.status === 1 ? '发布更新' : '发布文档',
-            key: 'update_publish',
-            onClick: () => handlePublish(item),
-          });
-        }
-        if (item.status !== 0) {
-          menuItems.push({
-            label:
-              item.rag_status === ConstsNodeRagInfoStatus.NodeRagStatusPending
-                ? '学习文档'
-                : '重新学习',
-            key: 'restudy',
-            onClick: () => handleRestudy(item),
-          });
-        }
-        menuItems.push(
-          {
             label: '文档权限',
             key: 'properties',
             onClick: () => handleProperties(item),
-          },
-          {
-            label: '前台查看',
-            key: 'front_doc',
-            onClick: () => handleFrontDoc(item.id),
-          },
-        );
+          });
+        }
+        menuItems.push({
+          label: '前台查看',
+          key: 'front_doc',
+          onClick: () => handleFrontDoc(item.id),
+        });
       }
 
-      if (!isEditing) {
+      if (!readOnly && !isEditing) {
         menuItems.push({ label: '重命名', key: 'rename', onClick: renameItem });
       }
-      menuItems.push({
-        label: '删除',
-        color: 'error',
-        key: 'delete',
-        onClick: () => handleDelete(item),
-      });
+      if (!readOnly) {
+        menuItems.push({
+          label: '删除',
+          color: 'error',
+          key: 'delete',
+          onClick: () => handleDelete(item),
+        });
+      }
 
       return menuItems;
     },
@@ -131,6 +134,7 @@ export function useDocTreeMenu(
       handleRestudy,
       handleProperties,
       handleFrontDoc,
+      readOnly,
     ],
   );
 }

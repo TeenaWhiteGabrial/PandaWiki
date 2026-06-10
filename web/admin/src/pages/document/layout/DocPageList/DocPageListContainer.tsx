@@ -6,6 +6,7 @@ import {
   DomainNodeListItemResp,
 } from '@/request/types';
 import { useAppSelector } from '@/store';
+import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { collapseAllFolders, convertToTree } from '@/utils/drag';
 import { message } from '@ctzhian/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -31,7 +32,8 @@ const DocPageListContainer = ({
   onRagOpen,
   registerTreeDragHandlers,
 }: DocPageListContainerProps) => {
-  const { kb_id } = useAppSelector(state => state.config);
+  const { kb_id, user, kbDetail } = useAppSelector(state => state.config);
+  const readOnlyUser = isOrdinaryReadOnlyUser(user, kbDetail);
   const dragTreeRef = useRef<DragTreeHandle>(null);
 
   const [supportSelect, setBatchOpen] = useState(false);
@@ -126,14 +128,17 @@ const DocPageListContainer = ({
     [list, wikiUrl],
   );
 
-  const menu = useDocTreeMenu({
-    handleUrl,
-    handleDelete,
-    handlePublish,
-    handleRestudy,
-    handleProperties,
-    handleFrontDoc,
-  });
+  const menu = useDocTreeMenu(
+    {
+      handleUrl,
+      handleDelete,
+      handlePublish,
+      handleRestudy,
+      handleProperties,
+      handleFrontDoc,
+    },
+    readOnlyUser,
+  );
 
   const updateLocalData = useCallback((newData: ITreeItem[]) => {
     setData([...newData]);
@@ -239,6 +244,7 @@ const DocPageListContainer = ({
         createLocal={createLocal}
         scrollTo={scrollTo}
         registerTreeDragHandlers={registerTreeDragHandlers}
+        readOnlyUser={readOnlyUser}
       />
       <DocListModals
         kb_id={kb_id}

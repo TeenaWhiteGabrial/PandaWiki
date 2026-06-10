@@ -13,15 +13,10 @@ COPY . .
 ARG VERSION
 RUN go build -ldflags "-s -w -extldflags '-static' -X github.com/chaitin/panda-wiki/telemetry.Version=${VERSION}" -o /build/panda-wiki-api cmd/api/main.go cmd/api/wire_gen.go \
     && go build -ldflags "-s -w -extldflags '-static' -X github.com/chaitin/panda-wiki/telemetry.Version=${VERSION}" -o /build/panda-wiki-migrate cmd/migrate/main.go cmd/migrate/wire_gen.go
-FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/alpine:3.21 AS api
-
-RUN apk update \
-    && apk upgrade \
-    && apk add --no-cache ca-certificates tzdata \
-    && update-ca-certificates 2>/dev/null || true \
-    && rm -rf /var/cache/apk/*
+FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/golang:1.24.3-alpine AS api
 
 WORKDIR /app
+ENV TZ=Asia/Shanghai
 
 COPY --from=builder /build/panda-wiki-api /app/panda-wiki-api
 COPY --from=builder /build/panda-wiki-migrate /app/panda-wiki-migrate

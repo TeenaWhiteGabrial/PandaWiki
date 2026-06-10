@@ -183,13 +183,6 @@ export async function proxy(request: NextRequest) {
     request.cookies.get('panda_wiki_token')?.value ||
     request.cookies.get('token')?.value;
 
-  if (token && isLoginPath(appPathname)) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = `${basePath || ''}/`;
-    redirectUrl.search = '';
-    return NextResponse.redirect(redirectUrl);
-  }
-
   if (!token && isProtectedPath(appPathname)) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = `${basePath || ''}/auth/login`;

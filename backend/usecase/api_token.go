@@ -33,8 +33,8 @@ func NewAPITokenUsecase(
 }
 
 func (u *APITokenUsecase) CreateMCPToken(ctx context.Context, userID string, req *tokenV1.CreateAPITokenReq) (*tokenV1.APITokenListItem, error) {
-	if req.Permission != consts.UserKBPermissionDocManage {
-		return nil, fmt.Errorf("mcp token permission must be doc_manage")
+	if req.Permission != consts.UserKBPermissionNotNull && req.Permission != consts.UserKBPermissionDocManage {
+		return nil, fmt.Errorf("mcp token permission must be not null or doc_manage")
 	}
 	if _, err := u.kbUsecase.GetKnowledgeBase(ctx, req.KbID); err != nil {
 		return nil, err
@@ -103,9 +103,11 @@ func toAPITokenListItem(token *domain.APIToken) *tokenV1.APITokenListItem {
 func isAllowedTokenPermission(requested, actual consts.UserKBPermission) bool {
 	switch actual {
 	case consts.UserKBPermissionFullControl:
-		return requested == consts.UserKBPermissionDocManage
+		return requested == consts.UserKBPermissionDocManage || requested == consts.UserKBPermissionNotNull
 	case consts.UserKBPermissionDocManage:
-		return requested == consts.UserKBPermissionDocManage
+		return requested == consts.UserKBPermissionDocManage || requested == consts.UserKBPermissionNotNull
+	case consts.UserKBPermissionNotNull:
+		return requested == consts.UserKBPermissionNotNull
 	default:
 		return false
 	}

@@ -35,6 +35,7 @@ interface HeaderProps {
   updateDetail: (detail: V1NodeDetailResp) => void;
   handleSave: () => void;
   handleExport: (type: string) => void;
+  readOnlyUser?: boolean;
 }
 
 const Header = ({
@@ -43,6 +44,7 @@ const Header = ({
   updateDetail,
   handleSave,
   handleExport,
+  readOnlyUser = false,
 }: HeaderProps) => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -90,6 +92,7 @@ const Header = ({
   }, [kbDetail]);
 
   const handlePublish = useCallback(() => {
+    if (readOnlyUser) return;
     if (nodeDetail?.status === 2 && !edit) {
       message.info('当前已是最新版本！');
     } else {
@@ -98,7 +101,7 @@ const Header = ({
         setPublishOpen(true);
       }, 200);
     }
-  }, [nodeDetail, edit, handleSave]);
+  }, [nodeDetail, edit, handleSave, readOnlyUser]);
 
   const handleDeleteAndNavigate = async () => {
     // 深度优先遍历树，按照目录顺序收集所有文档
@@ -246,79 +249,84 @@ const Header = ({
           </Stack>
         </Stack>
         <Stack direction={'row'} gap={1}>
-          <Cascader
-            list={[
-              {
-                key: 'copy',
-                textSx: { flex: 1 },
-                label: <StyledMenuSelect>创建副本</StyledMenuSelect>,
-                onClick: () => {
-                  if (kb_id) {
-                    postApiV1Node({
-                      name: detail.name + ' [副本]',
-                      content: detail.content,
-                      kb_id,
-                      nav_id: nav_id || detail.nav_id || '',
-                      parent_id: detail.parent_id || undefined,
-                      type: 2,
-                      emoji: detail.meta?.emoji,
-                    }).then(res => {
-                      message.success('复制成功');
-                      window.open(`/doc/editor/${res.id}`, '_blank');
-                    });
-                  }
+          {!readOnlyUser && (
+            <Cascader
+              list={[
+                {
+                  key: 'copy',
+                  textSx: { flex: 1 },
+                  label: <StyledMenuSelect>创建副本</StyledMenuSelect>,
+                  onClick: () => {
+                    if (readOnlyUser) return;
+                    if (kb_id) {
+                      postApiV1Node({
+                        name: detail.name + ' [副本]',
+                        content: detail.content,
+                        kb_id,
+                        nav_id: nav_id || detail.nav_id || '',
+                        parent_id: detail.parent_id || undefined,
+                        type: 2,
+                        emoji: detail.meta?.emoji,
+                      }).then(res => {
+                        message.success('复制成功');
+                        window.open(`/doc/editor/${res.id}`, '_blank');
+                      });
+                    }
+                  },
                 },
-              },
-              {
-                key: 'front_doc',
-                textSx: { flex: 1 },
-                label: <StyledMenuSelect>前台查看</StyledMenuSelect>,
-                onClick: () => {
-                  if (detail.status !== 2 && !detail.publisher_id) {
-                    message.warning('当前文档未发布，无法查看前台文档');
-                    return;
-                  }
-                  window.open(
-                    `${wikiUrlRef.current}/node/${detail.id}`,
-                    '_blank',
-                  );
+                {
+                  key: 'front_doc',
+                  textSx: { flex: 1 },
+                  label: <StyledMenuSelect>前台查看</StyledMenuSelect>,
+                  onClick: () => {
+                    if (detail.status !== 2 && !detail.publisher_id) {
+                      message.warning('当前文档未发布，无法查看前台文档');
+                      return;
+                    }
+                    window.open(
+                      `${wikiUrlRef.current}/node/${detail.id}`,
+                      '_blank',
+                    );
+                  },
                 },
-              },
-              {
-                key: 'version',
-                textSx: { flex: 1 },
-                label: <StyledMenuSelect>历史版本</StyledMenuSelect>,
-                onClick: () => {
-                  navigate(`/doc/editor/history/${detail.id}`);
+                {
+                  key: 'version',
+                  textSx: { flex: 1 },
+                  label: <StyledMenuSelect>历史版本</StyledMenuSelect>,
+                  onClick: () => {
+                    navigate(`/doc/editor/history/${detail.id}`);
+                  },
                 },
-              },
-              {
-                key: 'rename',
-                textSx: { flex: 1 },
-                label: <StyledMenuSelect>重命名</StyledMenuSelect>,
-                onClick: () => {
-                  setRenameOpen(true);
+                {
+                  key: 'rename',
+                  textSx: { flex: 1 },
+                  label: <StyledMenuSelect>重命名</StyledMenuSelect>,
+                  onClick: () => {
+                    if (readOnlyUser) return;
+                    setRenameOpen(true);
+                  },
                 },
-              },
-              {
-                key: 'delete',
-                textSx: { flex: 1 },
-                label: <StyledMenuSelect type='error'>删除</StyledMenuSelect>,
-                onClick: () => {
-                  setDelOpen(true);
+                {
+                  key: 'delete',
+                  textSx: { flex: 1 },
+                  label: <StyledMenuSelect type='error'>删除</StyledMenuSelect>,
+                  onClick: () => {
+                    if (readOnlyUser) return;
+                    setDelOpen(true);
+                  },
                 },
-              },
-            ]}
-            context={
-              <IconButton
-                size='small'
-                disabled={!detail.name}
-                sx={{ flexShrink: 0 }}
-              >
-                <IconGengduo sx={{ fontSize: 14 }} />
-              </IconButton>
-            }
-          />
+              ]}
+              context={
+                <IconButton
+                  size='small'
+                  disabled={!detail.name}
+                  sx={{ flexShrink: 0 }}
+                >
+                  <IconGengduo sx={{ fontSize: 14 }} />
+                </IconButton>
+              }
+            />
+          )}
           <Cascader
             list={[
               {
@@ -389,16 +397,46 @@ const Header = ({
               </Button>
             }
           />
-          <Cascader
-            list={[
-              {
-                key: 'save',
-                label: (
-                  <Tooltip
-                    title={<Box>{getShortcutKeyText(['ctrl', 's'])}</Box>}
-                    placement='right'
-                    arrow
-                  >
+          {!readOnlyUser && (
+            <Cascader
+              list={[
+                {
+                  key: 'save',
+                  label: (
+                    <Tooltip
+                      title={<Box>{getShortcutKeyText(['ctrl', 's'])}</Box>}
+                      placement='right'
+                      arrow
+                    >
+                      <Stack
+                        direction={'row'}
+                        alignItems={'center'}
+                        gap={1}
+                        sx={{
+                          fontSize: 14,
+                          px: 2,
+                          lineHeight: '40px',
+                          height: 40,
+                          width: 140,
+                          borderRadius: '5px',
+                          cursor: 'pointer',
+                          ':hover': {
+                            bgcolor: addOpacityToColor(
+                              theme.palette.primary.main,
+                              0.1,
+                            ),
+                          },
+                        }}
+                      >
+                        保存
+                      </Stack>
+                    </Tooltip>
+                  ),
+                  onClick: handleSave,
+                },
+                {
+                  key: 'save_publish',
+                  label: (
                     <Stack
                       direction={'row'}
                       alignItems={'center'}
@@ -419,90 +457,68 @@ const Header = ({
                         },
                       }}
                     >
-                      保存
+                      保存并发布
                     </Stack>
-                  </Tooltip>
-                ),
-                onClick: handleSave,
-              },
-              {
-                key: 'save_publish',
-                label: (
-                  <Stack
-                    direction={'row'}
-                    alignItems={'center'}
-                    gap={1}
-                    sx={{
-                      fontSize: 14,
-                      px: 2,
-                      lineHeight: '40px',
-                      height: 40,
-                      width: 140,
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      ':hover': {
-                        bgcolor: addOpacityToColor(
-                          theme.palette.primary.main,
-                          0.1,
-                        ),
-                      },
-                    }}
-                  >
-                    保存并发布
-                  </Stack>
-                ),
-                onClick: handlePublish,
-              },
-            ]}
-            context={
-              <Button
-                size='small'
-                variant='contained'
-                disabled={!detail.name}
-                startIcon={<IconBaocun sx={{ fontSize: 14 }} />}
-              >
-                保存
-              </Button>
-            }
-          />
+                  ),
+                  onClick: handlePublish,
+                },
+              ]}
+              context={
+                <Button
+                  size='small'
+                  variant='contained'
+                  disabled={!detail.name}
+                  startIcon={<IconBaocun sx={{ fontSize: 14 }} />}
+                >
+                  保存
+                </Button>
+              }
+            />
+          )}
         </Stack>
       </Stack>
-      <DocAddByCustomText
-        type={detail.type}
-        open={renameOpen}
-        onClose={() => {
-          setRenameOpen(false);
-        }}
-        data={detail}
-        setDetail={updateDetail}
-      />
-      <VersionPublish
-        open={publishOpen}
-        defaultSelected={[detail.id!]}
-        onClose={() => setPublishOpen(false)}
-        refresh={() =>
-          updateDetail({
-            status: 2,
-          })
-        }
-      />
-      <DocDelete
-        open={delOpen}
-        onClose={() => {
-          setDelOpen(false);
-        }}
-        onDeleted={handleDeleteAndNavigate}
-        data={[
-          {
-            ...detail,
-            emoji: detail.meta?.emoji || '',
-            parent_id: '',
-            summary: detail.meta?.summary || '',
-            position: 0,
-            status: 1,
-          },
-        ]}
-      />
+      {!readOnlyUser && (
+        <DocAddByCustomText
+          type={detail.type}
+          open={renameOpen}
+          onClose={() => {
+            setRenameOpen(false);
+          }}
+          data={detail}
+          setDetail={updateDetail}
+        />
+      )}
+      {!readOnlyUser && (
+        <VersionPublish
+          open={publishOpen}
+          defaultSelected={[detail.id!]}
+          onClose={() => setPublishOpen(false)}
+          refresh={() =>
+            updateDetail({
+              status: 2,
+            })
+          }
+        />
+      )}
+      {!readOnlyUser && (
+        <DocDelete
+          open={delOpen}
+          onClose={() => {
+            setDelOpen(false);
+          }}
+          onDeleted={handleDeleteAndNavigate}
+          data={[
+            {
+              ...detail,
+              emoji: detail.meta?.emoji || '',
+              parent_id: '',
+              summary: detail.meta?.summary || '',
+              position: 0,
+              status: 1,
+            },
+          ]}
+        />
+      )}
     </Box>
   );
 };

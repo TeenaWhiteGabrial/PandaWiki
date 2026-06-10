@@ -904,6 +904,9 @@ func (r *KnowledgeBaseRepository) GetKBPermByUserId(ctx context.Context, kbId st
 		if user.Role == consts.UserRoleManager {
 			return consts.UserKBPermissionDocManage, nil
 		}
+		if user.Role == consts.UserRoleUser {
+			return consts.UserKBPermissionNotNull, nil
+		}
 		kbUser, err := r.GetKBUser(ctx, kbId, authInfo.UserId)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

@@ -9,6 +9,7 @@ import {
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setIsRefreshDocList, setNavId } from '@/store/slices/config';
 import type { TreeDragHandlers } from '@/utils/drag';
+import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { message } from '@ctzhian/ui';
 import {
   DndContext,
@@ -33,6 +34,8 @@ const Content = () => {
   const { kb_id, isRefreshDocList, kbDetail } = useAppSelector(
     state => state.config,
   );
+  const user = useAppSelector(state => state.config.user);
+  const readOnlyUser = isOrdinaryReadOnlyUser(user, kbDetail);
   const dispatch = useAppDispatch();
   const nav_id = useAppSelector(state => state.config.nav_id) || undefined;
 
@@ -229,10 +232,12 @@ const Content = () => {
     <>
       <DocPageHeader
         onPublishClick={() => {
+          if (readOnlyUser) return;
           setPublishIds([]);
           setPublishOpen(true);
         }}
         onRagClick={() => {
+          if (readOnlyUser) return;
           setRagIds([]);
           setRagOpen(true);
         }}
@@ -266,10 +271,12 @@ const Content = () => {
             wikiUrl={wikiUrl}
             loading={loading && !hasLoadedOnce}
             onPublishOpen={ids => {
+              if (readOnlyUser) return;
               setPublishIds(ids ?? []);
               setPublishOpen(true);
             }}
             onRagOpen={ids => {
+              if (readOnlyUser) return;
               setRagIds(ids ?? []);
               setRagOpen(true);
             }}
@@ -279,24 +286,28 @@ const Content = () => {
           />
         </Stack>
       </DndContext>
-      <VersionPublish
-        open={publishOpen}
-        defaultSelected={publishIds}
-        onClose={() => {
-          setPublishOpen(false);
-          setPublishIds([]);
-        }}
-        refresh={refresh}
-      />
-      <RagErrorReStart
-        open={ragOpen}
-        defaultSelected={ragIds}
-        onClose={() => {
-          setRagOpen(false);
-          setRagIds([]);
-        }}
-        refresh={refresh}
-      />
+      {!readOnlyUser && (
+        <VersionPublish
+          open={publishOpen}
+          defaultSelected={publishIds}
+          onClose={() => {
+            setPublishOpen(false);
+            setPublishIds([]);
+          }}
+          refresh={refresh}
+        />
+      )}
+      {!readOnlyUser && (
+        <RagErrorReStart
+          open={ragOpen}
+          defaultSelected={ragIds}
+          onClose={() => {
+            setRagOpen(false);
+            setRagIds([]);
+          }}
+          refresh={refresh}
+        />
+      )}
     </>
   );
 };

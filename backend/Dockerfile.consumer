@@ -13,15 +13,10 @@ COPY . .
 ARG TARGETOS TARGETARCH
 RUN go build -ldflags "-s -w -extldflags '-static'" -o /build/panda-wiki-consumer cmd/consumer/main.go cmd/consumer/wire_gen.go
 
-FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/alpine:3.21 AS consumer
-
-RUN apk update \
-    && apk upgrade \
-    && apk add --no-cache ca-certificates tzdata \
-    && update-ca-certificates 2>/dev/null || true \
-    && rm -rf /var/cache/apk/*
+FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/golang:1.24.3-alpine AS consumer
 
 WORKDIR /app
+ENV TZ=Asia/Shanghai
 COPY --from=builder /build/panda-wiki-consumer /app/panda-wiki-consumer
 COPY --from=builder /src/store/pg/migration /app/migration
 

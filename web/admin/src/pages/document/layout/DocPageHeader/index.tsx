@@ -1,6 +1,7 @@
 import Card from '@/components/Card';
 import { getApiV1NodeStats } from '@/request/Node';
 import { useAppSelector } from '@/store';
+import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { Box, ButtonBase, Stack } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import DocSearch from './DocSearch';
@@ -17,7 +18,10 @@ const DocPageHeader = ({
   onRagClick,
   refreshTrigger,
 }: DocPageHeaderProps) => {
-  const { kb_id, isRefreshDocList } = useAppSelector(state => state.config);
+  const { kb_id, isRefreshDocList, user, kbDetail } = useAppSelector(
+    state => state.config,
+  );
+  const readOnlyUser = isOrdinaryReadOnlyUser(user, kbDetail);
   const [stats, setStats] = useState({
     unreleased_nav_count: 0,
     unpublished_count: 0,
@@ -64,51 +68,52 @@ const DocPageHeader = ({
           sx={{ fontSize: 16, fontWeight: 700 }}
         >
           <Box>目录</Box>
-          {(stats.unpublished_count > 0 || stats.unreleased_nav_count > 0) && (
-            <>
-              <Stack
-                direction={'row'}
-                alignItems={'center'}
-                gap={0}
-                sx={{ ml: 2 }}
-              >
-                {stats.unreleased_nav_count > 0 && (
-                  <Box
-                    sx={{
-                      color: 'error.main',
-                      fontSize: 12,
-                      fontWeight: 'normal',
-                    }}
-                  >
-                    {stats.unreleased_nav_count} 个 目录未发布，
-                  </Box>
-                )}
-                {stats.unpublished_count > 0 && (
-                  <Box
-                    sx={{
-                      color: 'error.main',
-                      fontSize: 12,
-                      fontWeight: 'normal',
-                    }}
-                  >
-                    {stats.unpublished_count} 个 文档/文件夹未发布，
-                  </Box>
-                )}
-              </Stack>
-              <ButtonBase
-                disableRipple
-                sx={{
-                  fontSize: 12,
-                  fontWeight: 400,
-                  color: 'primary.main',
-                }}
-                onClick={onPublishClick}
-              >
-                去发布
-              </ButtonBase>
-            </>
-          )}
-          {stats.unstudied_count > 0 && (
+          {!readOnlyUser &&
+            (stats.unpublished_count > 0 || stats.unreleased_nav_count > 0) && (
+              <>
+                <Stack
+                  direction={'row'}
+                  alignItems={'center'}
+                  gap={0}
+                  sx={{ ml: 2 }}
+                >
+                  {stats.unreleased_nav_count > 0 && (
+                    <Box
+                      sx={{
+                        color: 'error.main',
+                        fontSize: 12,
+                        fontWeight: 'normal',
+                      }}
+                    >
+                      {stats.unreleased_nav_count} 个 目录未发布，
+                    </Box>
+                  )}
+                  {stats.unpublished_count > 0 && (
+                    <Box
+                      sx={{
+                        color: 'error.main',
+                        fontSize: 12,
+                        fontWeight: 'normal',
+                      }}
+                    >
+                      {stats.unpublished_count} 个 文档/文件夹未发布，
+                    </Box>
+                  )}
+                </Stack>
+                <ButtonBase
+                  disableRipple
+                  sx={{
+                    fontSize: 12,
+                    fontWeight: 400,
+                    color: 'primary.main',
+                  }}
+                  onClick={onPublishClick}
+                >
+                  去发布
+                </ButtonBase>
+              </>
+            )}
+          {!readOnlyUser && stats.unstudied_count > 0 && (
             <>
               <Box
                 sx={{

@@ -35,7 +35,13 @@ const useMounted = () => {
 
 export default function Login() {
   const searchParams = useSearchParams();
-  const { kbDetail, mobile = false, themeMode, setAuthInfo } = useStore();
+  const {
+    kbDetail,
+    mobile = false,
+    themeMode,
+    setAuthInfo,
+    authInfo,
+  } = useStore();
   const basePath = useBasePath();
   const mounted = useMounted();
 
@@ -70,6 +76,13 @@ export default function Login() {
       localStorage.removeItem(REMEMBER_KEY);
     }
   }, []);
+
+  useEffect(() => {
+    if (!authInfo?.id) {
+      return;
+    }
+    window.location.href = redirectUrl;
+  }, [authInfo?.id, redirectUrl]);
 
   const handleLogin = async () => {
     if (!account.trim()) {

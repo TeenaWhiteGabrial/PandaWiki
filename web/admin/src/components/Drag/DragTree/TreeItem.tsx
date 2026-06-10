@@ -9,6 +9,7 @@ import { treeSx } from '@/constant/styles';
 import { postApiV1Node, putApiV1NodeDetail } from '@/request/Node';
 import { useAppSelector } from '@/store';
 import { AppContext, updateTree } from '@/utils/drag';
+import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import {
   handleMultiSelect,
   handleParentControlledSelect,
@@ -65,7 +66,13 @@ const TreeItem = React.forwardRef<
   HTMLDivElement,
   TreeItemComponentProps<ITreeItem>
 >((props, ref) => {
-  const { kb_id: id, nav_id } = useAppSelector(state => state.config);
+  const {
+    kb_id: id,
+    nav_id,
+    user,
+    kbDetail,
+  } = useAppSelector(state => state.config);
+  const readOnlyUser = isOrdinaryReadOnlyUser(user, kbDetail);
   const { item, collapsed } = props;
   const context = useContext(AppContext);
 
@@ -369,6 +376,7 @@ const TreeItem = React.forwardRef<
                     size='small'
                     onClick={e => {
                       e.stopPropagation();
+                      if (readOnlyUser) return;
                       if (item.name) {
                         putApiV1NodeDetail({
                           id: item.id,
@@ -476,6 +484,7 @@ const TreeItem = React.forwardRef<
                       collapsed={collapsed}
                       value={item.emoji}
                       onChange={async value => {
+                        if (readOnlyUser) return;
                         try {
                           await putApiV1NodeDetail({
                             id: item.id,

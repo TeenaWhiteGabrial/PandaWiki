@@ -19,6 +19,7 @@ interface InputContentProps {
     content_type?: string;
   }) => void;
   scrollTo?: (id: string) => void;
+  hidden?: boolean;
 }
 
 const AddDocBtn = ({
@@ -28,7 +29,10 @@ const AddDocBtn = ({
   context,
   createLocal,
   scrollTo,
+  hidden = false,
 }: InputContentProps) => {
+  if (hidden) return null;
+
   const [customDocOpen, setCustomDocOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [key, setKey] = useState<ConstsCrawlerSource | null>(null);

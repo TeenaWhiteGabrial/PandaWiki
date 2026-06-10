@@ -51,6 +51,7 @@ export interface DocPageListContentProps {
   registerTreeDragHandlers?: (
     handlers: import('@/utils/drag').TreeDragHandlers | null,
   ) => void;
+  readOnlyUser?: boolean;
 }
 
 const DocPageListContent = ({
@@ -75,6 +76,7 @@ const DocPageListContent = ({
   createLocal,
   scrollTo,
   registerTreeDragHandlers,
+  readOnlyUser = false,
 }: DocPageListContentProps) => {
   const theme = useTheme();
   const showEmpty = list.length === 0;
@@ -192,46 +194,49 @@ const DocPageListContent = ({
             createLocal={createLocal}
             scrollTo={scrollTo}
             disabled={!!search}
+            hidden={readOnlyUser}
           />
-          <Cascader
-            list={[
-              {
-                key: 'batch',
-                label: (
-                  <Stack
-                    direction={'row'}
-                    alignItems={'center'}
-                    gap={1}
-                    sx={{
-                      fontSize: 14,
-                      px: 2,
-                      lineHeight: '40px',
-                      height: 40,
-                      width: 180,
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      ':hover': {
-                        bgcolor: addOpacityToColor(
-                          theme.palette.primary.main,
-                          0.1,
-                        ),
-                      },
-                    }}
-                    onClick={onBatchOpen}
-                  >
-                    批量操作
-                  </Stack>
-                ),
-              },
-            ]}
-            context={
-              <Box>
-                <IconButton size='small'>
-                  <IconGengduo sx={{ fontSize: '16px' }} />
-                </IconButton>
-              </Box>
-            }
-          />
+          {!readOnlyUser && (
+            <Cascader
+              list={[
+                {
+                  key: 'batch',
+                  label: (
+                    <Stack
+                      direction={'row'}
+                      alignItems={'center'}
+                      gap={1}
+                      sx={{
+                        fontSize: 14,
+                        px: 2,
+                        lineHeight: '40px',
+                        height: 40,
+                        width: 180,
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        ':hover': {
+                          bgcolor: addOpacityToColor(
+                            theme.palette.primary.main,
+                            0.1,
+                          ),
+                        },
+                      }}
+                      onClick={onBatchOpen}
+                    >
+                      批量操作
+                    </Stack>
+                  ),
+                },
+              ]}
+              context={
+                <Box>
+                  <IconButton size='small'>
+                    <IconGengduo sx={{ fontSize: '16px' }} />
+                  </IconButton>
+                </Box>
+              }
+            />
+          )}
         </Stack>
       </Stack>
       <Stack

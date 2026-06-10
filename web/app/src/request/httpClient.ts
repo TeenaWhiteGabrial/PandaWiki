@@ -79,15 +79,43 @@ export enum ContentType {
   Text = "text/plain",
 }
 
-const pathnameWhiteList = ["/auth/login"];
+const pathnameWhiteList = ['/auth/login'];
+
+const stripBasePath = (pathname: string) => {
+  const basePath = window._BASE_PATH_ || '';
+  if (!basePath) {
+    return pathname;
+  }
+  if (pathname === basePath) {
+    return '/';
+  }
+  if (pathname.startsWith(`${basePath}/`)) {
+    return pathname.slice(basePath.length) || '/';
+  }
+  return pathname;
+};
+
+const clearAuthStorage = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.removeItem('panda_wiki_token');
+  document.cookie =
+    'panda_wiki_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  document.cookie =
+    'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  document.cookie =
+    '_pw_auth_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+};
 
 const redirectToLogin = () => {
+  clearAuthStorage();
   const redirectAfterLogin = encodeURIComponent(
-    location.href.replace(location.origin, ""),
+    stripBasePath(location.href.replace(location.origin, '')),
   );
   const search = `redirect=${redirectAfterLogin}`;
-  const pathname = `${window._BASE_PATH_ || ""}/auth/login`;
-  window.location.href = [pathname, search]?.join("?");
+  const pathname = `${window._BASE_PATH_ || ''}/auth/login`;
+  window.location.href = [pathname, search]?.join('?');
 };
 
 const getClientTokenHeader = () => {
@@ -95,7 +123,7 @@ const getClientTokenHeader = () => {
     return {};
   }
 
-  const token = window.localStorage.getItem("panda_wiki_token");
+  const token = window.localStorage.getItem('panda_wiki_token');
   if (!token) {
     return {};
   }
@@ -283,21 +311,24 @@ export class HttpClient<SecurityDataType = unknown> {
       if (response.status === 401) {
         if (typeof window === "undefined") {
           const pathname = await getServerPathname();
-          if (!pathnameWhiteList.includes(pathname)) {
+          const basePath = await getServerBasePath();
+          const normalizedPathname =
+            basePath && pathname.startsWith(basePath)
+              ? pathname.slice(basePath.length) || "/"
+              : pathname;
+          if (!pathnameWhiteList.includes(normalizedPathname)) {
             const search = await getServerSearch();
-            const basePath = await getServerBasePath();
             redirect(
-              `${basePath}/auth/login?redirect=${encodeURIComponent(pathname + search)}`,
+              `${basePath}/auth/login?redirect=${encodeURIComponent(normalizedPathname + search)}`,
             );
           }
           return;
         }
 
         if (typeof window !== "undefined") {
-          if (!pathnameWhiteList.includes(window.location.pathname)) {
-            if (response.status === 401) {
-              redirectToLogin();
-            }
+          const normalizedPathname = stripBasePath(window.location.pathname);
+          if (!pathnameWhiteList.includes(normalizedPathname)) {
+            redirectToLogin();
           }
           return;
         }

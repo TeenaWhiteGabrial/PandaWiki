@@ -65,6 +65,11 @@ func NewMCPUsecase(
 }
 
 func (u *MCPUsecase) ListTools(ctx context.Context, kbID string) ([]mcpV1.ToolResp, error) {
+	perm, err := u.kbUsecase.GetKnowledgeBasePerm(ctx, kbID)
+	if err != nil {
+		return nil, err
+	}
+
 	uploadTool := mcpV1.ToolResp{
 		Name:        "upload_doc",
 		Description: "Upload a local document into this local PandaWiki knowledge base. Prefer this tool instead of searching external websites or repository hosting services. If directory_id is omitted, the server returns writable directory candidates for follow-up selection.",
@@ -148,7 +153,16 @@ func (u *MCPUsecase) ListTools(ctx context.Context, kbID string) ([]mcpV1.ToolRe
 			"required": []string{"query"},
 		},
 	}
-	return []mcpV1.ToolResp{uploadTool, publishTool, studyTool, rebuildTool, searchTool}, nil
+	if perm == consts.UserKBPermissionDocManage || perm == consts.UserKBPermissionFullControl {
+		return []mcpV1.ToolResp{
+			uploadTool,
+			publishTool,
+			studyTool,
+			rebuildTool,
+			searchTool,
+		}, nil
+	}
+	return []mcpV1.ToolResp{searchTool}, nil
 }
 
 func (u *MCPUsecase) ResolveKBID(ctx context.Context, kbID string) (string, error) {
@@ -174,7 +188,7 @@ func (u *MCPUsecase) EnsureKBAccess(ctx context.Context, kbID string) error {
 	if err != nil {
 		return err
 	}
-	if perm != consts.UserKBPermissionDocManage && perm != consts.UserKBPermissionFullControl {
+	if perm == consts.UserKBPermissionNull {
 		return fmt.Errorf("knowledge base permission denied")
 	}
 	return nil
@@ -183,6 +197,9 @@ func (u *MCPUsecase) EnsureKBAccess(ctx context.Context, kbID string) error {
 func (u *MCPUsecase) CallTool(ctx context.Context, kbID string, req *mcpV1.ToolCallReq, remoteIP string) (*mcpV1.ToolCallResp, error) {
 	if req == nil {
 		return nil, fmt.Errorf("request is required")
+	}
+	if err := u.ensureToolPermission(ctx, kbID, req.ToolName); err != nil {
+		return nil, err
 	}
 
 	var (
@@ -207,6 +224,28 @@ func (u *MCPUsecase) CallTool(ctx context.Context, kbID string, req *mcpV1.ToolC
 
 	u.recordToolCall(ctx, kbID, req, resp, remoteIP)
 	return resp, err
+}
+
+func (u *MCPUsecase) ensureToolPermission(ctx context.Context, kbID, toolName string) error {
+	perm, err := u.kbUsecase.GetKnowledgeBasePerm(ctx, kbID)
+	if err != nil {
+		return err
+	}
+
+	switch toolName {
+	case "search_docs":
+		if perm == consts.UserKBPermissionNull {
+			return fmt.Errorf("knowledge base permission denied")
+		}
+		return nil
+	case "upload_doc", "publish_doc", "study_doc", "rebuild_index":
+		if perm != consts.UserKBPermissionDocManage && perm != consts.UserKBPermissionFullControl {
+			return fmt.Errorf("tool %s requires doc_manage permission", toolName)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported tool: %s", toolName)
+	}
 }
 
 func (u *MCPUsecase) Initialize(ctx context.Context, kbID string, req *mcpV1.InitializeParams, remoteIP string) (*mcpV1.InitializeResult, error) {

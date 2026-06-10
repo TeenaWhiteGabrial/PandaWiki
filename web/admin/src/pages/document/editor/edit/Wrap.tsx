@@ -38,9 +38,10 @@ import Toolbar from './Toolbar';
 
 interface WrapProps {
   detail: V1NodeDetailResp;
+  readOnlyUser?: boolean;
 }
 
-const Wrap = ({ detail: defaultDetail }: WrapProps) => {
+const Wrap = ({ detail: defaultDetail, readOnlyUser = false }: WrapProps) => {
   const { id = '' } = useParams();
   const navigate = useNavigate();
 
@@ -86,6 +87,7 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
 
   const debouncedUpdateSummary = useCallback(
     debounce((newSummary: string) => {
+      if (readOnlyUser) return;
       putApiV1NodeDetail({
         id: defaultDetail.id!,
         kb_id: defaultDetail.kb_id!,
@@ -100,11 +102,12 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
         });
       });
     }, 500),
-    [defaultDetail.id, defaultDetail.kb_id],
+    [defaultDetail.id, defaultDetail.kb_id, readOnlyUser],
   );
 
   const debouncedUpdateTitle = useCallback(
     debounce((newTitle: string) => {
+      if (readOnlyUser) return;
       putApiV1NodeDetail({
         id: defaultDetail.id!,
         kb_id: defaultDetail.kb_id!,
@@ -112,7 +115,7 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
         name: newTitle,
       });
     }, 500),
-    [defaultDetail.id, defaultDetail.kb_id],
+    [defaultDetail.id, defaultDetail.kb_id, readOnlyUser],
   );
 
   const updateDetail = (value: V1NodeDetailResp) => {
@@ -183,7 +186,7 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
   };
 
   const editorRef = useTiptap({
-    editable: !isMarkdown,
+    editable: !isMarkdown && !readOnlyUser,
     contentType: isMarkdown ? 'markdown' : 'html',
     immediatelyRender: true,
     content: defaultDetail.content,
@@ -311,7 +314,11 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
 
   const handleGlobalKeydown = useCallback(
     (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+      if (
+        !readOnlyUser &&
+        (event.ctrlKey || event.metaKey) &&
+        event.key === 's'
+      ) {
         event.preventDefault();
         changeCatalogItem();
       }
@@ -338,6 +345,7 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
             iconSx={{ fontSize: 28 }}
             value={nodeDetail?.meta?.emoji}
             onChange={value => {
+              if (readOnlyUser) return;
               putApiV1NodeDetail({
                 id: defaultDetail.id!,
                 kb_id: defaultDetail.kb_id!,
@@ -376,6 +384,7 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
               },
             }}
             onChange={e => {
+              if (readOnlyUser) return;
               setTitle(e.target.value);
               updateDetail({
                 name: e.target.value,
@@ -527,6 +536,7 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
                 },
               }}
               onChange={e => {
+                if (readOnlyUser) return;
                 setSummary(e.target.value);
                 debouncedUpdateSummary(e.target.value);
               }}
@@ -723,7 +733,9 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
           edit={isEditing}
           detail={nodeDetail!}
           updateDetail={updateDetail}
+          readOnlyUser={readOnlyUser}
           handleSave={async () => {
+            if (readOnlyUser) return;
             if (editorRef) {
               let content = nodeDetail?.content || '';
               if (!isMarkdown) {
@@ -743,7 +755,7 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
           }}
           handleExport={handleExport}
         />
-        {!isMarkdown && (
+        {!isMarkdown && !readOnlyUser && (
           <Toolbar editorRef={editorRef} handleAiGenerate={handleAiGenerate} />
         )}
       </Box>
@@ -781,6 +793,7 @@ const Wrap = ({ detail: defaultDetail }: WrapProps) => {
               onUpload={handleUpload}
               placeholder='请输入文档内容'
               onAceChange={value => {
+                if (readOnlyUser) return;
                 updateDetail({
                   content: value,
                 });

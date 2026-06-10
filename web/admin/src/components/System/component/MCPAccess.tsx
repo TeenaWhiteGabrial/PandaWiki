@@ -6,9 +6,11 @@ import {
 } from '@/request/pro';
 import {
   ConstsUserKBPermission,
+  GithubComChaitinPandaWikiProApiTokenV1CreateAPITokenReq,
   GithubComChaitinPandaWikiProApiTokenV1APITokenListItem,
 } from '@/request/pro/types';
 import { useAppSelector } from '@/store';
+import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { copyText } from '@/utils';
 import { message } from '@ctzhian/ui';
 import {
@@ -23,14 +25,15 @@ import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 
 const MCPAccess = () => {
-  const { kb_id } = useAppSelector(state => state.config);
+  const { kb_id, user, kbDetail } = useAppSelector(state => state.config);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [tokens, setTokens] = useState<
     GithubComChaitinPandaWikiProApiTokenV1APITokenListItem[]
   >([]);
   const [name, setName] = useState('knowledgeWiki MCP');
-  const [permission] = useState<'doc_manage'>('doc_manage');
+  const readOnlyMCP = isOrdinaryReadOnlyUser(user, kbDetail);
+  const permission = readOnlyMCP ? 'not null' : 'doc_manage';
 
   const fetchTokens = () => {
     if (!kb_id) return;
@@ -76,11 +79,14 @@ const MCPAccess = () => {
       return;
     }
     setCreating(true);
-    postApiProV1TokenCreate({
+    const payload = {
       kb_id,
       name: name.trim(),
       permission,
-    })
+    } as GithubComChaitinPandaWikiProApiTokenV1CreateAPITokenReq & {
+      permission: 'not null' | 'doc_manage';
+    };
+    postApiProV1TokenCreate(payload)
       .then(() => {
         message.success('创建成功');
         fetchTokens();
@@ -107,7 +113,9 @@ const MCPAccess = () => {
             连接片段，具体客户端外层配置格式可能略有差异。
           </Typography>
           <Typography color='text.secondary' fontSize={13}>
-            当前阶段 MCP Token 只开放文档管理权限。
+            {readOnlyMCP
+              ? '当前账号只能创建只读 MCP Token，可阅读知识库内容，不能上传、发布或学习文档。'
+              : '当前 MCP Token 可用于文档管理。'}
           </Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField
@@ -123,7 +131,9 @@ const MCPAccess = () => {
               onChange={() => undefined}
               sx={{ minWidth: 180 }}
             >
-              <MenuItem value='doc_manage'>文档管理</MenuItem>
+              <MenuItem value={permission}>
+                {readOnlyMCP ? '只读' : '文档管理'}
+              </MenuItem>
             </TextField>
             <Button
               variant='contained'
@@ -165,9 +175,12 @@ const MCPAccess = () => {
                       <Typography color='text.secondary' fontSize={13}>
                         权限：
                         {item.permission ===
-                        ConstsUserKBPermission.UserKBPermissionDocManage
-                          ? '文档管理'
-                          : item.permission}
+                        ConstsUserKBPermission.UserKBPermissionNotNull
+                          ? '只读'
+                          : item.permission ===
+                              ConstsUserKBPermission.UserKBPermissionDocManage
+                            ? '文档管理'
+                            : item.permission}
                         {' · '}
                         创建时间：
                         {item.created_at

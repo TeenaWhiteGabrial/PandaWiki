@@ -1,6 +1,7 @@
 import { getApiV1NodeDetail } from '@/request/Node';
 import { V1NodeDetailResp } from '@/request/types';
 import { useAppSelector } from '@/store';
+import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { Box } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useOutletContext, useParams } from 'react-router-dom';
@@ -10,7 +11,8 @@ import EditorWrap from './Wrap';
 
 const Edit = () => {
   const { id = '' } = useParams();
-  const { kb_id = '' } = useAppSelector(state => state.config);
+  const { kb_id = '', user, kbDetail } = useAppSelector(state => state.config);
+  const readOnlyUser = isOrdinaryReadOnlyUser(user, kbDetail);
   const { setNodeDetail } = useOutletContext<WrapContext>();
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<V1NodeDetailResp | null>(null);
@@ -74,7 +76,7 @@ const Edit = () => {
       {loading ? (
         <LoadingEditorWrap />
       ) : (
-        detail && <EditorWrap detail={detail} />
+        detail && <EditorWrap detail={detail} readOnlyUser={readOnlyUser} />
       )}
     </Box>
   );

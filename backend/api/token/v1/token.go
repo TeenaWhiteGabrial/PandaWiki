@@ -5,7 +5,7 @@ import "github.com/chaitin/panda-wiki/consts"
 type CreateAPITokenReq struct {
 	KbID       string                  `json:"kb_id" validate:"required"`
 	Name       string                  `json:"name" validate:"required"`
-	Permission consts.UserKBPermission `json:"permission" validate:"required,oneof=doc_manage"`
+	Permission consts.UserKBPermission `json:"permission" validate:"required,oneof=doc_manage 'not null'"`
 }
 
 type APITokenListReq struct {
