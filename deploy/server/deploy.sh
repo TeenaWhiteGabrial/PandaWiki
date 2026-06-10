@@ -201,12 +201,39 @@ run_restart() {
   compose ps
 }
 
+run_frontend_builds() {
+  echo "==> 构建前端产物"
+  compose rm -f admin-build app-build >/dev/null 2>&1 || true
+  compose run --rm admin-build
+  compose run --rm app-build
+}
+
+verify_frontend_artifacts() {
+  local admin_dist="${SCRIPT_DIR}/../../web/admin/dist"
+  local app_dist="${SCRIPT_DIR}/../../web/app/dist"
+
+  echo "==> 校验前端构建产物"
+
+  if [[ ! -d "${admin_dist}" ]]; then
+    echo "缺少前端构建产物：${admin_dist}"
+    echo "admin 镜像构建依赖该目录，请先检查 admin-build 日志。"
+    exit 1
+  fi
+
+  if [[ ! -d "${app_dist}" ]]; then
+    echo "缺少前端构建产物：${app_dist}"
+    echo "app 镜像构建依赖该目录，请先检查 app-build 日志。"
+    exit 1
+  fi
+}
+
 run_deploy() {
   echo "==> 删除旧容器和旧镜像后重建部署"
   compose down
   cleanup_old_runtime_artifacts
   compose up -d "${SERVICES_BASE[@]}"
-  compose up --build admin-build app-build
+  run_frontend_builds
+  verify_frontend_artifacts
   compose up -d --build "${SERVICES_BACKEND[@]}"
   compose up -d --build --no-deps "${SERVICES_FRONTEND[@]}"
   compose ps
@@ -230,7 +257,8 @@ run_fresh_db() {
   fi
 
   compose up -d "${SERVICES_BASE[@]}"
-  compose up --build admin-build app-build
+  run_frontend_builds
+  verify_frontend_artifacts
   compose up -d --build "${SERVICES_BACKEND[@]}"
   compose up -d --build --no-deps "${SERVICES_FRONTEND[@]}"
   compose ps
