@@ -29,6 +29,7 @@ func NewUserUsecase(repo *pg.UserRepository, enterpriseRepo *pg.EnterpriseReposi
 		if err := repo.UpsertDefaultUser(context.Background(), &domain.User{
 			ID:       uuid.New().String(),
 			Account:  "admin",
+			Name:     "超级管理员",
 			Password: config.AdminPassword,
 			Role:     consts.UserRoleAdmin,
 		}); err != nil {

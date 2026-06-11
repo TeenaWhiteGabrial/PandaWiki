@@ -49,8 +49,14 @@ func (r *UserRepository) UpsertDefaultUser(ctx context.Context, user *domain.Use
 			}
 			return nil
 		}
-		// User exists, update password
-		return tx.Model(&existingUser).Update("password", user.Password).Error
+		// User exists, update default fields
+		updates := map[string]any{
+			"password": user.Password,
+		}
+		if user.Name != "" {
+			updates["name"] = user.Name
+		}
+		return tx.Model(&existingUser).Updates(updates).Error
 	})
 }
 

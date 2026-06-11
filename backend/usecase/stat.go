@@ -47,6 +47,9 @@ func NewStatUseCase(repo *pg.StatRepository, nodeRepo *pg.NodeRepository, conver
 }
 
 func (u *StatUseCase) RecordPage(ctx context.Context, stat *domain.StatPage) error {
+	if stat.Scene == domain.StatPageSceneLogin {
+		return nil
+	}
 	if err := u.repo.CreateStatPage(ctx, stat); err != nil {
 		return err
 	}

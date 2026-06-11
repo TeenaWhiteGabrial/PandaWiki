@@ -14,6 +14,36 @@ import { Ellipsis } from '@ctzhian/ui';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 
+const getVisitorName = (item: StatInstantPageItme) => {
+  if (item?.info?.username) {
+    return item.info.username;
+  }
+  if (item.node_name === '登录页') {
+    return '未登录用户';
+  }
+  return '访客';
+};
+
+const getVisitorLocation = (item: StatInstantPageItme) => {
+  const country = item.ip_address.country;
+  const province = item.ip_address.province;
+  const city = item.ip_address.city;
+
+  if (
+    country === '保留地址' ||
+    province === '保留地址' ||
+    city === '保留地址'
+  ) {
+    return '内网地址';
+  }
+
+  if (country === '中国') {
+    return `${province}-${city}`;
+  }
+
+  return country;
+};
+
 const RTVisitor = ({ isWideScreen }: { isWideScreen: boolean }) => {
   const { kb_id = '' } = useAppSelector(state => state.config);
   const [count, setCount] = useState<TrendData[]>([]);
@@ -164,7 +194,7 @@ const RTVisitor = ({ isWideScreen }: { isWideScreen: boolean }) => {
                             borderRadius: '50%',
                           }}
                         />
-                        <Box>{it?.info?.username || '匿名用户'}</Box>
+                        <Box>{getVisitorName(it)}</Box>
                       </Stack>
 
                       {/* {it?.info?.email && (
@@ -180,9 +210,7 @@ const RTVisitor = ({ isWideScreen }: { isWideScreen: boolean }) => {
                         ...(!isWideScreen && { ml: '20px', fontSize: 10 }),
                       }}
                     >
-                      {it.ip_address.country === '中国'
-                        ? `${it.ip_address.province}-${it.ip_address.city}`
-                        : `${it.ip_address.country}`}
+                      {getVisitorLocation(it)}
                     </Box>
                   </Stack>
                 </Stack>

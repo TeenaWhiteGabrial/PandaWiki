@@ -5,6 +5,8 @@ import Avatar from '@/components/Avatar';
 import Card from '@/components/Card';
 import { useURLSearchParams } from '@/hooks';
 import {
+  alpha,
+  Autocomplete,
   Box,
   Button,
   Checkbox,
@@ -12,6 +14,7 @@ import {
   IconButton,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import { message } from '@ctzhian/ui';
 import { useEffect, useState } from 'react';
@@ -25,6 +28,44 @@ import {
 } from '@panda-wiki/icons';
 
 const REMEMBER_KEY = 'panda_wiki_remember_login';
+const MAX_REMEMBERED_LOGINS = 8;
+
+type RememberedLogin = {
+  account: string;
+  password: string;
+  updatedAt: number;
+};
+
+const loadRememberedLogins = (): RememberedLogin[] => {
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as RememberedLogin[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        item =>
+          item &&
+          typeof item.account === 'string' &&
+          typeof item.password === 'string',
+      )
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  } catch {
+    localStorage.removeItem(REMEMBER_KEY);
+    return [];
+  }
+};
+
+const saveRememberedLogins = (items: RememberedLogin[]) => {
+  if (!items.length) {
+    localStorage.removeItem(REMEMBER_KEY);
+    return;
+  }
+  localStorage.setItem(
+    REMEMBER_KEY,
+    JSON.stringify(items.slice(0, MAX_REMEMBERED_LOGINS)),
+  );
+};
 
 const Login = () => {
   const navigate = useNavigate();
@@ -35,37 +76,51 @@ const Login = () => {
   const [remember, setRemember] = useState(false);
   const [see, setSee] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [rememberedLogins, setRememberedLogins] = useState<RememberedLogin[]>(
+    [],
+  );
 
   useEffect(() => {
-    const remembered = localStorage.getItem(REMEMBER_KEY);
-    if (!remembered) return;
-    try {
-      const parsed = JSON.parse(remembered) as {
-        account?: string;
-        password?: string;
-      };
-      setAccount(parsed.account || '');
-      setPassword(parsed.password || '');
+    const parsed = loadRememberedLogins();
+    setRememberedLogins(parsed);
+    if (parsed.length > 0) {
+      setAccount(parsed[0].account || '');
+      setPassword(parsed[0].password || '');
       setRemember(true);
-    } catch {
-      localStorage.removeItem(REMEMBER_KEY);
     }
   }, []);
+
+  const handleAccountChange = (value: string) => {
+    setAccount(value);
+    const matched = rememberedLogins.find(item => item.account === value);
+    if (matched) {
+      setPassword(matched.password);
+      setRemember(true);
+    }
+  };
 
   const submit = () => {
     postApiV1UserLogin({ account, password })
       .then(res => {
         localStorage.setItem('panda_wiki_token', res.token!);
+        const trimmedAccount = account.trim();
         if (remember) {
-          localStorage.setItem(
-            REMEMBER_KEY,
-            JSON.stringify({
-              account,
+          const nextLogins = [
+            {
+              account: trimmedAccount,
               password,
-            }),
-          );
+              updatedAt: Date.now(),
+            },
+            ...rememberedLogins.filter(item => item.account !== trimmedAccount),
+          ];
+          setRememberedLogins(nextLogins);
+          saveRememberedLogins(nextLogins);
         } else {
-          localStorage.removeItem(REMEMBER_KEY);
+          const nextLogins = rememberedLogins.filter(
+            item => item.account !== trimmedAccount,
+          );
+          setRememberedLogins(nextLogins);
+          saveRememberedLogins(nextLogins);
         }
         navigate(redirect);
         message.success('登录成功');
@@ -84,6 +139,14 @@ const Login = () => {
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
+        position: 'relative',
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          inset: 0,
+          background:
+            'linear-gradient(135deg, rgba(11,18,36,0.62) 0%, rgba(26,45,88,0.38) 45%, rgba(255,255,255,0.12) 100%)',
+        },
       }}
     >
       <Stack
@@ -93,63 +156,129 @@ const Login = () => {
         sx={{
           width: '100%',
           height: '100%',
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         <Card
           sx={{
             mt: -3,
-            p: 4,
+            p: 4.5,
             width: 458,
             boxShadow:
-              '0px 0px 4px 0px rgba(54,59,76,0.1), 0px 20px 40px 0px rgba(54,59,76,0.1)',
+              '0px 24px 80px rgba(6, 16, 38, 0.24), 0px 6px 18px rgba(6, 16, 38, 0.12)',
             position: 'absolute',
             top: '50%',
             left: '50%',
-            bgcolor: 'background.paper',
+            bgcolor: alpha('#FFFFFF', 0.94),
+            border: `1px solid ${alpha('#FFFFFF', 0.55)}`,
+            borderRadius: '24px',
+            backdropFilter: 'blur(14px)',
             transform: 'translate(-50%, -50%)',
           }}
         >
           <Stack alignItems={'center'}>
-            <Avatar src={Logo} sx={{ width: 64, height: 64, mb: 1 }} />
+            <Avatar src={Logo} sx={{ width: 68, height: 68, mb: 1.5 }} />
             <Stack
               direction={'row'}
               alignItems={'center'}
               gap={1}
               sx={{
-                fontSize: 28,
+                fontSize: 30,
                 fontWeight: 700,
                 color: 'text.primary',
-                mb: 4,
+                mb: 1,
               }}
             >
               知识库管理台
             </Stack>
-            <TextField
-              value={account}
+            <Typography
+              sx={{
+                mb: 4,
+                fontSize: 14,
+                color: 'text.secondary',
+              }}
+            >
+              支持保存多个登录账号，选择后可直接带出密码
+            </Typography>
+            <Autocomplete
+              freeSolo
               fullWidth
-              sx={{ mb: 4 }}
-              onChange={e => setAccount(e.target.value)}
-              placeholder='账号'
-              autoFocus
-              tabIndex={1}
+              options={rememberedLogins.map(item => item.account)}
+              value={account}
+              onChange={(_, value) => handleAccountChange(value || '')}
+              onInputChange={(_, value, reason) => {
+                if (reason === 'input' || reason === 'clear') {
+                  handleAccountChange(value);
+                }
+              }}
               slotProps={{
-                input: {
-                  startAdornment: (
-                    <IconZhanghao sx={{ fontSize: 16, mr: 2, flexShrink: 0 }} />
-                  ),
-                  endAdornment: account ? (
-                    <IconButton
-                      onClick={() => setAccount('')}
-                      size='small'
-                      tabIndex={-1}
-                    >
-                      <IconIcon_tool_close
-                        sx={{ fontSize: 14, color: 'text.tertiary' }}
-                      />
-                    </IconButton>
-                  ) : null,
+                paper: {
+                  sx: {
+                    mt: 1,
+                    borderRadius: '16px',
+                    boxShadow: '0px 18px 48px rgba(15, 23, 42, 0.18)',
+                    border: `1px solid ${alpha('#D7DEEA', 0.9)}`,
+                  },
+                },
+                listbox: {
+                  sx: {
+                    py: 1,
+                    '& .MuiAutocomplete-option': {
+                      minHeight: 48,
+                      px: 2,
+                      fontSize: 14,
+                    },
+                  },
                 },
               }}
+              renderInput={params => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  sx={{ mb: 3 }}
+                  placeholder='账号'
+                  autoFocus
+                  tabIndex={1}
+                  helperText={
+                    rememberedLogins.length
+                      ? `已保存 ${rememberedLogins.length} 个账号，可下拉选择`
+                      : ' '
+                  }
+                  slotProps={{
+                    input: {
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          <IconZhanghao
+                            sx={{ fontSize: 16, mr: 2, flexShrink: 0 }}
+                          />
+                          {params.InputProps.startAdornment}
+                        </>
+                      ),
+                      endAdornment: (
+                        <>
+                          {account ? (
+                            <IconButton
+                              onClick={() => handleAccountChange('')}
+                              size='small'
+                              tabIndex={-1}
+                            >
+                              <IconIcon_tool_close
+                                sx={{
+                                  fontSize: 14,
+                                  color: 'text.tertiary',
+                                }}
+                              />
+                            </IconButton>
+                          ) : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    },
+                  }}
+                />
+              )}
             />
             <TextField
               value={password}
@@ -210,13 +339,18 @@ const Login = () => {
                     onChange={event => setRemember(event.target.checked)}
                   />
                 }
-                label='记住密码'
+                label='记住密码并加入账号列表'
               />
             </Box>
             <Button
               fullWidth
               variant='contained'
-              sx={{ height: 48 }}
+              sx={{
+                height: 50,
+                borderRadius: '14px',
+                fontSize: 16,
+                fontWeight: 700,
+              }}
               onClick={() => {
                 if (!account || !password) return;
                 setLoading(true);

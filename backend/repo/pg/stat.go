@@ -146,6 +146,7 @@ func (r *StatRepository) GetInstantPages(ctx context.Context, kbID string) ([]*d
 	var instantPages []*domain.InstantPageResp
 	if err := r.db.WithContext(ctx).Model(&domain.StatPage{}).
 		Where("kb_id = ?", kbID).
+		Where("scene != ?", domain.StatPageSceneLogin).
 		Select("node_id, ip, scene, created_at,user_id").
 		Order("created_at DESC").
 		Limit(10).

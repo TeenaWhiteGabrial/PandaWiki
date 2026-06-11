@@ -3,7 +3,7 @@ import Card from '@/components/Card';
 import { FormItem } from '@/components/Form';
 import { getApiV1EnterpriseDepartments } from '@/request/Enterprise';
 import type { Department } from '@/request/Enterprise';
-import { copyText, generatePassword } from '@/utils';
+import { generatePassword } from '@/utils';
 import {
   buildDepartmentTree,
   flattenDepartmentTree,
@@ -12,7 +12,7 @@ import {
 } from '@/utils/enterprise';
 import { CheckCircle } from '@mui/icons-material';
 import { Box, Button, MenuItem, Stack, TextField } from '@mui/material';
-import { Modal } from '@ctzhian/ui';
+import { message, Modal } from '@ctzhian/ui';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { V1CreateUserReq } from '@/request/types';
@@ -26,6 +26,7 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
     account: string;
     password: string;
   } | null>(null);
+  const [copying, setCopying] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
 
   const {
@@ -56,17 +57,46 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
     });
   }, [addMember]);
 
-  const copyUserInfo = ({
+  const fallbackCopy = (text: string) => {
+    const textArea = document.createElement('textarea');
+    textArea.style.position = 'fixed';
+    textArea.style.opacity = '0';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '-9999px';
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      return document.execCommand('copy');
+    } finally {
+      document.body.removeChild(textArea);
+    }
+  };
+
+  const copyUserInfo = async ({
     account,
     password,
   }: {
     account: string;
     password: string;
   }) => {
-    copyText(`账号: ${account}\n密码: ${password}`, () => {
+    const text = `账号: ${account}\n密码: ${password}`;
+    setCopying(true);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else if (!fallbackCopy(text)) {
+        throw new Error('copy failed');
+      }
+      message.success('复制成功', 1.5);
       setCreatedUserInfo(null);
       reset();
-    });
+    } catch {
+      message.error('复制失败，请手动复制', 1.5);
+    } finally {
+      setCopying(false);
+    }
   };
 
   const onSubmit = handleSubmit(data => {
@@ -123,6 +153,7 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
         okText='复制用户信息'
         okButtonProps={{
           sx: { minWidth: '120px' },
+          loading: copying,
         }}
         onOk={() => createdUserInfo && copyUserInfo(createdUserInfo)}
       >
