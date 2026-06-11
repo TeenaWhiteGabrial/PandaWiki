@@ -179,7 +179,7 @@ func (cfg *WechatConfig) SendURLToUser(touser, question, token, conversationID, 
 		"agentid": cfg.AgentID,
 		"textcard": map[string]interface{}{
 			"title":       question,
-			"description": "<div class = \"highlight\">本回答由 PandaWiki 基于 AI 生成，仅供参考。</div>",
+			"description": "<div class = \"highlight\"> 基于 AI 生成，仅供参考。</div>",
 			"url":         fmt.Sprintf("%s/h5-chat?id=%s&source_type=%s", baseUrl, conversationID, consts.SourceTypeWechatBot),
 		},
 	}

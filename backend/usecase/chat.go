@@ -217,11 +217,21 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 			}
 		}
 
-		groupIds, err := u.AuthRepo.GetAuthGroupIdsWithParentsByAuthId(ctx, req.Info.UserInfo.AuthUserID)
+		kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, req.KBID)
 		if err != nil {
-			u.logger.Error("failed to get auth groupIds", log.Error(err))
-			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get auth groupIds"}
+			u.logger.Error("failed to get kb", log.Error(err))
+			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get kb"}
 			return
+		}
+
+		groupIds := []int(nil)
+		if !kb.AccessSettings.EnterpriseAuth.Enabled {
+			groupIds, err = u.AuthRepo.GetAuthGroupIdsWithParentsByAuthId(ctx, req.Info.UserInfo.AuthUserID)
+			if err != nil {
+				u.logger.Error("failed to get auth groupIds", log.Error(err))
+				eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get auth groupIds"}
+				return
+			}
 		}
 
 		shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.Info.UserInfo.AuthUserID)
@@ -341,19 +351,21 @@ func (u *ChatUsecase) ChatRagOnly(ctx context.Context, req *domain.ChatRagOnlyRe
 			}
 		}
 
-		groupIds, err := u.AuthRepo.GetAuthGroupIdsWithParentsByAuthId(ctx, req.UserInfo.AuthUserID)
-		if err != nil {
-			u.logger.Error("failed to get auth groupIds", log.Error(err))
-			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get auth groupIds"}
-			return
-		}
-
 		// retrieve documents
 		kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, req.KBID)
 		if err != nil {
 			u.logger.Error("failed to get kb", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get kb"}
 			return
+		}
+		groupIds := []int(nil)
+		if !kb.AccessSettings.EnterpriseAuth.Enabled {
+			groupIds, err = u.AuthRepo.GetAuthGroupIdsWithParentsByAuthId(ctx, req.UserInfo.AuthUserID)
+			if err != nil {
+				u.logger.Error("failed to get auth groupIds", log.Error(err))
+				eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get auth groupIds"}
+				return
+			}
 		}
 		_, rankedNodes, err := u.llmUsecase.GetRankNodes(ctx, GetRankNodesRequest{
 			DatasetID:           kb.DatasetID,
@@ -441,16 +453,18 @@ func (u *ChatUsecase) replaceWithSimpleString(content string, filter *utils.DFA)
 }
 
 func (u *ChatUsecase) Search(ctx context.Context, req *domain.ChatSearchReq) (*domain.ChatSearchResp, error) {
-	groupIds, err := u.AuthRepo.GetAuthGroupIdsWithParentsByAuthId(ctx, req.AuthUserID)
+	kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, req.KBID)
 	if err != nil {
 		return nil, err
+	}
+	groupIds := []int(nil)
+	if !kb.AccessSettings.EnterpriseAuth.Enabled {
+		groupIds, err = u.AuthRepo.GetAuthGroupIdsWithParentsByAuthId(ctx, req.AuthUserID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.AuthUserID)
-	if err != nil {
-		return nil, err
-	}
-
-	kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, req.KBID)
 	if err != nil {
 		return nil, err
 	}

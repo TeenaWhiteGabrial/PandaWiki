@@ -22,7 +22,10 @@ type Role = 'manager' | 'user';
 const MemberAdd = ({ refresh }: { refresh: () => void }) => {
   const [addMember, setAddMember] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [password, setPassword] = useState('');
+  const [createdUserInfo, setCreatedUserInfo] = useState<{
+    account: string;
+    password: string;
+  } | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
 
   const {
@@ -41,7 +44,6 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
     },
   });
 
-  const account = watch('account');
   const departmentIDs = watch('department_ids');
   const flatDepartments = flattenDepartmentTree(
     buildDepartmentTree(departments),
@@ -62,7 +64,7 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
     password: string;
   }) => {
     copyText(`账号: ${account}\n密码: ${password}`, () => {
-      setPassword('');
+      setCreatedUserInfo(null);
       reset();
     });
   };
@@ -79,7 +81,10 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
       role: data.role,
     };
     const onSuccess = () => {
-      setPassword(password);
+      setCreatedUserInfo({
+        account: data.account,
+        password,
+      });
       setAddMember(false);
       refresh();
     };
@@ -108,27 +113,27 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
             新用户创建成功
           </Stack>
         }
-        open={!!password}
+        open={!!createdUserInfo}
         closable={false}
         cancelText='关闭'
         onCancel={() => {
-          setPassword('');
+          setCreatedUserInfo(null);
           reset();
         }}
         okText='复制用户信息'
         okButtonProps={{
           sx: { minWidth: '120px' },
         }}
-        onOk={() => copyUserInfo({ account, password })}
+        onOk={() => createdUserInfo && copyUserInfo(createdUserInfo)}
       >
         <Card sx={{ p: 2, fontSize: 14, bgcolor: 'background.paper3' }}>
           <Stack direction={'row'}>
             <Box sx={{ width: 80 }}>账号</Box>
-            <Box sx={{ fontWeight: 700 }}>{account}</Box>
+            <Box sx={{ fontWeight: 700 }}>{createdUserInfo?.account}</Box>
           </Stack>
           <Stack direction={'row'} sx={{ mt: 1 }}>
             <Box sx={{ width: 80 }}>密码</Box>
-            <Box sx={{ fontWeight: 700 }}>{password}</Box>
+            <Box sx={{ fontWeight: 700 }}>{createdUserInfo?.password}</Box>
           </Stack>
         </Card>
       </Modal>

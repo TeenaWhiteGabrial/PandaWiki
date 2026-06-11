@@ -99,6 +99,19 @@ const AnswerStatus = {
   4: '',
 };
 
+const getChatAuthHeaders = (): Record<string, string> => {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+  const token = window.localStorage.getItem('panda_wiki_token');
+  if (!token) {
+    return {};
+  }
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+};
+
 const LoadingContent = ({
   thinking,
 }: {
@@ -614,6 +627,7 @@ const AiQaContent: React.FC<{
       url: `${basePath}/share/v1/chat/message`,
       headers: {
         'Content-Type': 'application/json',
+        ...getChatAuthHeaders(),
       },
       onError: error => {
         setLoading(false);
