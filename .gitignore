@@ -54,3 +54,4 @@ backend/tmp_*.go
 backend/migration/migration
 
 .gocache/
+.pnpm-store/

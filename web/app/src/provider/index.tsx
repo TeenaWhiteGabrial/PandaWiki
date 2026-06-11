@@ -22,6 +22,7 @@ import {
   addExpandState,
   type NavItem,
 } from '@/utils/tree';
+import { usePathname } from 'next/navigation';
 
 interface StoreContextType {
   authInfo?: V1UserInfoResp;
@@ -80,6 +81,7 @@ export default function StoreProvider({
   } = props;
 
   const NAV_ID_STORAGE_KEY = 'kb-selected-nav-id';
+  const pathname = usePathname();
 
   // 使用 props 传入的 defaultNavId，避免 SSR 与 CSR 不一致导致 Hydration 错误
   const initialNavId = initialSelectedNavId;
@@ -158,6 +160,15 @@ export default function StoreProvider({
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    const basePath = window._BASE_PATH_ || '';
+    const normalizedPathname =
+      basePath && pathname?.startsWith(basePath)
+        ? pathname.slice(basePath.length) || '/'
+        : pathname || '/';
+    if (normalizedPathname === '/auth/login') {
+      return;
+    }
+
     const token = window.localStorage.getItem('panda_wiki_token');
     if (!token) {
       setAuthInfo(undefined);
@@ -182,7 +193,7 @@ export default function StoreProvider({
     return () => {
       disposed = true;
     };
-  }, [authInfoState?.id]);
+  }, [authInfoState?.id, pathname]);
 
   const params = useParams();
   const docId = (params?.id as string) || undefined;
