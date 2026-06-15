@@ -1388,10 +1388,21 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                           checked={!!modelData['analysis-vl']?.is_active}
                           onChange={() => {
                             const analysisVL = modelData['analysis-vl'];
-                            if (!analysisVL) return;
+                            if (
+                              !analysisVL?.id ||
+                              !analysisVL.model ||
+                              !analysisVL.provider ||
+                              !analysisVL.type
+                            ) {
+                              return;
+                            }
                             putApiV1Model({
                               ...analysisVL,
+                              id: analysisVL.id,
                               base_url: analysisVL.base_url || '',
+                              model: analysisVL.model,
+                              provider: analysisVL.provider,
+                              type: analysisVL.type,
                               is_active: !analysisVL.is_active,
                             }).then(() => {
                               message.success('修改成功');

@@ -335,15 +335,17 @@ const ContributePage = () => {
               keyword,
             }),
         }}
-        locale={{
-          emptyText: (
+        sx={tableSx}
+        renderEmpty={
+          loading ? (
+            <Box />
+          ) : (
             <Stack alignItems='center' sx={{ py: 6 }}>
               <Box component='img' src={NoData} sx={{ width: 140, mb: 2 }} />
               <Box sx={{ color: 'text.tertiary' }}>暂无贡献记录</Box>
             </Stack>
-          ),
-        }}
-        sx={tableSx}
+          )
+        }
       />
 
       <Dialog

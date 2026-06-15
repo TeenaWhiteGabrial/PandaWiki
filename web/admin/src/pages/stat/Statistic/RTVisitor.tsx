@@ -88,7 +88,10 @@ const RTVisitor = ({ isWideScreen }: { isWideScreen: boolean }) => {
           const stat = stats.find(it => it.time === time);
           statsData.push(
             stat
-              ? stat
+              ? {
+                  count: stat.count || 0,
+                  time: stat.time || time,
+                }
               : {
                   count: 0,
                   time,
