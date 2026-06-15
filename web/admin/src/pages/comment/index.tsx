@@ -162,7 +162,11 @@ const CommentPage = () => {
     {
       dataIndex: 'content',
       title: '评论内容',
-      render: (text?: string) => <Ellipsis lines={2}>{text || '-'}</Ellipsis>,
+      render: (text?: string) => (
+        <Ellipsis sx={{ display: 'block', maxWidth: 480 }}>
+          {text || '-'}
+        </Ellipsis>
+      ),
     },
     {
       dataIndex: 'info',

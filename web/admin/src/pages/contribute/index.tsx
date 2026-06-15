@@ -12,8 +12,8 @@ import {
   ConstsContributeStatus,
   GithubComChaitinPandaWikiProApiContributeV1ContributeDetailResp,
   GithubComChaitinPandaWikiProApiContributeV1ContributeItem,
-  V1NavListResp,
 } from '@/request/pro/types';
+import { V1NavListResp } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { Ellipsis, Table, message } from '@ctzhian/ui';
 import { ColumnType } from '@ctzhian/ui/dist/Table';
@@ -139,7 +139,11 @@ const ContributePage = () => {
       {
         dataIndex: 'reason',
         title: '贡献说明',
-        render: (text?: string) => <Ellipsis lines={2}>{text || '-'}</Ellipsis>,
+        render: (text?: string) => (
+          <Ellipsis sx={{ display: 'block', maxWidth: 480 }}>
+            {text || '-'}
+          </Ellipsis>
+        ),
       },
       {
         dataIndex: 'auth_name',
@@ -320,7 +324,7 @@ const ContributePage = () => {
         columns={columns}
         dataSource={data}
         pagination={{
-          current: page,
+          page,
           pageSize,
           total,
           onChange: (nextPage, nextPageSize) =>
@@ -334,11 +338,7 @@ const ContributePage = () => {
         locale={{
           emptyText: (
             <Stack alignItems='center' sx={{ py: 6 }}>
-              <Box
-                component='img'
-                src={NoData.src}
-                sx={{ width: 140, mb: 2 }}
-              />
+              <Box component='img' src={NoData} sx={{ width: 140, mb: 2 }} />
               <Box sx={{ color: 'text.tertiary' }}>暂无贡献记录</Box>
             </Stack>
           ),

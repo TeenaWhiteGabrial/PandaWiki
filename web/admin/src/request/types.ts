@@ -99,6 +99,8 @@ export enum ConstsWatermarkSetting {
 export enum ConstsUserRole {
   /** 管理员 */
   UserRoleAdmin = "admin",
+  /** 管理员 */
+  UserRoleManager = "manager",
   /** 普通用户 */
   UserRoleUser = "user",
 }
@@ -1702,9 +1704,12 @@ export interface V1CrawlerResultsResp {
 
 export interface V1CreateUserReq {
   account: string;
+  name: string;
+  department_ids: string[];
   /** @minLength 8 */
   password: string;
-  role: "admin" | "user";
+  primary_department: string;
+  role: "manager" | "user";
 }
 
 export interface V1CreateUserResp {

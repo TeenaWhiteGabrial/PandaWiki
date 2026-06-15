@@ -34,6 +34,7 @@ import {
   convertLocalModelToUIModel,
   modelService,
 } from '@/services/modelService';
+import { GithubComChaitinPandaWikiDomainModelProvider } from '@/request/types';
 import AutoModelConfig, {
   AutoModelConfigRef,
   AutoModelConfigFormData,
@@ -259,7 +260,12 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
       try {
         const requestData: {
           mode: 'auto' | 'manual';
-          auto_provider?: AutoModelConfigFormData;
+          auto_provider?: {
+            provider: GithubComChaitinPandaWikiDomainModelProvider;
+            base_url: string;
+            api_key: string;
+            models: AutoModelConfigFormData['models'];
+          };
         } = {
           mode: tempMode,
         };
@@ -280,7 +286,13 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
               message.error('请完成自动模式的供应商和模型配置');
               return;
             }
-            requestData.auto_provider = formData;
+            requestData.auto_provider = {
+              provider:
+                formData.provider as GithubComChaitinPandaWikiDomainModelProvider,
+              base_url: formData.base_url,
+              api_key: formData.api_key,
+              models: formData.models,
+            };
           }
         }
 
@@ -1370,14 +1382,17 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                       可选
                     </Box>
                     {modelData['analysis-vl'] &&
-                      modelData['analysis-vl'].id && (
+                      modelData['analysis-vl']?.id && (
                         <Switch
                           size='small'
-                          checked={modelData['analysis-vl'].is_active}
+                          checked={!!modelData['analysis-vl']?.is_active}
                           onChange={() => {
+                            const analysisVL = modelData['analysis-vl'];
+                            if (!analysisVL) return;
                             putApiV1Model({
-                              ...modelData['analysis-vl'],
-                              is_active: !modelData['analysis-vl'].is_active,
+                              ...analysisVL,
+                              base_url: analysisVL.base_url || '',
+                              is_active: !analysisVL.is_active,
                             }).then(() => {
                               message.success('修改成功');
                               getModelList();

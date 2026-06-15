@@ -96,7 +96,9 @@ const RTVisitor = ({ isWideScreen }: { isWideScreen: boolean }) => {
           );
         }
         setCount(
-          statsData.map(it => ({ count: it.count, name: it.time })).reverse(),
+          statsData
+            .map(it => ({ count: it.count || 0, name: it.time }))
+            .reverse(),
         );
       });
     }
