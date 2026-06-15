@@ -14,6 +14,9 @@ type ModelProvider string
 
 const (
 	ModelProviderBrandBaiZhiCloud ModelProvider = "BaiZhiCloud"
+	ModelProviderCompatibleCloud  ModelProvider = "CompatiblePlatform"
+	ModelProviderXinference       ModelProvider = "Xinference"
+	ModelProviderGPUStack         ModelProvider = "gpustack"
 )
 
 type ModelType string
@@ -179,11 +182,35 @@ type ActivateModelReq struct {
 }
 
 type SwitchModeReq struct {
-	Mode           string `json:"mode" validate:"required,oneof=manual auto"`
-	AutoModeAPIKey string `json:"auto_mode_api_key"` // 百智云 API Key
-	ChatModel      string `json:"chat_model"`        // 自定义对话模型名称
+	Mode         string                `json:"mode" validate:"required,oneof=manual auto"`
+	AutoProvider *AutoModeProviderReq `json:"auto_provider"`
 }
 
 type SwitchModeResp struct {
 	Message string `json:"message"`
+}
+
+type AutoProviderConfig struct {
+	ID          string                 `json:"id"`
+	Provider    ModelProvider          `json:"provider" validate:"required"`
+	BaseURL     string                 `json:"base_url" validate:"required"`
+	APIKey      string                 `json:"api_key"`
+	APIHeader   string                 `json:"api_header"`
+	APIVersion  string                 `json:"api_version"`
+	ExtraConfig map[string]interface{} `json:"extra_config,omitempty"`
+}
+
+type AutoModeProviderReq struct {
+	Provider ModelProvider `json:"provider" validate:"required"`
+	BaseURL  string        `json:"base_url" validate:"required"`
+	APIKey   string        `json:"api_key"`
+	Models   AutoModeModels `json:"models"`
+}
+
+type AutoModeModels struct {
+	Chat       string `json:"chat"`
+	Embedding  string `json:"embedding"`
+	Rerank     string `json:"rerank"`
+	Analysis   string `json:"analysis"`
+	AnalysisVL string `json:"analysis_vl"`
 }

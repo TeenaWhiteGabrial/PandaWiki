@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 
 	modelkitDomain "github.com/chaitin/ModelKit/v2/domain"
 	modelkit "github.com/chaitin/ModelKit/v2/usecase"
@@ -57,8 +59,131 @@ func (u *ModelUsecase) Create(ctx context.Context, model *domain.Model) error {
 	}
 	// 模型更新成功后，如果更新嵌入模型，则触发记录更新
 	if updatedEmbeddingModel {
-		if _, err := u.updateModeSettingConfig(ctx, "", "", "", true); err != nil {
+		if _, err := u.updateModeSettingConfig(ctx, &domain.SwitchModeReq{}, true); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (u *ModelUsecase) normalizeModelModeSetting(config *domain.ModelModeSetting) {
+	if config == nil {
+		return
+	}
+
+	if config.AutoProvider == nil && len(config.AutoProviderConfigs) > 0 {
+		for _, item := range config.AutoProviderConfigs {
+			if item.ID != config.ActiveAutoProvider {
+				continue
+			}
+			config.AutoProvider = &domain.AutoModeProviderSetting{
+				Provider: domain.ModelProvider(item.Provider),
+				BaseURL:  item.BaseURL,
+				APIKey:   item.APIKey,
+				Models: domain.AutoModeModelSelection{
+					Chat:       consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeChat)),
+					Embedding:  consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeEmbedding)),
+					Rerank:     consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeRerank)),
+					Analysis:   consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeAnalysis)),
+					AnalysisVL: consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeAnalysisVL)),
+				},
+			}
+			break
+		}
+	}
+
+	if len(config.AutoProviderConfigs) == 0 && config.AutoModeAPIKey != "" {
+		providerID := uuid.New().String()
+		config.AutoProviderConfigs = []domain.AutoProviderSettingItem{
+			{
+				ID:       providerID,
+				Provider: string(domain.ModelProviderBrandBaiZhiCloud),
+				BaseURL:  consts.AutoModeBaseURL,
+				APIKey:   config.AutoModeAPIKey,
+			},
+		}
+		if config.ActiveAutoProvider == "" {
+			config.ActiveAutoProvider = providerID
+		}
+		if config.AutoProvider == nil {
+			config.AutoProvider = &domain.AutoModeProviderSetting{
+				Provider: domain.ModelProviderBrandBaiZhiCloud,
+				BaseURL:  consts.AutoModeBaseURL,
+				APIKey:   config.AutoModeAPIKey,
+				Models: domain.AutoModeModelSelection{
+					Chat:       consts.GetAutoModeDefaultModel(string(domain.ModelProviderBrandBaiZhiCloud), string(domain.ModelTypeChat)),
+					Embedding:  consts.GetAutoModeDefaultModel(string(domain.ModelProviderBrandBaiZhiCloud), string(domain.ModelTypeEmbedding)),
+					Rerank:     consts.GetAutoModeDefaultModel(string(domain.ModelProviderBrandBaiZhiCloud), string(domain.ModelTypeRerank)),
+					Analysis:   consts.GetAutoModeDefaultModel(string(domain.ModelProviderBrandBaiZhiCloud), string(domain.ModelTypeAnalysis)),
+					AnalysisVL: consts.GetAutoModeDefaultModel(string(domain.ModelProviderBrandBaiZhiCloud), string(domain.ModelTypeAnalysisVL)),
+				},
+			}
+		}
+	}
+
+	for index := range config.AutoProviderConfigs {
+		item := &config.AutoProviderConfigs[index]
+		if item.ID == "" {
+			item.ID = uuid.New().String()
+		}
+		if item.BaseURL == "" {
+			if baseURL := consts.GetAutoModeBaseURL(item.Provider); baseURL != "" {
+				item.BaseURL = baseURL
+			}
+		}
+	}
+
+	if config.ActiveAutoProvider == "" && len(config.AutoProviderConfigs) > 0 {
+		config.ActiveAutoProvider = config.AutoProviderConfigs[0].ID
+	}
+}
+
+func (u *ModelUsecase) getAutoModeProvider(config domain.ModelModeSetting) (*domain.AutoModeProviderSetting, error) {
+	u.normalizeModelModeSetting(&config)
+	if config.AutoProvider == nil {
+		return nil, fmt.Errorf("auto provider config is required")
+	}
+	return config.AutoProvider, nil
+}
+
+func (u *ModelUsecase) validateAutoProviderConfig(ctx context.Context, config *domain.AutoModeProviderReq) error {
+	if config == nil {
+		return fmt.Errorf("auto provider config is required")
+	}
+	if !consts.SupportsAutoModeProvider(string(config.Provider)) {
+		return fmt.Errorf("auto mode does not support provider %s", config.Provider)
+	}
+	if strings.TrimSpace(config.BaseURL) == "" {
+		return fmt.Errorf("auto provider base url is required")
+	}
+	modelsByType := map[domain.ModelType]string{
+		domain.ModelTypeChat:       config.Models.Chat,
+		domain.ModelTypeEmbedding:  config.Models.Embedding,
+		domain.ModelTypeRerank:     config.Models.Rerank,
+		domain.ModelTypeAnalysis:   config.Models.Analysis,
+		domain.ModelTypeAnalysisVL: config.Models.AnalysisVL,
+	}
+
+	for modelType, modelName := range modelsByType {
+		if strings.TrimSpace(modelName) == "" {
+			return fmt.Errorf("auto mode %s model is required", modelType)
+		}
+		checkType := modelType
+		if modelType == domain.ModelTypeAnalysis || modelType == domain.ModelTypeAnalysisVL {
+			checkType = domain.ModelTypeChat
+		}
+		check, err := u.modelkit.CheckModel(ctx, &modelkitDomain.CheckModelReq{
+			Provider:   string(config.Provider),
+			Model:      modelName,
+			BaseURL:    config.BaseURL,
+			APIKey:     config.APIKey,
+			Type:       string(checkType),
+		})
+		if err != nil {
+			return fmt.Errorf("auto provider %s model %s check failed: %w", config.Provider, modelName, err)
+		}
+		if check.Error != "" {
+			return fmt.Errorf("auto provider %s model %s check failed: %s", config.Provider, modelName, check.Error)
 		}
 	}
 	return nil
@@ -136,7 +261,7 @@ func (u *ModelUsecase) Update(ctx context.Context, req *domain.UpdateModelReq) e
 	}
 	// 模型更新成功后，如果更新嵌入模型，则触发记录更新
 	if updatedEmbeddingModel {
-		if _, err := u.updateModeSettingConfig(ctx, "", "", "", true); err != nil {
+		if _, err := u.updateModeSettingConfig(ctx, &domain.SwitchModeReq{}, true); err != nil {
 			return err
 		}
 	}
@@ -150,20 +275,20 @@ func (u *ModelUsecase) GetChatModel(ctx context.Context) (*domain.Model, error) 
 	if err != nil {
 		u.logger.Error("get model mode setting failed, use manual mode", log.Error(err))
 	}
-	if err == nil && modelModeSetting.Mode == consts.ModelSettingModeAuto && modelModeSetting.AutoModeAPIKey != "" {
-		modelName := modelModeSetting.ChatModel
-		if modelName == "" {
-			modelName = string(consts.AutoModeDefaultChatModel)
+	if err == nil && modelModeSetting.Mode == consts.ModelSettingModeAuto {
+		activeProvider, providerErr := u.getAutoModeProvider(modelModeSetting)
+		if providerErr == nil {
+			model = &domain.Model{
+				Model:      activeProvider.Models.Chat,
+				Type:       domain.ModelTypeChat,
+				IsActive:   true,
+				BaseURL:    activeProvider.BaseURL,
+				APIKey:     activeProvider.APIKey,
+				Provider:   activeProvider.Provider,
+			}
+			return model, nil
 		}
-		model = &domain.Model{
-			Model:    modelName,
-			Type:     domain.ModelTypeChat,
-			IsActive: true,
-			BaseURL:  consts.AutoModeBaseURL,
-			APIKey:   modelModeSetting.AutoModeAPIKey,
-			Provider: domain.ModelProviderBrandBaiZhiCloud,
-		}
-		return model, nil
+		u.logger.Warn("active auto provider is invalid, fallback to manual mode", log.Error(providerErr))
 	}
 	model, err = u.modelRepo.GetChatModel(ctx)
 	if err != nil {
@@ -184,26 +309,8 @@ func (u *ModelUsecase) UpdateUsage(ctx context.Context, modelID string, usage *s
 func (u *ModelUsecase) SwitchMode(ctx context.Context, req *domain.SwitchModeReq) error {
 	switch consts.ModelSettingMode(req.Mode) {
 	case consts.ModelSettingModeAuto:
-		if req.AutoModeAPIKey == "" {
-			return fmt.Errorf("auto mode api key is required")
-		}
-		modelName := req.ChatModel
-		if modelName == "" {
-			modelName = consts.GetAutoModeDefaultModel(string(domain.ModelTypeChat))
-		}
-		// 检查 API Key 是否有效
-		check, err := u.modelkit.CheckModel(ctx, &modelkitDomain.CheckModelReq{
-			Provider: string(domain.ModelProviderBrandBaiZhiCloud),
-			Model:    modelName,
-			BaseURL:  consts.AutoModeBaseURL,
-			APIKey:   req.AutoModeAPIKey,
-			Type:     string(domain.ModelTypeChat),
-		})
-		if err != nil {
-			return fmt.Errorf("百智云模型 API Key 检查失败: %w", err)
-		}
-		if check.Error != "" {
-			return fmt.Errorf("百智云模型 API Key 检查失败: %s", check.Error)
+		if err := u.validateAutoProviderConfig(ctx, req.AutoProvider); err != nil {
+			return err
 		}
 	case consts.ModelSettingModeManual:
 		needModelTypes := []domain.ModelType{
@@ -241,12 +348,12 @@ func (u *ModelUsecase) SwitchMode(ctx context.Context, req *domain.SwitchModeReq
 		isResetEmbeddingUpdateFlag = false
 	}
 
-	modelModeSetting, err := u.updateModeSettingConfig(ctx, req.Mode, req.AutoModeAPIKey, req.ChatModel, isResetEmbeddingUpdateFlag)
+	modelModeSetting, err := u.updateModeSettingConfig(ctx, req, isResetEmbeddingUpdateFlag)
 	if err != nil {
 		return err
 	}
 
-	if err := u.updateRAGModelsByMode(ctx, req.Mode, modelModeSetting.AutoModeAPIKey, oldModelModeSetting); err != nil {
+	if err := u.updateRAGModelsByMode(ctx, req.Mode, *modelModeSetting, oldModelModeSetting); err != nil {
 		return err
 	}
 
@@ -254,7 +361,7 @@ func (u *ModelUsecase) SwitchMode(ctx context.Context, req *domain.SwitchModeReq
 }
 
 // updateModeSettingConfig 读取当前设置并更新，然后持久化
-func (u *ModelUsecase) updateModeSettingConfig(ctx context.Context, mode, apiKey, chatModel string, isManualEmbeddingUpdated bool) (*domain.ModelModeSetting, error) {
+func (u *ModelUsecase) updateModeSettingConfig(ctx context.Context, req *domain.SwitchModeReq, isManualEmbeddingUpdated bool) (*domain.ModelModeSetting, error) {
 	// 读取当前设置
 	setting, err := u.systemSettingRepo.GetSystemSetting(ctx, consts.SystemSettingModelMode)
 	if err != nil {
@@ -267,17 +374,28 @@ func (u *ModelUsecase) updateModeSettingConfig(ctx context.Context, mode, apiKey
 	}
 
 	// 更新设置
-	if apiKey != "" {
-		config.AutoModeAPIKey = apiKey
+	if req.Mode != "" {
+		config.Mode = consts.ModelSettingMode(req.Mode)
 	}
-	if chatModel != "" {
-		config.ChatModel = chatModel
-	}
-	if mode != "" {
-		config.Mode = consts.ModelSettingMode(mode)
+	if req.Mode == string(consts.ModelSettingModeAuto) {
+		if req.AutoProvider != nil {
+			config.AutoProvider = &domain.AutoModeProviderSetting{
+				Provider: req.AutoProvider.Provider,
+				BaseURL:  req.AutoProvider.BaseURL,
+				APIKey:   req.AutoProvider.APIKey,
+				Models: domain.AutoModeModelSelection{
+					Chat:       req.AutoProvider.Models.Chat,
+					Embedding:  req.AutoProvider.Models.Embedding,
+					Rerank:     req.AutoProvider.Models.Rerank,
+					Analysis:   req.AutoProvider.Models.Analysis,
+					AnalysisVL: req.AutoProvider.Models.AnalysisVL,
+				},
+			}
+		}
 	}
 
 	config.IsManualEmbeddingUpdated = isManualEmbeddingUpdated
+	u.normalizeModelModeSetting(&config)
 
 	// 持久化设置
 	updatedValue, err := json.Marshal(config)
@@ -299,15 +417,16 @@ func (u *ModelUsecase) GetModelModeSetting(ctx context.Context) (domain.ModelMod
 	if err := json.Unmarshal(setting.Value, &config); err != nil {
 		return domain.ModelModeSetting{}, fmt.Errorf("failed to parse model mode setting: %w", err)
 	}
+	u.normalizeModelModeSetting(&config)
 	// 无效设置检查
-	if config == (domain.ModelModeSetting{}) || config.Mode == "" {
+	if config.Mode == "" {
 		return domain.ModelModeSetting{}, fmt.Errorf("model mode setting is invalid")
 	}
 	return config, nil
 }
 
 // updateRAGModelsByMode 根据模式更新 RAG 模型
-func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode, autoModeAPIKey string, oldModelModeSetting domain.ModelModeSetting) error {
+func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, modelModeSetting, oldModelModeSetting domain.ModelModeSetting) error {
 	var isTriggerUpsertRecords = true
 
 	// 手动切换到手动模式, 根据IsManualEmbeddingUpdated字段决定
@@ -339,14 +458,27 @@ func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode, autoMode
 			}
 			model = m
 		} else {
-			modelName := consts.GetAutoModeDefaultModel(string(modelType))
+			activeProvider, err := u.getAutoModeProvider(modelModeSetting)
+			if err != nil {
+				return err
+			}
+			modelName := map[domain.ModelType]string{
+				domain.ModelTypeChat:       activeProvider.Models.Chat,
+				domain.ModelTypeEmbedding:  activeProvider.Models.Embedding,
+				domain.ModelTypeRerank:     activeProvider.Models.Rerank,
+				domain.ModelTypeAnalysis:   activeProvider.Models.Analysis,
+				domain.ModelTypeAnalysisVL: activeProvider.Models.AnalysisVL,
+			}[modelType]
+			if strings.TrimSpace(modelName) == "" {
+				return fmt.Errorf("auto mode %s model is required", modelType)
+			}
 			model = &domain.Model{
-				Model:    modelName,
-				Type:     modelType,
-				IsActive: true,
-				BaseURL:  consts.AutoModeBaseURL,
-				APIKey:   autoModeAPIKey,
-				Provider: domain.ModelProviderBrandBaiZhiCloud,
+				Model:      modelName,
+				Type:       modelType,
+				IsActive:   true,
+				BaseURL:    activeProvider.BaseURL,
+				APIKey:     activeProvider.APIKey,
+				Provider:   activeProvider.Provider,
 			}
 		}
 

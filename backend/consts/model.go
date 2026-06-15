@@ -10,23 +10,6 @@ const (
 	AutoModeDefaultAnalysisVLModel AutoModeDefaultModel = "qwen-vl-max-latest"
 )
 
-func GetAutoModeDefaultModel(modelType string) string {
-	switch modelType {
-	case "chat":
-		return string(AutoModeDefaultChatModel)
-	case "embedding":
-		return string(AutoModeDefaultEmbeddingModel)
-	case "rerank":
-		return string(AutoModeDefaultRerankModel)
-	case "analysis":
-		return string(AutoModeDefaultAnalysisModel)
-	case "analysis-vl":
-		return string(AutoModeDefaultAnalysisVLModel)
-	default:
-		return string(AutoModeDefaultChatModel)
-	}
-}
-
 type ModelSettingMode string
 
 const (
@@ -34,6 +17,62 @@ const (
 	ModelSettingModeAuto   ModelSettingMode = "auto"
 )
 
-const (
-	AutoModeBaseURL = "https://model-square.app.baizhi.cloud/v1"
-)
+const AutoModeBaseURL = "https://model-square.app.baizhi.cloud/v1"
+
+func GetAutoModeDefaultModel(provider string, modelType string) string {
+	switch provider {
+	case "BaiZhiCloud", "CompatiblePlatform":
+		switch modelType {
+		case "chat":
+			return string(AutoModeDefaultChatModel)
+		case "embedding":
+			return string(AutoModeDefaultEmbeddingModel)
+		case "rerank":
+			return string(AutoModeDefaultRerankModel)
+		case "analysis":
+			return string(AutoModeDefaultAnalysisModel)
+		case "analysis-vl":
+			return string(AutoModeDefaultAnalysisVLModel)
+		default:
+			return string(AutoModeDefaultChatModel)
+		}
+	case "Xinference", "gpustack":
+		switch modelType {
+		case "chat":
+			return string(AutoModeDefaultChatModel)
+		case "embedding":
+			return string(AutoModeDefaultEmbeddingModel)
+		case "rerank":
+			return string(AutoModeDefaultRerankModel)
+		case "analysis":
+			return string(AutoModeDefaultAnalysisModel)
+		case "analysis-vl":
+			return string(AutoModeDefaultAnalysisVLModel)
+		default:
+			return string(AutoModeDefaultChatModel)
+		}
+	default:
+		return ""
+	}
+}
+
+func GetAutoModeBaseURL(provider string) string {
+	switch provider {
+	case "BaiZhiCloud":
+		return AutoModeBaseURL
+	default:
+		return ""
+	}
+}
+
+func SupportsAutoModeProvider(provider string) bool {
+	switch provider {
+	case "BaiZhiCloud",
+		"CompatiblePlatform",
+		"Xinference",
+		"gpustack":
+		return true
+	default:
+		return false
+	}
+}

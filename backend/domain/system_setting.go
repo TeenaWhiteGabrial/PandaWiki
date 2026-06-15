@@ -22,10 +22,38 @@ func (SystemSetting) TableName() string {
 
 // ModelModeSetting 模型配置结构体
 type ModelModeSetting struct {
-	Mode                     consts.ModelSettingMode `json:"mode"`                        // 模式: manual 或 auto
-	AutoModeAPIKey           string                  `json:"auto_mode_api_key"`           // 百智云 API Key
-	ChatModel                string                  `json:"chat_model"`                  // 自定义对话模型名称
-	IsManualEmbeddingUpdated bool                    `json:"is_manual_embedding_updated"` // 手动模式下嵌入模型是否更新
+	Mode                     consts.ModelSettingMode    `json:"mode"`                        // 模式: manual 或 auto
+	AutoProviderConfigs      []AutoProviderSettingItem  `json:"auto_provider_configs"`       // 兼容上一版自动模式多供应商配置
+	ActiveAutoProvider       string                     `json:"active_auto_provider"`        // 兼容上一版自动模式当前供应商 ID
+	AutoProvider             *AutoModeProviderSetting   `json:"auto_provider"`               // 自动模式统一供应商配置
+	AutoModeAPIKey           string                     `json:"auto_mode_api_key"`           // 兼容旧百智云自动模式字段
+	ChatModel                string                     `json:"chat_model"`                  // 兼容旧自动模式字段
+	IsManualEmbeddingUpdated bool                       `json:"is_manual_embedding_updated"` // 手动模式下嵌入模型是否更新
+}
+
+type AutoProviderSettingItem struct {
+	ID          string                 `json:"id"`
+	Provider    string                 `json:"provider"`
+	BaseURL     string                 `json:"base_url"`
+	APIKey      string                 `json:"api_key"`
+	APIHeader   string                 `json:"api_header"`
+	APIVersion  string                 `json:"api_version"`
+	ExtraConfig map[string]interface{} `json:"extra_config,omitempty"`
+}
+
+type AutoModeProviderSetting struct {
+	Provider ModelProvider           `json:"provider"`
+	BaseURL  string                  `json:"base_url"`
+	APIKey   string                  `json:"api_key"`
+	Models   AutoModeModelSelection  `json:"models"`
+}
+
+type AutoModeModelSelection struct {
+	Chat       string `json:"chat"`
+	Embedding  string `json:"embedding"`
+	Rerank     string `json:"rerank"`
+	Analysis   string `json:"analysis"`
+	AnalysisVL string `json:"analysis_vl"`
 }
 
 // UploadDeniedExtensionsSetting 上传禁止扩展名配置

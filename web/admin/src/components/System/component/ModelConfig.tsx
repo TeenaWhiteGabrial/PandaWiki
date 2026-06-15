@@ -34,7 +34,15 @@ import {
   convertLocalModelToUIModel,
   modelService,
 } from '@/services/modelService';
-import AutoModelConfig, { AutoModelConfigRef } from './AutoModelConfig';
+import AutoModelConfig, {
+  AutoModelConfigRef,
+  AutoModelConfigFormData,
+} from './AutoModelConfig';
+
+type ModelDataMap = Record<
+  'chat' | 'embedding' | 'rerank' | 'analysis' | 'analysis-vl',
+  GithubComChaitinPandaWikiDomainModelListItem | null
+>;
 
 const ModelModal = lazy(() =>
   import('@ctzhian/modelkit').then(
@@ -43,7 +51,7 @@ const ModelModal = lazy(() =>
 );
 
 export interface ModelConfigRef {
-  getAutoConfigFormData: () => { apiKey: string; selectedModel: string } | null;
+  getAutoConfigFormData: () => AutoModelConfigFormData | null;
   handleClose: () => void;
   onSubmit: () => Promise<void>;
 }
@@ -84,11 +92,11 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
     const [tempMode, setTempMode] = useState<'auto' | 'manual'>('manual');
     const [savedMode, setSavedMode] = useState<'auto' | 'manual'>('manual');
     const [isSaving, setIsSaving] = useState(false);
-    const [initialApiKey, setInitialApiKey] = useState('');
-    const [initialChatModel, setInitialChatModel] = useState('');
+    const [initialAutoProvider, setInitialAutoProvider] =
+      useState<AutoModelConfigFormData | null>(null);
     const [hasConfigChanged, setHasConfigChanged] = useState(false);
 
-    const [modelData, setModelData] = useState<Record<string, any>>({
+    const [modelData, setModelData] = useState<ModelDataMap>({
       chat: chatModelData,
       embedding: embeddingModelData,
       rerank: rerankModelData,
@@ -96,7 +104,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
       'analysis-vl': analysisVLModelData,
     });
 
-    const cacheModelData = useRef<Record<string, any>>({});
+    const cacheModelData = useRef<Record<string, unknown>>({});
 
     const autoConfigRef = useRef<AutoModelConfigRef>(null);
 
@@ -122,30 +130,6 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
       }
     };
 
-    const getProcessedUrl = (
-      baseUrl: string,
-      provider: keyof typeof ModelProvider,
-    ) => {
-      if (!ModelProvider[provider]?.urlWrite) {
-        return baseUrl;
-      }
-      if (baseUrl.endsWith('#')) {
-        return baseUrl;
-      }
-      const forceUseOriginalHost = () => {
-        if (baseUrl.endsWith('/')) {
-          baseUrl = baseUrl.slice(0, -1);
-          return true;
-        }
-        if (/\/v\d+$/.test(baseUrl)) {
-          return true;
-        }
-        return baseUrl.endsWith('volces.com/api/v3');
-      };
-
-      return forceUseOriginalHost() ? baseUrl : `${baseUrl}/v1`;
-    };
-
     // 组件挂载时,获取当前配置
     useEffect(() => {
       const fetchModeSetting = async () => {
@@ -158,13 +142,9 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
             setTempMode(mode);
             setSavedMode(mode);
 
-            // 保存 API Key 和 Chat Model
-            if (setting.auto_mode_api_key) {
-              setInitialApiKey(setting.auto_mode_api_key);
-            }
-            if (setting.chat_model) {
-              setInitialChatModel(setting.chat_model);
-            }
+            setInitialAutoProvider(
+              (setting.auto_provider as AutoModelConfigFormData | null) || null,
+            );
           }
         } catch (err) {
           console.error('获取模型配置失败:', err);
@@ -178,7 +158,11 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
       const switchToAutoMode = async () => {
         if (autoSwitchToAutoMode && !hasAutoSwitched) {
           try {
-            await postApiV1ModelSwitchMode({ mode: 'auto' });
+            const currentSetting = await getApiV1ModelModeSetting();
+            await postApiV1ModelSwitchMode({
+              mode: 'auto',
+              auto_provider: currentSetting.auto_provider,
+            });
             setAutoConfigMode(true);
             setTempMode('auto');
             setSavedMode('auto');
@@ -275,18 +259,28 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
       try {
         const requestData: {
           mode: 'auto' | 'manual';
-          auto_mode_api_key?: string;
-          chat_model?: string;
+          auto_provider?: AutoModelConfigFormData;
         } = {
           mode: tempMode,
         };
 
-        // 如果是自动模式，获取用户输入的 API Key 和 model
+        // 如果是自动模式，获取自动供应商配置
         if (tempMode === 'auto' && autoConfigRef.current) {
           const formData = autoConfigRef.current.getFormData();
           if (formData) {
-            requestData.auto_mode_api_key = formData.apiKey;
-            requestData.chat_model = formData.selectedModel;
+            if (
+              !formData.provider ||
+              !formData.base_url ||
+              !formData.models.chat ||
+              !formData.models.embedding ||
+              !formData.models.rerank ||
+              !formData.models.analysis ||
+              !formData.models.analysis_vl
+            ) {
+              message.error('请完成自动模式的供应商和模型配置');
+              return;
+            }
+            requestData.auto_provider = formData;
           }
         }
 
@@ -299,8 +293,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
         if (tempMode === 'auto' && autoConfigRef.current) {
           const formData = autoConfigRef.current.getFormData();
           if (formData) {
-            setInitialApiKey(formData.apiKey);
-            setInitialChatModel(formData.selectedModel);
+            setInitialAutoProvider(formData);
           }
         }
 
@@ -361,9 +354,10 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
       return convertLocalModelToUIModel(modelData.analysis);
     }, [modelData.analysis]);
 
+    const analysisVLModel = modelData['analysis-vl'];
     const modelModalAnalysisVLData = useMemo(() => {
-      return convertLocalModelToUIModel(modelData['analysis-vl']);
-    }, [modelData['analysis-vl']]);
+      return convertLocalModelToUIModel(analysisVLModel);
+    }, [analysisVLModel]);
 
     return (
       <Stack gap={0}>
@@ -461,8 +455,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
           <AutoModelConfig
             ref={autoConfigRef}
             showTip={showTip}
-            initialApiKey={initialApiKey}
-            initialChatModel={initialChatModel}
+            initialValue={initialAutoProvider}
             onDataChange={() => setHasConfigChanged(true)}
           />
         ) : (

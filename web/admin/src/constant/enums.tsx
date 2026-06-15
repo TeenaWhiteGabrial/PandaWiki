@@ -162,9 +162,9 @@ export const VersionMap = {
 };
 
 export const ModelProvider = {
-  CompatiblePlatform: {
-    label: 'CompatibleCloud',
-    cn: '兼容平台',
+  BaiZhiCloud: {
+    label: 'BaiZhiCloud',
+    cn: '百智云',
     icon: IconChatgpt,
     urlWrite: false,
     secretRequired: true,
@@ -174,7 +174,7 @@ export const ModelProvider = {
     embedding: true,
     rerank: true,
     modelDocumentUrl: '',
-    defaultBaseUrl: '',
+    defaultBaseUrl: 'https://model-square.app.baizhi.cloud/v1',
   },
   ZhiPu: {
     label: 'ZhiPu',

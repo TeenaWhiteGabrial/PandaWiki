@@ -19,6 +19,8 @@ export enum SchemaRoleType {
 
 export enum GithubComChaitinPandaWikiDomainModelProvider {
   ModelProviderBrandBaiZhiCloud = "BaiZhiCloud",
+  ModelProviderGPUStack = "gpustack",
+  ModelProviderXinference = "Xinference",
 }
 
 export enum DomainStatPageScene {
@@ -97,8 +99,6 @@ export enum ConstsWatermarkSetting {
 export enum ConstsUserRole {
   /** 管理员 */
   UserRoleAdmin = "admin",
-  /** 管理员 */
-  UserRoleManager = "manager",
   /** 普通用户 */
   UserRoleUser = "user",
 }
@@ -977,10 +977,38 @@ export interface DomainMetricsConfig {
   type?: string;
 }
 
+export interface DomainAutoProviderConfig {
+  api_header?: string;
+  api_key?: string;
+  api_version?: string;
+  base_url: string;
+  extra_config?: Record<string, any>;
+  id: string;
+  provider: GithubComChaitinPandaWikiDomainModelProvider;
+}
+
+export interface DomainAutoModeModels {
+  analysis?: string;
+  analysis_vl?: string;
+  chat?: string;
+  embedding?: string;
+  rerank?: string;
+}
+
+export interface DomainAutoModeProviderReq {
+  api_key?: string;
+  base_url: string;
+  models?: DomainAutoModeModels;
+  provider: GithubComChaitinPandaWikiDomainModelProvider;
+}
+
 export interface DomainModelModeSetting {
-  /** 百智云 API Key */
+  active_auto_provider?: string;
+  auto_provider?: DomainAutoModeProviderReq;
+  auto_provider_configs?: DomainAutoProviderConfig[];
+  /** 兼容旧百智云自动模式字段 */
   auto_mode_api_key?: string;
-  /** 自定义对话模型名称 */
+  /** 兼容旧自动模式字段 */
   chat_model?: string;
   /** 手动模式下嵌入模型是否更新 */
   is_manual_embedding_updated?: boolean;
