@@ -14,9 +14,19 @@ import { Ellipsis } from '@ctzhian/ui';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 
+type InstantCountItem = {
+  count?: number;
+  time?: string;
+};
+
 const getVisitorName = (item: StatInstantPageItme) => {
-  if (item?.info?.username) {
-    return item.info.username;
+  const info = item.info as { name?: string; account?: string } | undefined;
+
+  if (info?.name) {
+    return info.name;
+  }
+  if (info?.account) {
+    return info.account;
   }
   if (item.node_name === '登录页') {
     return '未登录用户';
@@ -55,7 +65,7 @@ const RTVisitor = ({ isWideScreen }: { isWideScreen: boolean }) => {
         setPages(res as StatInstantPageItme[]);
       });
       getApiV1StatInstantCount({ kb_id }).then(res => {
-        const stats = ((res || []) as any[]).map(it => ({
+        const stats = ((res || []) as InstantCountItem[]).map(it => ({
           count: it.count,
           time: dayjs(it.time).format('YYYY-MM-DD HH:mm'),
         }));
@@ -188,7 +198,7 @@ const RTVisitor = ({ isWideScreen }: { isWideScreen: boolean }) => {
                         sx={{ cursor: 'pointer' }}
                       >
                         <img
-                          src={it?.info?.avatar_url || Logo}
+                          src={Logo}
                           width={14}
                           style={{
                             borderRadius: '50%',

@@ -112,7 +112,7 @@ func createApp() (*App, error) {
 		return nil, err
 	}
 	ipAddressRepo := ipdb2.NewIPAddressRepo(ipdbIPDB, logger)
-	conversationUsecase := usecase.NewConversationUsecase(conversationRepository, nodeRepository, geoRepo, logger, ipAddressRepo, authRepo)
+	conversationUsecase := usecase.NewConversationUsecase(conversationRepository, nodeRepository, geoRepo, logger, ipAddressRepo, userRepository)
 	blockWordRepo := pg2.NewBlockWordRepo(db, logger)
 	chatUsecase, err := usecase.NewChatUsecase(llmUsecase, knowledgeBaseRepository, conversationUsecase, modelUsecase, appRepository, blockWordRepo, nodeRepository, authRepo, enterpriseUsecase, logger)
 	if err != nil {
@@ -136,11 +136,14 @@ func createApp() (*App, error) {
 	creationUsecase := usecase.NewCreationUsecase(logger, llmUsecase, modelUsecase)
 	creationHandler := v1.NewCreationHandler(echo, baseHandler, logger, creationUsecase)
 	statRepository := pg2.NewStatRepository(db, cacheCache)
-	statUseCase := usecase.NewStatUseCase(statRepository, nodeRepository, conversationRepository, appRepository, ipAddressRepo, geoRepo, authRepo, knowledgeBaseRepository, logger)
+	statUseCase := usecase.NewStatUseCase(statRepository, nodeRepository, conversationRepository, appRepository, ipAddressRepo, geoRepo, userRepository, knowledgeBaseRepository, logger)
 	statHandler := v1.NewStatHandler(baseHandler, echo, statUseCase, logger, authMiddleware)
 	commentRepository := pg2.NewCommentRepository(db, logger)
-	commentUsecase := usecase.NewCommentUsecase(commentRepository, logger, nodeRepository, ipAddressRepo, authRepo)
+	commentUsecase := usecase.NewCommentUsecase(commentRepository, logger, nodeRepository, ipAddressRepo, userRepository)
 	commentHandler := v1.NewCommentHandler(echo, baseHandler, logger, authMiddleware, commentUsecase)
+	contributeRepository := pg2.NewContributeRepository(db, logger)
+	contributeUsecase := usecase.NewContributeUsecase(contributeRepository, nodeRepository, userRepository, appRepository, knowledgeBaseRepository, ragRepository, logger)
+	contributeHandler := v1.NewContributeHandler(echo, baseHandler, logger, authMiddleware, contributeUsecase)
 	authUsecase, err := usecase.NewAuthUsecase(authRepo, logger, knowledgeBaseRepository, cacheCache)
 	if err != nil {
 		return nil, err
@@ -167,6 +170,7 @@ func createApp() (*App, error) {
 		CreationHandler:      creationHandler,
 		StatHandler:          statHandler,
 		CommentHandler:       commentHandler,
+		ContributeHandler:    contributeHandler,
 		AuthV1Handler:        authV1Handler,
 		NavHandler:           navHandler,
 		EnterpriseHandler:    enterpriseHandler,
@@ -175,12 +179,13 @@ func createApp() (*App, error) {
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)
 	shareAppHandler := share.NewShareAppHandler(echo, baseHandler, logger, appUsecase)
-	shareChatHandler := share.NewShareChatHandler(echo, baseHandler, logger, appUsecase, chatUsecase, authUsecase, conversationUsecase, modelUsecase)
+	shareChatHandler := share.NewShareChatHandler(echo, baseHandler, logger, appUsecase, chatUsecase, conversationUsecase, modelUsecase)
 	sitemapUsecase := usecase.NewSitemapUsecase(nodeRepository, knowledgeBaseRepository, logger)
 	shareSitemapHandler := share.NewShareSitemapHandler(echo, baseHandler, sitemapUsecase, appUsecase, logger)
 	shareStatHandler := share.NewShareStatHandler(baseHandler, echo, statUseCase, logger)
 	shareCommentHandler := share.NewShareCommentHandler(echo, baseHandler, logger, commentUsecase, appUsecase)
-	shareAuthHandler := share.NewShareAuthHandler(echo, baseHandler, configConfig, logger, knowledgeBaseUsecase, authUsecase, apiTokenRepo)
+	shareContributeHandler := share.NewShareContributeHandler(echo, baseHandler, logger, contributeUsecase, appUsecase)
+	shareAuthHandler := share.NewShareAuthHandler(echo, baseHandler, configConfig, logger, knowledgeBaseUsecase, apiTokenRepo)
 	shareConversationHandler := share.NewShareConversationHandler(baseHandler, echo, conversationUsecase, logger)
 	wechatRepository := pg2.NewWechatRepository(db, logger)
 	wechatServiceUsecase := usecase.NewWechatUsecase(logger, appUsecase, chatUsecase, wechatRepository, authRepo)
@@ -188,7 +193,7 @@ func createApp() (*App, error) {
 	wechatAppUsecase := usecase.NewWechatAppUsecase(logger, appUsecase, chatUsecase, wechatRepository, authRepo, appRepository)
 	shareWechatHandler := share.NewShareWechatHandler(echo, baseHandler, logger, appUsecase, conversationUsecase, wechatServiceUsecase, wecomUsecase, wechatAppUsecase)
 	shareCaptchaHandler := share.NewShareCaptchaHandler(baseHandler, echo, logger, knowledgeBaseUsecase)
-	openapiV1Handler := share.NewOpenapiV1Handler(echo, baseHandler, logger, authUsecase, appUsecase)
+	openapiV1Handler := share.NewOpenapiV1Handler(echo, baseHandler, logger, appUsecase)
 	shareCommonHandler := share.NewShareCommonHandler(echo, baseHandler, logger, fileUsecase)
 	shareHandler := &share.ShareHandler{
 		ShareNodeHandler:         shareNodeHandler,
@@ -198,6 +203,7 @@ func createApp() (*App, error) {
 		ShareSitemapHandler:      shareSitemapHandler,
 		ShareStatHandler:         shareStatHandler,
 		ShareCommentHandler:      shareCommentHandler,
+		ShareContributeHandler:   shareContributeHandler,
 		ShareAuthHandler:         shareAuthHandler,
 		ShareConversationHandler: shareConversationHandler,
 		ShareWechatHandler:       shareWechatHandler,

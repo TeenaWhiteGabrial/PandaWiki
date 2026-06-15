@@ -237,17 +237,39 @@ func (u *CrawlerUsecase) ScrapeGetResults(ctx context.Context, taskIds []string)
 	list := make([]v1.CrawlerResultItem, 0)
 	status := consts.CrawlerStatusCompleted
 	for i, data := range taskRes.Data {
-		if slices.Contains([]anydoc.Status{anydoc.StatusPending, anydoc.StatusInProgress}, taskRes.Data[i].Status) {
+		currentStatus := taskRes.Data[i].Status
+		if slices.Contains([]anydoc.Status{anydoc.StatusPending, anydoc.StatusInProgress}, currentStatus) {
 			status = consts.CrawlerStatusPending
+			list = append(list, v1.CrawlerResultItem{
+				TaskId: taskRes.Data[i].TaskId,
+				Status: consts.CrawlerStatus(currentStatus),
+			})
+			continue
+		}
+
+		if currentStatus == anydoc.StatusFailed {
+			status = consts.CrawlerStatusFailed
+			list = append(list, v1.CrawlerResultItem{
+				TaskId: taskRes.Data[i].TaskId,
+				Status: consts.CrawlerStatus(currentStatus),
+			})
+			continue
 		}
 
 		fileBytes, err := u.anydocClient.DownloadDoc(ctx, data.Markdown)
 		if err != nil {
-			return nil, err
+			u.logger.Warn("download crawl result failed", log.Error(err), log.String("task_id", data.TaskId))
+			status = consts.CrawlerStatusPending
+			list = append(list, v1.CrawlerResultItem{
+				TaskId: taskRes.Data[i].TaskId,
+				Status: consts.CrawlerStatusPending,
+			})
+			continue
 		}
+
 		list = append(list, v1.CrawlerResultItem{
 			TaskId:  taskRes.Data[i].TaskId,
-			Status:  consts.CrawlerStatus(taskRes.Data[i].Status),
+			Status:  consts.CrawlerStatus(currentStatus),
 			Content: string(fileBytes),
 		})
 	}

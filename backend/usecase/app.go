@@ -153,10 +153,6 @@ func (u *AppUsecase) ValidateUpdateApp(ctx context.Context, id string, req *doma
 		}
 	}
 
-	if !limitation.AllowCommentAudit && app.Settings.WebAppCommentSettings.ModerationEnable != req.Settings.WebAppCommentSettings.ModerationEnable {
-		return domain.ErrPermissionDenied
-	}
-
 	if !limitation.AllowOpenAIBotSettings {
 		if app.Settings.OpenAIAPIBotSettings.IsEnabled != req.Settings.OpenAIAPIBotSettings.IsEnabled || app.Settings.OpenAIAPIBotSettings.SecretKey != req.Settings.OpenAIAPIBotSettings.SecretKey {
 			return domain.ErrPermissionDenied
@@ -166,12 +162,6 @@ func (u *AppUsecase) ValidateUpdateApp(ctx context.Context, id string, req *doma
 	if !limitation.AllowCustomCopyright {
 		if app.Settings.WidgetBotSettings.CopyrightHideEnabled != req.Settings.WidgetBotSettings.CopyrightHideEnabled || app.Settings.WidgetBotSettings.CopyrightInfo != req.Settings.WidgetBotSettings.CopyrightInfo {
 			return domain.ErrPermissionDenied
-		}
-		if app.Settings.ConversationSetting.CopyrightHideEnabled != req.Settings.ConversationSetting.CopyrightHideEnabled {
-			return domain.ErrPermissionDenied
-		}
-		if req.Settings.ConversationSetting.CopyrightInfo != domain.SettingCopyrightInfo && app.Settings.ConversationSetting.CopyrightInfo != req.Settings.ConversationSetting.CopyrightInfo {
-			req.Settings.ConversationSetting.CopyrightInfo = domain.SettingCopyrightInfo
 		}
 	}
 
@@ -590,11 +580,6 @@ func (u *AppUsecase) GetAppDetailByKBIDAndAppType(ctx context.Context, kbID stri
 		StatsSetting:      app.Settings.StatsSetting,
 	}
 
-	if !domain.GetBaseEditionLimitation(ctx).AllowCustomCopyright {
-		appDetailResp.Settings.ConversationSetting.CopyrightHideEnabled = false
-		appDetailResp.Settings.ConversationSetting.CopyrightInfo = domain.SettingCopyrightInfo
-	}
-
 	// init ai feedback string
 	if app.Settings.AIFeedbackSettings.AIFeedbackType == nil {
 		appDetailResp.Settings.AIFeedbackSettings.AIFeedbackType = []string{"内容不准确", "没有帮助", "其他"}
@@ -661,7 +646,7 @@ func (u *AppUsecase) GetMCPServerAppInfo(ctx context.Context, kbID string) (*dom
 	return appInfo, nil
 }
 
-func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, authId uint) (*domain.AppInfoResp, error) {
+func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, userID string) (*domain.AppInfoResp, error) {
 	kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, kbID)
 	if err != nil {
 		u.logger.Error("get kb failed", log.Error(err), log.String("kb_id", kbID))
@@ -696,13 +681,13 @@ func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, authId
 			NodeIds:         app.Settings.WebAppLandingConfigs[i].NodeIds,
 		}
 		if app.Settings.WebAppLandingConfigs[i].NavDocConfig != nil {
-			navNodes, err := u.GetRecommendNodesByNavIds(ctx, kbID, app.Settings.WebAppLandingConfigs[i].NavDocConfig.NavIds, authId)
+			navNodes, err := u.GetRecommendNodesByNavIds(ctx, kbID, app.Settings.WebAppLandingConfigs[i].NavDocConfig.NavIds, userID)
 			if err != nil {
 				return nil, err
 			}
 			webAppLandingConfigResp.Nodes = navNodes
 		} else {
-			nodes, err := u.GetRecommendNodesByIds(ctx, kbID, app.Settings.WebAppLandingConfigs[i].NodeIds, authId)
+			nodes, err := u.GetRecommendNodesByIds(ctx, kbID, app.Settings.WebAppLandingConfigs[i].NodeIds, userID)
 			if err != nil {
 				return nil, err
 			}
@@ -768,8 +753,6 @@ func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, authId
 	if !domain.GetBaseEditionLimitation(ctx).AllowCustomCopyright {
 		appInfo.Settings.WebAppCustomSettings.ShowBrandInfo = &showBrand
 		appInfo.Settings.DisclaimerSettings.Content = &defaultDisclaimer
-		appInfo.Settings.ConversationSetting.CopyrightHideEnabled = false
-		appInfo.Settings.ConversationSetting.CopyrightInfo = domain.SettingCopyrightInfo
 	} else {
 		if appInfo.Settings.DisclaimerSettings.Content == nil {
 			appInfo.Settings.DisclaimerSettings.Content = &defaultDisclaimer
@@ -980,8 +963,8 @@ func (u *AppUsecase) GetOpenAIAPIAppInfo(ctx context.Context, kbID string) (*dom
 }
 
 // filterNodesByPermissions 对节点列表进行权限过滤
-func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*domain.RecommendNodeListResp, authId uint) ([]*domain.RecommendNodeListResp, error) {
-	shareAccess, err := u.nodeUsecase.enterprise.BuildShareAccessContext(ctx, authId)
+func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*domain.RecommendNodeListResp, userID string) ([]*domain.RecommendNodeListResp, error) {
+	shareAccess, err := u.nodeUsecase.enterprise.BuildShareAccessContext(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1026,7 +1009,7 @@ func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*doma
 	return filteredNodes, nil
 }
 
-func (u *AppUsecase) GetRecommendNodesByIds(ctx context.Context, kbId string, nodeIds []string, authId uint) ([]*domain.RecommendNodeListResp, error) {
+func (u *AppUsecase) GetRecommendNodesByIds(ctx context.Context, kbId string, nodeIds []string, userID string) ([]*domain.RecommendNodeListResp, error) {
 	nodes, err := u.nodeUsecase.GetRecommendNodeList(ctx, &domain.GetRecommendNodeListReq{
 		KBID:    kbId,
 		NodeIDs: nodeIds,
@@ -1035,10 +1018,10 @@ func (u *AppUsecase) GetRecommendNodesByIds(ctx context.Context, kbId string, no
 		return nil, err
 	}
 
-	return u.filterNodesByPermissions(ctx, nodes, authId)
+	return u.filterNodesByPermissions(ctx, nodes, userID)
 }
 
-func (u *AppUsecase) GetRecommendNodesByNavIds(ctx context.Context, kbId string, navIds []string, authId uint) ([]*domain.RecommendNodeListResp, error) {
+func (u *AppUsecase) GetRecommendNodesByNavIds(ctx context.Context, kbId string, navIds []string, userID string) ([]*domain.RecommendNodeListResp, error) {
 	navList, err := u.navRepo.GetListByIds(ctx, kbId, navIds)
 	if err != nil {
 		return nil, err
@@ -1058,7 +1041,7 @@ func (u *AppUsecase) GetRecommendNodesByNavIds(ctx context.Context, kbId string,
 		return nil, err
 	}
 
-	filteredAll, err := u.filterNodesByPermissions(ctx, allNodes, authId)
+	filteredAll, err := u.filterNodesByPermissions(ctx, allNodes, userID)
 	if err != nil {
 		return nil, err
 	}

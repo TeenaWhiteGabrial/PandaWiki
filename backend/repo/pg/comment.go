@@ -29,11 +29,9 @@ func (r *CommentRepository) CreateComment(ctx context.Context, comment *domain.C
 func (r *CommentRepository) GetCommentList(ctx context.Context, nodeID string) ([]*domain.ShareCommentListItem, int64, error) {
 	// 按照时间排序来查询node_id的comments
 	var comments []*domain.ShareCommentListItem
-	query := r.db.WithContext(ctx).Model(&domain.Comment{}).Where("node_id = ?", nodeID)
-
-	if domain.GetBaseEditionLimitation(ctx).AllowCommentAudit {
-		query = query.Where("status = ?", domain.CommentStatusAccepted) //accepted
-	}
+	query := r.db.WithContext(ctx).Model(&domain.Comment{}).
+		Where("node_id = ?", nodeID).
+		Where("status = ?", domain.CommentStatusAccepted)
 
 	var count int64
 	if err := query.Count(&count).Error; err != nil {
@@ -57,9 +55,7 @@ func (r *CommentRepository) GetCommentListByKbID(ctx context.Context, req *domai
 			return nil, 0, err
 		}
 	} else {
-		if domain.GetBaseEditionLimitation(ctx).AllowCommentAudit {
-			query = query.Where("comments.status = ?", *req.Status)
-		}
+		query = query.Where("comments.status = ?", *req.Status)
 		// 按照时间排序来查询kb_id的comments ->reject pending accepted
 		if err := query.Count(&count).Error; err != nil {
 			return nil, 0, err
@@ -80,6 +76,13 @@ func (r *CommentRepository) GetCommentListByKbID(ctx context.Context, req *domai
 	// success
 	return comments, count, nil
 
+}
+
+func (r *CommentRepository) ModerateCommentList(ctx context.Context, ids []string, status domain.CommentStatus) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Comment{}).
+		Where("id IN (?)", ids).
+		Update("status", status).Error
 }
 
 func (r *CommentRepository) DeleteCommentList(ctx context.Context, commentID []string) error {

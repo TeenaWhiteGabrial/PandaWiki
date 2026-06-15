@@ -79,43 +79,42 @@ export enum ContentType {
   Text = "text/plain",
 }
 
-const pathnameWhiteList = ['/auth/login'];
+const pathnameWhiteList = ["/auth/login"];
 
 const stripBasePath = (pathname: string) => {
-  const basePath = window._BASE_PATH_ || '';
+  const basePath = window._BASE_PATH_ || "";
   if (!basePath) {
     return pathname;
   }
   if (pathname === basePath) {
-    return '/';
+    return "/";
   }
   if (pathname.startsWith(`${basePath}/`)) {
-    return pathname.slice(basePath.length) || '/';
+    return pathname.slice(basePath.length) || "/";
   }
   return pathname;
 };
 
 const clearAuthStorage = () => {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.removeItem('panda_wiki_token');
+  window.localStorage.removeItem("panda_wiki_token");
   document.cookie =
-    'panda_wiki_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    "panda_wiki_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+  document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
   document.cookie =
-    'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-  document.cookie =
-    '_pw_auth_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    "_pw_auth_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 };
 
 const redirectToLogin = () => {
   clearAuthStorage();
   const redirectAfterLogin = encodeURIComponent(
-    stripBasePath(location.href.replace(location.origin, '')),
+    stripBasePath(location.href.replace(location.origin, "")),
   );
   const search = `redirect=${redirectAfterLogin}`;
-  const pathname = `${window._BASE_PATH_ || ''}/auth/login`;
-  window.location.href = [pathname, search]?.join('?');
+  const pathname = `${window._BASE_PATH_ || ""}/auth/login`;
+  window.location.href = [pathname, search]?.join("?");
 };
 
 const getClientTokenHeader = () => {
@@ -123,7 +122,7 @@ const getClientTokenHeader = () => {
     return {};
   }
 
-  const token = window.localStorage.getItem('panda_wiki_token');
+  const token = window.localStorage.getItem("panda_wiki_token");
   if (!token) {
     return {};
   }
@@ -290,7 +289,6 @@ export class HttpClient<SecurityDataType = unknown> {
       `${baseUrl || this.baseUrl || (typeof window !== "undefined" ? window._BASE_PATH_ : "")}${path}${queryString ? `?${queryString}` : ""}`,
       {
         ...requestParams,
-        ...(typeof window === "undefined" ? { cache: "no-store" as const } : {}),
         headers: {
           ...customHeaders,
           ...(requestParams.headers || {}),

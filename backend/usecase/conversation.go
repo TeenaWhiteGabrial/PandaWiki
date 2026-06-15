@@ -20,7 +20,7 @@ type ConversationUsecase struct {
 	geoCacheRepo *cache.GeoRepo
 	logger       *log.Logger
 	ipRepo       *ipdb.IPAddressRepo
-	authRepo     *pg.AuthRepo
+	userRepo     *pg.UserRepository
 }
 
 func NewConversationUsecase(
@@ -29,14 +29,14 @@ func NewConversationUsecase(
 	geoCacheRepo *cache.GeoRepo,
 	logger *log.Logger,
 	ipRepo *ipdb.IPAddressRepo,
-	authRepo *pg.AuthRepo,
+	userRepo *pg.UserRepository,
 ) *ConversationUsecase {
 	return &ConversationUsecase{
 		repo:         repo,
 		nodeRepo:     nodeRepo,
 		geoCacheRepo: geoCacheRepo,
 		ipRepo:       ipRepo,
-		authRepo:     authRepo,
+		userRepo:     userRepo,
 		logger:       logger.WithModule("usecase.conversation"),
 	}
 }
@@ -54,13 +54,13 @@ func (u *ConversationUsecase) GetConversationList(ctx context.Context, request *
 	// get feedback info
 	conversationIDs := make([]string, 0, len(conversations))
 	// get all conversation authID
-	authIDs := make([]uint, 0, len(conversations))
+	userIDs := make([]string, 0, len(conversations))
 
 	for _, c := range conversations {
 		conversationIDs = append(conversationIDs, c.ID)
 		// 检查 s_id 是否有效，避免查询无效数据
-		if c.Info.UserInfo.AuthUserID != 0 {
-			authIDs = append(authIDs, c.Info.UserInfo.AuthUserID)
+		if c.Info.UserInfo.UserID != "" {
+			userIDs = append(userIDs, c.Info.UserInfo.UserID)
 		}
 	}
 
@@ -70,7 +70,7 @@ func (u *ConversationUsecase) GetConversationList(ctx context.Context, request *
 		u.logger.Error("get latest feedback by conversation id failed", log.Error(err))
 	}
 	// get user info according authIDs
-	authMap, err := u.authRepo.GetAuthUserinfoByIDs(ctx, authIDs)
+	userMap, err := u.userRepo.GetUsersByIDs(ctx, userIDs)
 	if err != nil {
 		u.logger.Error("get user info failed", log.Error(err))
 	}
@@ -92,11 +92,11 @@ func (u *ConversationUsecase) GetConversationList(ctx context.Context, request *
 		if _, ok := feedbackMap[conversation.ID]; ok {
 			conversation.FeedBackInfo = feedbackMap[conversation.ID]
 		}
-		if _, ok := authMap[conversation.Info.UserInfo.AuthUserID]; ok {
+		if user, ok := userMap[conversation.Info.UserInfo.UserID]; ok {
 			conversation.Info.UserInfo = domain.UserInfo{
-				NickName: authMap[conversation.Info.UserInfo.AuthUserID].AuthUserInfo.Username,
-				Avatar:   authMap[conversation.Info.UserInfo.AuthUserID].AuthUserInfo.AvatarUrl,
-				Email:    authMap[conversation.Info.UserInfo.AuthUserID].AuthUserInfo.Email,
+				UserID:   user.ID,
+				NickName: user.Account,
+				RealName: user.Name,
 			}
 		}
 		return conversation
@@ -212,14 +212,13 @@ func (u *ConversationUsecase) GetMessageList(ctx context.Context, req *domain.Me
 		return nil, err
 	}
 	// get auth userinfo --> auth_user_id is not 0
-	authIDs := make([]uint, 0, len(messageList))
+	userIDs := make([]string, 0, len(messageList))
 	for _, message := range messageList {
-		if message.ConversationInfo.UserInfo.AuthUserID != 0 {
-			authIDs = append(authIDs, message.ConversationInfo.UserInfo.AuthUserID)
+		if message.ConversationInfo.UserInfo.UserID != "" {
+			userIDs = append(userIDs, message.ConversationInfo.UserInfo.UserID)
 		}
 	}
-	// get user info according authIDs
-	authMap, err := u.authRepo.GetAuthUserinfoByIDs(ctx, authIDs)
+	userMap, err := u.userRepo.GetUsersByIDs(ctx, userIDs)
 	if err != nil {
 		u.logger.Error("get user info failed", log.Error(err))
 	}
@@ -238,11 +237,11 @@ func (u *ConversationUsecase) GetMessageList(ctx context.Context, req *domain.Me
 		} else {
 			message.IPAddress = ipAddressMap[message.RemoteIP]
 		}
-		if _, ok := authMap[message.ConversationInfo.UserInfo.AuthUserID]; ok {
+		if user, ok := userMap[message.ConversationInfo.UserInfo.UserID]; ok {
 			message.ConversationInfo.UserInfo = domain.UserInfo{
-				NickName: authMap[message.ConversationInfo.UserInfo.AuthUserID].AuthUserInfo.Username,
-				Avatar:   authMap[message.ConversationInfo.UserInfo.AuthUserID].AuthUserInfo.AvatarUrl,
-				Email:    authMap[message.ConversationInfo.UserInfo.AuthUserID].AuthUserInfo.Email,
+				UserID:   user.ID,
+				NickName: user.Account,
+				RealName: user.Name,
 			}
 		}
 		return message

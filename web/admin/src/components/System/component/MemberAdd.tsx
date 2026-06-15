@@ -1,5 +1,6 @@
 import { postApiV1UserCreate } from '@/request/User';
 import Card from '@/components/Card';
+import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import { FormItem } from '@/components/Form';
 import { getApiV1EnterpriseDepartments } from '@/request/Enterprise';
 import type { Department } from '@/request/Enterprise';
@@ -7,13 +8,12 @@ import { generatePassword } from '@/utils';
 import {
   buildDepartmentTree,
   flattenDepartmentTree,
-  formatDepartmentOptionLabel,
-  normalizeSelectedDepartmentIDs,
+  getAncestorIds,
 } from '@/utils/enterprise';
 import { CheckCircle } from '@mui/icons-material';
 import { Box, Button, MenuItem, Stack, TextField } from '@mui/material';
 import { message, Modal } from '@ctzhian/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { V1CreateUserReq } from '@/request/types';
 
@@ -35,6 +35,7 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
     formState: { errors },
     reset,
     watch,
+    setValue,
   } = useForm({
     defaultValues: {
       account: '',
@@ -46,8 +47,13 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
   });
 
   const departmentIDs = watch('department_ids');
-  const flatDepartments = flattenDepartmentTree(
-    buildDepartmentTree(departments),
+  const departmentTree = useMemo(
+    () => buildDepartmentTree(departments),
+    [departments],
+  );
+  const flatDepartments = useMemo(
+    () => flattenDepartmentTree(departmentTree),
+    [departmentTree],
   );
 
   useEffect(() => {
@@ -105,7 +111,12 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
     const payload: V1CreateUserReq = {
       account: data.account,
       name: data.name,
-      department_ids: data.department_ids,
+      department_ids: [
+        ...new Set([
+          ...getAncestorIds(data.department_ids, departments),
+          ...data.department_ids,
+        ]),
+      ],
       password,
       primary_department: data.primary_department,
       role: data.role,
@@ -247,30 +258,24 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
             rules={{
               validate: value => (value?.length ? true : '请选择所属部门'),
             }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                fullWidth
-                select
-                SelectProps={{ multiple: true }}
+            render={({ field, fieldState }) => (
+              <DepartmentTreeSelect
+                departments={departmentTree}
+                flatDepartments={flatDepartments}
                 value={field.value || []}
-                onChange={event => {
-                  const selectedValues = Array.isArray(event.target.value)
-                    ? event.target.value
-                    : [event.target.value];
-                  field.onChange(
-                    normalizeSelectedDepartmentIDs(selectedValues, departments),
-                  );
+                onChange={newValue => {
+                  field.onChange(newValue);
+                  // 如果主部门不在新选中列表中，清空主部门
+                  const currentPrimary = watch('primary_department');
+                  if (currentPrimary && !newValue.includes(currentPrimary)) {
+                    setValue('primary_department', '');
+                  }
                 }}
-                error={!!errors.department_ids}
-                helperText={errors.department_ids?.message as string}
-              >
-                {flatDepartments.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {formatDepartmentOptionLabel(item)}
-                  </MenuItem>
-                ))}
-              </TextField>
+                multiple
+                label='所属部门'
+                error={!!fieldState.error}
+                helperText={fieldState.error?.message}
+              />
             )}
           />
         </FormItem>
@@ -281,22 +286,22 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
             rules={{
               required: '请选择主部门',
             }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                fullWidth
-                select
-                error={!!errors.primary_department}
-                helperText={errors.primary_department?.message}
-              >
-                {flatDepartments
-                  .filter(item => departmentIDs?.includes(item.id))
-                  .map(item => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {formatDepartmentOptionLabel(item)}
-                    </MenuItem>
-                  ))}
-              </TextField>
+            render={({ field, fieldState }) => (
+              <DepartmentTreeSelect
+                departments={departmentTree}
+                flatDepartments={flatDepartments}
+                value={field.value ? [field.value] : []}
+                onChange={newValue => {
+                  field.onChange(newValue[0] || '');
+                }}
+                multiple={false}
+                label='主部门'
+                error={!!fieldState.error}
+                helperText={fieldState.error?.message}
+                excludeIds={flatDepartments
+                  .filter(d => !departmentIDs?.includes(d.id))
+                  .map(d => d.id)}
+              />
             )}
           />
         </FormItem>

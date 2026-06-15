@@ -20,22 +20,22 @@ type CommentUsecase struct {
 	CommentRepo *pg.CommentRepository
 	NodeRepo    *pg.NodeRepository
 	ipRepo      *ipdb.IPAddressRepo
-	authRepo    *pg.AuthRepo
+	userRepo    *pg.UserRepository
 }
 
 func NewCommentUsecase(commentRepo *pg.CommentRepository, logger *log.Logger,
-	nodeRepo *pg.NodeRepository, ipRepo *ipdb.IPAddressRepo, authRepo *pg.AuthRepo) *CommentUsecase {
+	nodeRepo *pg.NodeRepository, ipRepo *ipdb.IPAddressRepo, userRepo *pg.UserRepository) *CommentUsecase {
 	return &CommentUsecase{
 		logger:      logger.WithModule("usecase.comment"),
 		CommentRepo: commentRepo,
 		NodeRepo:    nodeRepo,
 		ipRepo:      ipRepo,
-		authRepo:    authRepo,
+		userRepo:    userRepo,
 	}
 }
 
 func (u *CommentUsecase) CreateComment(ctx context.Context, commentReq *domain.CommentReq, KbID string, remoteIP string,
-	status domain.CommentStatus, userID uint) (string, error) {
+	status domain.CommentStatus, userID string) (string, error) {
 	// node
 	if _, err := u.NodeRepo.GetNodeByID(ctx, commentReq.NodeID); err != nil {
 		return "", err
@@ -53,9 +53,9 @@ func (u *CommentUsecase) CreateComment(ctx context.Context, commentReq *domain.C
 		PicUrls: commentReq.PicUrls,
 		NodeID:  commentReq.NodeID,
 		Info: domain.CommentInfo{
-			UserName:   commentReq.UserName,
-			RemoteIP:   remoteIP,
-			AuthUserID: userID, // default = 0. have no auth info
+			UserName: commentReq.UserName,
+			RemoteIP: remoteIP,
+			UserID:   userID,
 		},
 		ParentID:  commentReq.ParentID,
 		RootID:    commentReq.RootID,
@@ -78,14 +78,13 @@ func (u *CommentUsecase) GetCommentListByNodeID(ctx context.Context, nodeID stri
 		return nil, err
 	}
 	// get auth userinfo --> auth_user_id is not 0
-	authIDs := make([]uint, 0, len(comments))
+	userIDs := make([]string, 0, len(comments))
 	for _, comment := range comments {
-		if comment.Info.AuthUserID != 0 {
-			authIDs = append(authIDs, comment.Info.AuthUserID)
+		if comment.Info.UserID != "" {
+			userIDs = append(userIDs, comment.Info.UserID)
 		}
 	}
-	// get user info according authIDs
-	authMap, err := u.authRepo.GetAuthUserinfoByIDs(ctx, authIDs)
+	userMap, err := u.userRepo.GetUsersByIDs(ctx, userIDs)
 	if err != nil {
 		u.logger.Error("get user info failed", log.Error(err))
 	}
@@ -106,10 +105,11 @@ func (u *CommentUsecase) GetCommentListByNodeID(ctx context.Context, nodeID stri
 		} else {
 			comment.IPAddress = ipAddressMap[comment.Info.RemoteIP]
 		}
-		if _, ok := authMap[comment.Info.AuthUserID]; ok { // moderate userinfo
-			comment.Info.UserName = authMap[comment.Info.AuthUserID].AuthUserInfo.Username
-			comment.Info.Avatar = authMap[comment.Info.AuthUserID].AuthUserInfo.AvatarUrl
-			comment.Info.Email = authMap[comment.Info.AuthUserID].AuthUserInfo.Email
+		if user, ok := userMap[comment.Info.UserID]; ok {
+			comment.Info.UserName = user.Name
+			if comment.Info.UserName == "" {
+				comment.Info.UserName = user.Account
+			}
 		}
 		return comment
 	})
@@ -123,14 +123,13 @@ func (u *CommentUsecase) GetCommentListByKbID(ctx context.Context, req *domain.C
 		return nil, err
 	}
 	// get auth userinfo --> auth_user_id is not 0
-	authIDs := make([]uint, 0, len(comments))
+	userIDs := make([]string, 0, len(comments))
 	for _, comment := range comments {
-		if comment.Info.AuthUserID != 0 {
-			authIDs = append(authIDs, comment.Info.AuthUserID)
+		if comment.Info.UserID != "" {
+			userIDs = append(userIDs, comment.Info.UserID)
 		}
 	}
-	// get user info according authIDs
-	authMap, err := u.authRepo.GetAuthUserinfoByIDs(ctx, authIDs)
+	userMap, err := u.userRepo.GetUsersByIDs(ctx, userIDs)
 	if err != nil {
 		u.logger.Error("get user info failed", log.Error(err))
 	}
@@ -148,10 +147,11 @@ func (u *CommentUsecase) GetCommentListByKbID(ctx context.Context, req *domain.C
 		} else {
 			comment.IPAddress = ipAddressMap[comment.Info.RemoteIP]
 		}
-		if _, ok := authMap[comment.Info.AuthUserID]; ok { // moderate userinfo
-			comment.Info.UserName = authMap[comment.Info.AuthUserID].AuthUserInfo.Username
-			comment.Info.Avatar = authMap[comment.Info.AuthUserID].AuthUserInfo.AvatarUrl
-			comment.Info.Email = authMap[comment.Info.AuthUserID].AuthUserInfo.Email
+		if user, ok := userMap[comment.Info.UserID]; ok {
+			comment.Info.UserName = user.Name
+			if comment.Info.UserName == "" {
+				comment.Info.UserName = user.Account
+			}
 		}
 		return comment
 	})
@@ -166,6 +166,10 @@ func (u *CommentUsecase) DeleteCommentList(ctx context.Context, req *domain.Dele
 		return err
 	}
 	return nil
+}
+
+func (u *CommentUsecase) ModerateCommentList(ctx context.Context, req *domain.ModerateCommentListReq) error {
+	return u.CommentRepo.ModerateCommentList(ctx, req.IDS, req.Status)
 }
 
 func maskIP(ip string) string {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sort"
 
 	"github.com/jinzhu/copier"
@@ -29,10 +28,10 @@ type StatUseCase struct {
 	ipRepo           *ipdb.IPAddressRepo
 	logger           *log.Logger
 	geoCacheRepo     *cache.GeoRepo
-	authRepo         *pg.AuthRepo
+	userRepo         *pg.UserRepository
 }
 
-func NewStatUseCase(repo *pg.StatRepository, nodeRepo *pg.NodeRepository, conversationRepo *pg.ConversationRepository, appRepo *pg.AppRepository, ipRepo *ipdb.IPAddressRepo, geoCacheRepo *cache.GeoRepo, authRepo *pg.AuthRepo, kbRepo *pg.KnowledgeBaseRepository, logger *log.Logger) *StatUseCase {
+func NewStatUseCase(repo *pg.StatRepository, nodeRepo *pg.NodeRepository, conversationRepo *pg.ConversationRepository, appRepo *pg.AppRepository, ipRepo *ipdb.IPAddressRepo, geoCacheRepo *cache.GeoRepo, userRepo *pg.UserRepository, kbRepo *pg.KnowledgeBaseRepository, logger *log.Logger) *StatUseCase {
 	return &StatUseCase{
 		repo:             repo,
 		nodeRepo:         nodeRepo,
@@ -40,7 +39,7 @@ func NewStatUseCase(repo *pg.StatRepository, nodeRepo *pg.NodeRepository, conver
 		appRepo:          appRepo,
 		ipRepo:           ipRepo,
 		geoCacheRepo:     geoCacheRepo,
-		authRepo:         authRepo,
+		userRepo:         userRepo,
 		kbRepo:           kbRepo,
 		logger:           logger.WithModule("usecase.stats"),
 	}
@@ -68,17 +67,7 @@ func (u *StatUseCase) RecordPage(ctx context.Context, stat *domain.StatPage) err
 
 func (u *StatUseCase) ValidateStatDay(statDay consts.StatDay, edition consts.LicenseEdition) error {
 	switch statDay {
-	case consts.StatDay1:
-		return nil
-	case consts.StatDay7:
-		if edition == consts.LicenseEditionFree {
-			return domain.ErrPermissionDenied
-		}
-		return nil
-	case consts.StatDay30, consts.StatDay90:
-		if !slices.Contains([]consts.LicenseEdition{consts.LicenseEditionBusiness, consts.LicenseEditionEnterprise}, edition) {
-			return domain.ErrPermissionDenied
-		}
+	case consts.StatDay1, consts.StatDay7, consts.StatDay30, consts.StatDay90:
 		return nil
 	default:
 		u.logger.Error("stat day is invalid")
@@ -258,7 +247,7 @@ func (u *StatUseCase) GetInstantPages(ctx context.Context, kbID string) ([]*doma
 	if err != nil {
 		return nil, err
 	}
-	authIDs := make([]uint, 0, 10)
+	userIDs := make([]string, 0, 10)
 	for _, page := range pages {
 		ipAddress, ok := ipAddresses[page.IP]
 		if !ok {
@@ -270,11 +259,11 @@ func (u *StatUseCase) GetInstantPages(ctx context.Context, kbID string) ([]*doma
 			}
 		}
 		page.IPAddress = *ipAddress
-		if page.UserID != 0 {
-			authIDs = append(authIDs, page.UserID)
+		if page.UserID != "" {
+			userIDs = append(userIDs, page.UserID)
 		}
 	}
-	authMap, err := u.authRepo.GetAuthUserinfoByIDs(ctx, authIDs)
+	userMap, err := u.userRepo.GetUsersByIDs(ctx, userIDs)
 	if err != nil {
 		u.logger.Error("get user info failed", log.Error(err))
 	}
@@ -298,12 +287,8 @@ func (u *StatUseCase) GetInstantPages(ctx context.Context, kbID string) ([]*doma
 		default:
 			page.NodeName = "未知"
 		}
-		if _, ok := authMap[page.UserID]; ok {
-			page.Info = &domain.AuthUserInfo{
-				Username:  authMap[page.UserID].AuthUserInfo.Username,
-				Email:     authMap[page.UserID].AuthUserInfo.Email,
-				AvatarUrl: authMap[page.UserID].AuthUserInfo.AvatarUrl,
-			}
+		if user, ok := userMap[page.UserID]; ok {
+			page.Info = user
 		}
 	}
 	return pages, nil

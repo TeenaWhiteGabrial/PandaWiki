@@ -8,7 +8,7 @@ import (
 const (
 	SettingKeySystemPrompt = "system_prompt"
 	SettingBlockWords      = "block_words"
-	SettingCopyrightInfo   = "本网站由 PandaWiki 提供技术支持"
+	SettingCopyrightInfo   = ""
 )
 
 // table: settings

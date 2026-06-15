@@ -22,6 +22,7 @@ type APIHandlers struct {
 	CreationHandler      *CreationHandler
 	StatHandler          *StatHandler
 	CommentHandler       *CommentHandler
+	ContributeHandler    *ContributeHandler
 	AuthV1Handler        *AuthV1Handler
 	NavHandler           *NavHandler
 	EnterpriseHandler    *EnterpriseHandler
@@ -45,6 +46,7 @@ var ProviderSet = wire.NewSet(
 	NewCreationHandler,
 	NewStatHandler,
 	NewCommentHandler,
+	NewContributeHandler,
 	NewAuthV1Handler,
 	NewNavHandler,
 	NewEnterpriseHandler,

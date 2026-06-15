@@ -18,6 +18,7 @@ var ProviderSet = wire.NewSet(
 	NewKnowledgeBaseRepository,
 	NewStatRepository,
 	NewCommentRepository,
+	NewContributeRepository,
 	NewPromptRepo,
 	NewBlockWordRepo,
 	NewEnterpriseRepository,

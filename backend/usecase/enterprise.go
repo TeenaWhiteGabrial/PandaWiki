@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -132,15 +131,15 @@ func (u *EnterpriseUsecase) GetDepartmentIDs(ctx context.Context, userID string)
 	return departmentIDs, nil
 }
 
-func (u *EnterpriseUsecase) BuildShareAccessContext(ctx context.Context, authID uint) (*domain.EnterpriseAccessContext, error) {
-	if authID == 0 {
-		if authInfo := domain.GetAuthInfoFromCtx(ctx); authInfo != nil && authInfo.UserId != "" && !authInfo.IsToken {
-			return u.repo.GetUserAccessContext(ctx, authInfo.UserId)
-		}
+func (u *EnterpriseUsecase) BuildShareAccessContext(ctx context.Context, userID string) (*domain.EnterpriseAccessContext, error) {
+	if authInfo := domain.GetAuthInfoFromCtx(ctx); userID == "" && authInfo != nil && authInfo.UserId != "" {
+		userID = authInfo.UserId
 	}
-
+	if userID != "" {
+		return u.repo.GetUserAccessContext(ctx, userID)
+	}
 	result := &domain.EnterpriseAccessContext{
-		PrincipalID: fmt.Sprintf("auth:%d", authID),
+		PrincipalID: "visitor",
 	}
 
 	defaultLevel, err := u.repo.GetDefaultPermissionLevel(ctx)
@@ -149,19 +148,6 @@ func (u *EnterpriseUsecase) BuildShareAccessContext(ctx context.Context, authID 
 		result.PermissionLevelRank = defaultLevel.Rank
 	}
 
-	if authID == 0 {
-		return result, nil
-	}
-
-	groups, err := u.authRepo.GetAuthGroupWithParentsByAuthId(ctx, authID)
-	if err != nil {
-		return nil, err
-	}
-	departmentIDs := make([]string, 0, len(groups))
-	for _, group := range groups {
-		departmentIDs = append(departmentIDs, strconv.FormatUint(uint64(group.ID), 10))
-	}
-	result.DepartmentIDs = departmentIDs
 	return result, nil
 }
 

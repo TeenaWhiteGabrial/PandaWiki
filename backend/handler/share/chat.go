@@ -20,7 +20,6 @@ type ShareChatHandler struct {
 	logger              *log.Logger
 	appUsecase          *usecase.AppUsecase
 	chatUsecase         *usecase.ChatUsecase
-	authUsecase         *usecase.AuthUsecase
 	conversationUsecase *usecase.ConversationUsecase
 	modelUsecase        *usecase.ModelUsecase
 }
@@ -31,7 +30,6 @@ func NewShareChatHandler(
 	logger *log.Logger,
 	appUsecase *usecase.AppUsecase,
 	chatUsecase *usecase.ChatUsecase,
-	authUsecase *usecase.AuthUsecase,
 	conversationUsecase *usecase.ConversationUsecase,
 	modelUsecase *usecase.ModelUsecase,
 ) *ShareChatHandler {
@@ -40,7 +38,6 @@ func NewShareChatHandler(
 		logger:              logger.WithModule("handler.share.chat"),
 		appUsecase:          appUsecase,
 		chatUsecase:         chatUsecase,
-		authUsecase:         authUsecase,
 		conversationUsecase: conversationUsecase,
 		modelUsecase:        modelUsecase,
 	}
@@ -115,13 +112,7 @@ func (h *ShareChatHandler) ChatMessage(c echo.Context) error {
 	c.Response().Header().Set("Connection", "keep-alive")
 	c.Response().Header().Set("Transfer-Encoding", "chunked")
 
-	// get user info --> no enterprise is nil
-	userID := c.Get("user_id")
-	h.logger.Debug("userid:", userID)
-	if userID != nil { // find userinfo from auth
-		userIDValue := userID.(uint)
-		req.Info.UserInfo.AuthUserID = userIDValue
-	}
+	req.Info.UserInfo.UserID = domain.GetShareUserID(c)
 
 	eventCh, err := h.chatUsecase.Chat(ctx, &req)
 	if err != nil {
@@ -492,15 +483,7 @@ func (h *ShareChatHandler) ChatSearch(c echo.Context) error {
 
 	req.RemoteIP = c.RealIP()
 
-	// get user info --> no enterprise is nil
-	userID := c.Get("user_id")
-	if userID != nil {
-		if userIDValue, ok := userID.(uint); ok {
-			req.AuthUserID = userIDValue
-		} else {
-			return h.NewResponseWithError(c, "invalid user id type", nil)
-		}
-	}
+	req.UserID = domain.GetShareUserID(c)
 
 	resp, err := h.chatUsecase.Search(ctx, &req)
 	if err != nil {

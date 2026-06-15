@@ -68,6 +68,7 @@ func createApp() (*App, error) {
 	ipAddressRepo := ipdb2.NewIPAddressRepo(ipdbIPDB, logger)
 	geoRepo := cache2.NewGeoCache(cacheCache, db, logger)
 	authRepo := pg2.NewAuthRepo(db, logger, cacheCache)
+	userRepository := pg2.NewUserRepository(db, logger)
 	enterpriseRepository := pg2.NewEnterpriseRepository(db, logger)
 	navRepository := pg2.NewNavRepository(db, logger)
 	enterpriseUsecase, err := usecase.NewEnterpriseUsecase(enterpriseRepository, authRepo, nodeRepository, navRepository, logger)
@@ -83,8 +84,7 @@ func createApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	statUseCase := usecase.NewStatUseCase(statRepository, nodeRepository, conversationRepository, appRepository, ipAddressRepo, geoRepo, authRepo, knowledgeBaseRepository, logger)
-	userRepository := pg2.NewUserRepository(db, logger)
+	statUseCase := usecase.NewStatUseCase(statRepository, nodeRepository, conversationRepository, appRepository, ipAddressRepo, geoRepo, userRepository, knowledgeBaseRepository, logger)
 	minioClient, err := s3.NewMinioClient(configConfig)
 	if err != nil {
 		return nil, err

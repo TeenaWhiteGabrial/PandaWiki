@@ -65,8 +65,8 @@ func (h *ShareNavHandler) ShareNavList(c echo.Context) error {
 		return h.NewResponseWithError(c, "failed to get nav list", err)
 	}
 
-	authID := domain.GetAuthID(c)
-	shareAccess, err := h.usecase.EnterpriseAccessContext(c.Request().Context(), authID)
+	userID := domain.GetShareUserID(c)
+	shareAccess, err := h.usecase.EnterpriseAccessContext(c.Request().Context(), userID)
 	if err == nil {
 		filtered := make([]navV1.NavListResp, 0, len(navs))
 		for _, nav := range navs {

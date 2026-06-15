@@ -1,4 +1,5 @@
 import Card from '@/components/Card';
+import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import { FormItem } from '@/components/Form';
 import {
   deleteApiV1EnterpriseDepartments,
@@ -29,7 +30,6 @@ import {
   buildDepartmentTree,
   flattenExpandedDepartmentTree,
   flattenDepartmentTree,
-  formatDepartmentOptionLabel,
 } from '@/utils/enterprise';
 import { KeyboardArrowDown, KeyboardArrowRight } from '@mui/icons-material';
 
@@ -456,16 +456,26 @@ const EnterpriseAccess = () => {
               name='parent_id'
               control={departmentControl}
               render={({ field }) => (
-                <TextField {...field} fullWidth select>
-                  <MenuItem value=''>无</MenuItem>
-                  {flatDepartments
-                    .filter(item => item.id !== editingDepartment?.id)
-                    .map(item => (
-                      <MenuItem key={item.id} value={item.id}>
-                        {formatDepartmentOptionLabel(item)}
-                      </MenuItem>
-                    ))}
-                </TextField>
+                <DepartmentTreeSelect
+                  departments={departmentTree}
+                  flatDepartments={flatDepartments}
+                  value={field.value ? [field.value] : []}
+                  onChange={newValue => {
+                    field.onChange(newValue[0] || '');
+                  }}
+                  multiple={false}
+                  label='父部门'
+                  excludeIds={
+                    editingDepartment
+                      ? [
+                          editingDepartment.id,
+                          ...flatDepartments
+                            .filter(d => d.parent_id === editingDepartment.id)
+                            .map(d => d.id),
+                        ]
+                      : []
+                  }
+                />
               )}
             />
           </FormItem>

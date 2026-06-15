@@ -19,17 +19,17 @@ import (
 )
 
 type ShareAuthMiddleware struct {
-	config      *config.Config
-	logger      *log.Logger
-	kbUsecase   *usecase.KnowledgeBaseUsecase
+	config       *config.Config
+	logger       *log.Logger
+	kbUsecase    *usecase.KnowledgeBaseUsecase
 	apiTokenRepo *pg.APITokenRepo
 }
 
 func NewShareAuthMiddleware(config *config.Config, logger *log.Logger, kbUsecase *usecase.KnowledgeBaseUsecase, apiTokenRepo *pg.APITokenRepo) *ShareAuthMiddleware {
 	return &ShareAuthMiddleware{
-		config:      config,
-		logger:      logger.WithModule("middleware.share_auth"),
-		kbUsecase:   kbUsecase,
+		config:       config,
+		logger:       logger.WithModule("middleware.share_auth"),
+		kbUsecase:    kbUsecase,
 		apiTokenRepo: apiTokenRepo,
 	}
 }
@@ -203,18 +203,11 @@ func (h *ShareAuthMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc 
 			})
 		}
 
-		// 企业认证
 		if kb.AccessSettings.EnterpriseAuth.Enabled {
-			userId, ok := sess.Values["user_id"].(uint)
-			if !ok || userId == 0 {
-				h.logger.Error("session user_id get failed", log.Error(err))
-				return c.JSON(http.StatusUnauthorized, domain.PWResponse{
-					Success: false,
-					Message: "Unauthorized",
-				})
-			}
-			c.Set("user_id", userId)
-			return next(c)
+			return c.JSON(http.StatusUnauthorized, domain.PWResponse{
+				Success: false,
+				Message: "Unauthorized",
+			})
 		}
 
 		return next(c)

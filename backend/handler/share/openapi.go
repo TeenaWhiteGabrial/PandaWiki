@@ -1,17 +1,13 @@
 package share
 
 import (
-	"context"
 	"errors"
 	"io"
-	"net/http"
 
 	"github.com/labstack/echo/v4"
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 
-	v1 "github.com/chaitin/panda-wiki/api/share/v1"
-	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
@@ -20,67 +16,28 @@ import (
 
 type OpenapiV1Handler struct {
 	*handler.BaseHandler
-	logger      *log.Logger
-	authUseCase *usecase.AuthUsecase
-	appCase     *usecase.AppUsecase
+	logger  *log.Logger
+	appCase *usecase.AppUsecase
 }
 
 func NewOpenapiV1Handler(
 	e *echo.Echo,
 	baseHandler *handler.BaseHandler,
 	logger *log.Logger,
-	authUseCase *usecase.AuthUsecase,
 	appCase *usecase.AppUsecase,
 ) *OpenapiV1Handler {
 	h := &OpenapiV1Handler{
 		BaseHandler: baseHandler,
 		logger:      logger,
-		authUseCase: authUseCase,
 		appCase:     appCase,
 	}
 
 	OpenapiGroup := e.Group("/share/v1/openapi")
 
-	OpenapiGroup.Any("/github/callback", h.GitHubCallback)
-
 	// lark机器人
 	OpenapiGroup.POST("/lark/bot/:kb_id", h.LarkBot)
 
 	return h
-}
-
-// GitHubCallback GitHub回调
-//
-//	@Tags			ShareOpenapi
-//	@Summary		GitHub回调
-//	@Description	GitHub回调
-//	@ID				v1-GitHubCallback
-//	@Accept			json
-//	@Produce		json
-//	@Param			param	query		v1.GitHubCallbackReq	true	"para"
-//	@Success		200		{object}	domain.PWResponse{data=v1.GitHubCallbackResp}
-//	@Router			/share/v1/openapi/github/callback [get]
-func (h *OpenapiV1Handler) GitHubCallback(c echo.Context) error {
-	ctx := context.WithValue(c.Request().Context(), consts.ContextKeyEdition, consts.GetLicenseEdition(c))
-
-	var req v1.GitHubCallbackReq
-	if err := c.Bind(&req); err != nil {
-		return err
-	}
-	if req.Code == "" {
-		return h.NewResponseWithError(c, "code is required", nil)
-	}
-
-	auth, redirectUrl, err := h.authUseCase.GitHubCallback(ctx, req)
-	if err != nil {
-		return h.NewResponseWithError(c, "handle callback failed", err)
-	}
-
-	if err := h.authUseCase.SaveNewSession(c, auth); err != nil {
-		return h.NewResponseWithError(c, "save session failed", err)
-	}
-
-	return c.Redirect(http.StatusFound, redirectUrl)
 }
 
 // LarkBot Lark机器人请求

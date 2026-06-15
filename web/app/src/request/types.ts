@@ -1321,10 +1321,9 @@ export interface DomainStatsSetting {
 }
 
 export interface DomainSwitchModeReq {
-  /** 百智云 API Key */
-  auto_mode_api_key?: string;
-  /** 自定义对话模型名称 */
-  chat_model?: string;
+  auto_provider?: DomainAutoModeProviderReq;
+  active_auto_provider?: string;
+  auto_provider_configs?: DomainAutoProviderConfig[];
   mode: "manual" | "auto";
 }
 
@@ -2076,6 +2075,7 @@ export interface GetApiV1NodeListParams {
 
 export interface GetApiV1NodeListGroupNavParams {
   kb_id: string;
+  nav_ids?: string[];
   search?: string;
   status?: "released" | "unpublished" | "unstudied";
 }
@@ -2087,7 +2087,8 @@ export interface GetApiV1NodePermissionParams {
 
 export interface GetApiV1NodeRecommendNodesParams {
   kb_id: string;
-  node_ids: string[];
+  nav_ids?: string[];
+  node_ids?: string[];
 }
 
 export interface GetApiV1NodeStatsParams {

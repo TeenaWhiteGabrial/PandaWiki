@@ -1,4 +1,5 @@
 import { Form, FormItem } from '@/pages/setting/component/Common';
+import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import {
   Department,
   getApiV1EnterpriseDepartments,
@@ -13,8 +14,7 @@ import { V1NavListResp } from '@/request/types';
 import {
   buildDepartmentTree,
   flattenDepartmentTree,
-  formatDepartmentOptionLabel,
-  normalizeSelectedDepartmentIDs,
+  getAncestorIds,
 } from '@/utils/enterprise';
 import { message, Modal } from '@ctzhian/ui';
 import { MenuItem, TextField } from '@mui/material';
@@ -121,7 +121,12 @@ const NavPermissionModal = ({
       permissions: {
         scope_type: values.scope_type,
         min_permission_level_id: values.min_permission_level_id || undefined,
-        allowed_department_ids: values.allowed_department_ids,
+        allowed_department_ids: [
+          ...new Set([
+            ...getAncestorIds(values.allowed_department_ids, departments),
+            ...values.allowed_department_ids,
+          ]),
+        ],
         allowed_user_ids: values.allowed_user_ids,
       },
     })
@@ -177,31 +182,15 @@ const NavPermissionModal = ({
                 name='allowed_department_ids'
                 control={control}
                 render={({ field }) => (
-                  <TextField
-                    {...field}
-                    fullWidth
-                    select
-                    size='small'
-                    SelectProps={{ multiple: true }}
+                  <DepartmentTreeSelect
+                    departments={departmentTree}
+                    flatDepartments={flatDepartments}
                     value={field.value || []}
-                    onChange={event => {
-                      const selectedValues = Array.isArray(event.target.value)
-                        ? event.target.value
-                        : [event.target.value];
-                      field.onChange(
-                        normalizeSelectedDepartmentIDs(
-                          selectedValues,
-                          flatDepartments,
-                        ),
-                      );
-                    }}
-                  >
-                    {flatDepartments.map(item => (
-                      <MenuItem key={item.id} value={item.id}>
-                        {formatDepartmentOptionLabel(item)}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+                    onChange={field.onChange}
+                    multiple
+                    label='允许部门'
+                    size='small'
+                  />
                 )}
               />
             </FormItem>

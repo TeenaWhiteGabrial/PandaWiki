@@ -69,6 +69,18 @@ const router = [
           LazyLoadable(lazy(() => import('./pages/conversation'))),
         ),
       },
+      {
+        path: '/comment',
+        element: createElement(
+          LazyLoadable(lazy(() => import('./pages/comment'))),
+        ),
+      },
+      {
+        path: '/contribute',
+        element: createElement(
+          LazyLoadable(lazy(() => import('./pages/contribute'))),
+        ),
+      },
     ],
   },
   {

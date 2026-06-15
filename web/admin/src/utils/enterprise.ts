@@ -75,23 +75,95 @@ export const formatDepartmentOptionLabel = (department: Department) => {
   return `${'　'.repeat(depth)}${depth > 0 ? '└ ' : ''}${department.name}`;
 };
 
+/**
+ * 获取选中节点的所有祖先部门 ID
+ * 用于提交时补全祖先链
+ */
+export const getAncestorIds = (
+  selectedIds: string[],
+  departments: Department[],
+): string[] => {
+  const map = new Map(departments.map(d => [d.id, d]));
+  const result = new Set<string>();
+
+  selectedIds.forEach(id => {
+    let current = map.get(id);
+    while (current?.parent_id) {
+      result.add(current.parent_id);
+      current = map.get(current.parent_id);
+    }
+  });
+
+  return [...result];
+};
+
+/**
+ * 获取指定节点的所有后代部门 ID
+ */
+const getDescendantIds = (
+  nodeId: string,
+  departments: Department[],
+): Set<string> => {
+  const map = new Map<string, Department[]>();
+  departments.forEach(d => {
+    if (d.parent_id) {
+      const children = map.get(d.parent_id) || [];
+      children.push(d);
+      map.set(d.parent_id, children);
+    }
+  });
+
+  const result = new Set<string>();
+  const walk = (parentId: string) => {
+    const children = map.get(parentId) || [];
+    children.forEach(child => {
+      result.add(child.id);
+      walk(child.id);
+    });
+  };
+  walk(nodeId);
+  return result;
+};
+
+/**
+ * 获取指定节点的所有祖先部门 ID
+ */
+const getAncestorIdsSet = (
+  nodeId: string,
+  departments: Department[],
+): Set<string> => {
+  const map = new Map(departments.map(d => [d.id, d]));
+  const result = new Set<string>();
+  let current = map.get(nodeId);
+  while (current?.parent_id) {
+    result.add(current.parent_id);
+    current = map.get(current.parent_id);
+  }
+  return result;
+};
+
+/**
+ * 标准化选中的部门 ID 列表：
+ * - 选中子节点时，自动移除其祖先和后代的选中
+ * - 选中父节点时，自动移除其后代的选中
+ * - 返回最精简的选中列表（不含隐含的祖先/后代）
+ */
 export const normalizeSelectedDepartmentIDs = (
   selectedIDs: string[],
   departments: Department[],
-) => {
+  preferredID?: string,
+): string[] => {
   if (!selectedIDs.length) return [];
 
-  const departmentMap = new Map(departments.map(item => [item.id, item]));
   const selectedSet = new Set(selectedIDs);
 
-  return selectedIDs.filter(id => {
-    let current = departmentMap.get(id);
-    while (current?.parent_id) {
-      if (selectedSet.has(current.parent_id)) {
-        return false;
-      }
-      current = departmentMap.get(current.parent_id);
-    }
-    return true;
-  });
+  if (preferredID && selectedSet.has(preferredID)) {
+    const ancestorIds = getAncestorIdsSet(preferredID, departments);
+    const descendantIds = getDescendantIds(preferredID, departments);
+    ancestorIds.forEach(id => selectedSet.delete(id));
+    descendantIds.forEach(id => selectedSet.delete(id));
+    selectedSet.add(preferredID);
+  }
+
+  return selectedIDs.filter(id => selectedSet.has(id));
 };

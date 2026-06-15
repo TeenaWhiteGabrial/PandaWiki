@@ -29,11 +29,11 @@ func (Comment) TableName() string {
 }
 
 type CommentInfo struct {
-	AuthUserID uint   `json:"auth_user_id"`
-	UserName   string `json:"user_name"`
-	Email      string `json:"email"`
-	Avatar     string `json:"avatar"` // avatar
-	RemoteIP   string `json:"remote_ip"`
+	UserID   string `json:"user_id"`
+	UserName string `json:"user_name"`
+	Email    string `json:"email"`
+	Avatar   string `json:"avatar"` // avatar
+	RemoteIP string `json:"remote_ip"`
 }
 
 type CommentStatus int8
@@ -87,6 +87,11 @@ type CommentListItem struct {
 
 type DeleteCommentListReq struct {
 	IDS []string `json:"ids" query:"ids"`
+}
+
+type ModerateCommentListReq struct {
+	IDS    []string      `json:"ids" validate:"required,min=1"`
+	Status CommentStatus `json:"status" validate:"oneof=-1 1"`
 }
 
 type ShareCommentListItem struct {

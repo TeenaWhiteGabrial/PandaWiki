@@ -11,6 +11,8 @@ import {
   IconPaperFull,
   IconDuihualishi1,
   IconChilun,
+  IconKehupingjia,
+  IconTianjia,
 } from '@panda-wiki/icons';
 
 const MENUS = [
@@ -41,6 +43,28 @@ const MENUS = [
     value: '/conversation',
     pathname: 'conversation',
     icon: IconDuihualishi1,
+    show: true,
+    perms: [
+      ConstsUserKBPermission.UserKBPermissionFullControl,
+      ConstsUserKBPermission.UserKBPermissionDataOperate,
+    ],
+  },
+  {
+    label: '评论',
+    value: '/comment',
+    pathname: 'comment',
+    icon: IconKehupingjia,
+    show: true,
+    perms: [
+      ConstsUserKBPermission.UserKBPermissionFullControl,
+      ConstsUserKBPermission.UserKBPermissionDataOperate,
+    ],
+  },
+  {
+    label: '贡献',
+    value: '/contribute',
+    pathname: 'contribute',
+    icon: IconTianjia,
     show: true,
     perms: [
       ConstsUserKBPermission.UserKBPermissionFullControl,
@@ -93,6 +117,11 @@ const Sidebar = () => {
       return;
     }
 
+    // 权限数据还没加载完，不执行重定向
+    if (!kbDetail.perm) {
+      return;
+    }
+
     const menu = menus.find(it => {
       if (it.value === '/') {
         return pathname === '/';
@@ -103,7 +132,7 @@ const Sidebar = () => {
     if (!menu && menus.length > 0) {
       navigate(menus[0].value);
     }
-  }, [pathname, menus]);
+  }, [pathname, menus, kbDetail.perm, navigate]);
 
   return (
     <Stack

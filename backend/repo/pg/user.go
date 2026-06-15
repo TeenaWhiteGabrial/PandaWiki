@@ -213,6 +213,29 @@ func (r *UserRepository) GetUsersAccountMap(ctx context.Context) (map[string]str
 	return m, nil
 }
 
+func (r *UserRepository) GetUsersByIDs(ctx context.Context, userIDs []string) (map[string]*domain.UserSummary, error) {
+	if len(userIDs) == 0 {
+		return map[string]*domain.UserSummary{}, nil
+	}
+
+	var users []domain.UserSummary
+	if err := r.db.WithContext(ctx).
+		Model(&domain.User{}).
+		Select("id, account, name").
+		Where("id IN ?", userIDs).
+		Find(&users).Error; err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]*domain.UserSummary, len(users))
+	for i := range users {
+		user := users[i]
+		result[user.ID] = &user
+	}
+
+	return result, nil
+}
+
 func (r *UserRepository) UpdateUserPassword(ctx context.Context, userID string, newPassword string) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {

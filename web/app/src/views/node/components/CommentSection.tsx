@@ -22,12 +22,6 @@ interface CommentItem {
   created_at: string;
   pic_urls?: string[];
   info: { user_name: string };
-  ip_address?: {
-    city?: string;
-    country?: string;
-    province?: string;
-    ip?: string;
-  };
 }
 
 interface CommentSectionProps {
@@ -45,18 +39,6 @@ interface CommentSectionProps {
   basePath: string;
   showNameInput: boolean;
 }
-
-const renderIp = (ip_address: CommentItem['ip_address']) => {
-  const { city = '', country = '未知', province = '', ip } = ip_address || {};
-  return (
-    <>
-      <Box>{ip}</Box>
-      <Box sx={{ color: 'text.tertiary', fontSize: 12 }}>
-        {country === '中国' ? `${province}-${city}` : `${country}`}
-      </Box>
-    </>
-  );
-};
 
 const CommentSection = ({
   commentList,
@@ -174,10 +156,9 @@ const CommentSection = ({
               direction='row'
               justifyContent='flex-end'
               alignItems='center'
-              gap={2}
+              gap={1}
               sx={{ color: 'text.tertiary', fontSize: 12 }}
             >
-              {renderIp(item.ip_address)}
               <Box>{dayjs(item.created_at).fromNow()}</Box>
             </Stack>
           </Stack>

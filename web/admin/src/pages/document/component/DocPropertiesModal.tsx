@@ -1,4 +1,5 @@
 import Card from '@/components/Card';
+import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import DragTree from '@/components/Drag/DragTree';
 import { Form, FormItem } from '@/pages/setting/component/Common';
 import {
@@ -24,14 +25,13 @@ import { convertToTree } from '@/utils/drag';
 import {
   buildDepartmentTree,
   flattenDepartmentTree,
-  formatDepartmentOptionLabel,
-  normalizeSelectedDepartmentIDs,
+  getAncestorIds,
 } from '@/utils/enterprise';
 import { filterEmptyFolders } from '@/utils/tree';
 import { Modal, message } from '@ctzhian/ui';
 import { Box, Button, MenuItem, Stack, TextField, styled } from '@mui/material';
 import dayjs from 'dayjs';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { IconShuaxin } from '@panda-wiki/icons';
 import SSEClient from '@/utils/fetch';
@@ -96,8 +96,14 @@ const DocPropertiesModal = ({
   });
 
   const scopeType = navScopeType;
-  const departmentTree = buildDepartmentTree(departments);
-  const flatDepartments = flattenDepartmentTree(departmentTree);
+  const departmentTree = useMemo(
+    () => buildDepartmentTree(departments),
+    [departments],
+  );
+  const flatDepartments = useMemo(
+    () => flattenDepartmentTree(departmentTree),
+    [departmentTree],
+  );
   const selectedLevel = permissionLevels.find(
     item => item.id === parentPermissionSummary.minPermissionLevelId,
   );
@@ -163,7 +169,15 @@ const DocPropertiesModal = ({
           scope_type: navScopeType,
           inherit: values.inherit,
           min_permission_level_id: values.min_permission_level_id || undefined,
-          allowed_department_ids: values.allowed_department_ids || [],
+          allowed_department_ids: [
+            ...new Set([
+              ...getAncestorIds(
+                values.allowed_department_ids || [],
+                departments,
+              ),
+              ...(values.allowed_department_ids || []),
+            ]),
+          ],
           allowed_user_ids: values.allowed_user_ids || [],
         },
       } as never),
@@ -428,31 +442,20 @@ const DocPropertiesModal = ({
                 name='allowed_department_ids'
                 control={control}
                 render={({ field }) => (
-                  <TextField
-                    {...field}
-                    fullWidth
-                    select
-                    size='small'
-                    SelectProps={{ multiple: true }}
+                  <DepartmentTreeSelect
+                    departments={departmentTree}
+                    flatDepartments={availableDepartments}
                     value={field.value || []}
-                    onChange={event => {
-                      const selectedValues = Array.isArray(event.target.value)
-                        ? event.target.value
-                        : [event.target.value];
-                      field.onChange(
-                        normalizeSelectedDepartmentIDs(
-                          selectedValues,
-                          departments,
-                        ),
-                      );
-                    }}
-                  >
-                    {availableDepartments.map(item => (
-                      <MenuItem key={item.id} value={item.id}>
-                        {formatDepartmentOptionLabel(item)}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+                    onChange={field.onChange}
+                    multiple
+                    label='允许部门'
+                    size='small'
+                    excludeIds={flatDepartments
+                      .filter(
+                        d => !availableDepartments.some(ad => ad.id === d.id),
+                      )
+                      .map(d => d.id)}
+                  />
                 )}
               />
             </FormItem>

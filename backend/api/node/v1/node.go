@@ -92,3 +92,48 @@ type NodeListGroupNavResp struct {
 	IsReleased bool                      `json:"is_released"`
 	List       []domain.NodeListItemResp `json:"list"`
 }
+
+type GetNodeReleaseListReq struct {
+	KbID   string `query:"kb_id" json:"kb_id" validate:"required"`
+	NodeID string `query:"node_id" json:"node_id" validate:"required"`
+}
+
+type GetNodeReleaseDetailReq struct {
+	KbID string `query:"kb_id" json:"kb_id" validate:"required"`
+	ID   string `query:"id" json:"id" validate:"required"`
+}
+
+type RestoreNodeReleaseReq struct {
+	KbID string `json:"kb_id" validate:"required"`
+	ID   string `json:"id" validate:"required"`
+}
+
+type NodeReleaseListItem struct {
+	ID               string          `json:"id"`
+	NodeID           string          `json:"node_id"`
+	Name             string          `json:"name"`
+	Meta             domain.NodeMeta `json:"meta"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	ReleaseID        string          `json:"release_id"`
+	ReleaseName      string          `json:"release_name"`
+	ReleaseMessage   string          `json:"release_message"`
+	PublisherID      string          `json:"publisher_id"`
+	PublisherAccount string          `json:"publisher_account"`
+	EditorID         string          `json:"editor_id"`
+	EditorAccount    string          `json:"editor_account"`
+	CreatorID        string          `json:"creator_id"`
+	CreatorAccount   string          `json:"creator_account"`
+}
+
+type GetNodeReleaseDetailResp struct {
+	NodeID           string          `json:"node_id"`
+	Name             string          `json:"name"`
+	Content          string          `json:"content"`
+	Meta             domain.NodeMeta `json:"meta"`
+	PublisherID      string          `json:"publisher_id"`
+	PublisherAccount string          `json:"publisher_account"`
+	EditorID         string          `json:"editor_id"`
+	EditorAccount    string          `json:"editor_account"`
+	CreatorID        string          `json:"creator_id"`
+	CreatorAccount   string          `json:"creator_account"`
+}

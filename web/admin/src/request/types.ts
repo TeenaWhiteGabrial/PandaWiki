@@ -1323,10 +1323,8 @@ export interface DomainStatsSetting {
 }
 
 export interface DomainSwitchModeReq {
-  /** 百智云 API Key */
-  auto_mode_api_key?: string;
-  /** 自定义对话模型名称 */
-  chat_model?: string;
+  auto_provider?: DomainAutoModeProviderReq;
+  auto_provider_configs?: DomainAutoProviderConfig[];
   mode: "manual" | "auto";
 }
 
@@ -1704,12 +1702,9 @@ export interface V1CrawlerResultsResp {
 
 export interface V1CreateUserReq {
   account: string;
-  name: string;
-  department_ids: string[];
   /** @minLength 8 */
   password: string;
-  primary_department: string;
-  role: "manager" | "user";
+  role: "admin" | "user";
 }
 
 export interface V1CreateUserResp {
@@ -1805,16 +1800,28 @@ export interface V1NodeMoveNavReq {
 }
 
 export interface V1NodePermissionEditReq {
+  /** 可被问答 */
+  answerable_groups?: number[];
   ids: string[];
   kb_id: string;
   permissions?: DomainNodePermissions;
+  /** 导航内可见 */
+  visible_groups?: number[];
+  /** 可被访问 */
+  visitable_groups?: number[];
 }
 
 export type V1NodePermissionEditResp = Record<string, any>;
 
 export interface V1NodePermissionResp {
+  /** 可被问答 */
+  answerable_groups?: DomainNodeGroupDetail[];
   id?: string;
   permissions?: DomainNodePermissions;
+  /** 导航内可见 */
+  visible_groups?: DomainNodeGroupDetail[];
+  /** 可被访问 */
+  visitable_groups?: DomainNodeGroupDetail[];
 }
 
 export interface V1NodeRestudyReq {

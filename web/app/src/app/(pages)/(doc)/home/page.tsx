@@ -4,13 +4,24 @@ import Home from '@/views/home';
 import { WelcomeFooter } from '@/components/footer';
 import { ThemeProvider } from '@ctzhian/ui';
 import { WelcomeHeader } from '@/components/header';
-import { Stack, createTheme } from '@mui/material';
+import { Box, Stack, createTheme } from '@mui/material';
 import { createComponentStyleOverrides } from '@/theme';
 import { useStore } from '@/provider';
 import { THEME_TO_PALETTE } from '@panda-wiki/themes/constants';
 
+const useMounted = () => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return mounted;
+};
+
 const HomePage = () => {
   const { kbDetail } = useStore();
+  const mounted = useMounted();
   const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
@@ -64,6 +75,34 @@ const HomePage = () => {
     });
     // @ts-ignore
   }, [kbDetail?.settings?.web_app_landing_theme?.name]);
+
+  if (!mounted) {
+    return (
+      <ThemeProvider theme={theme}>
+        <Stack
+          justifyContent='space-between'
+          sx={{ minHeight: '100vh', bgcolor: 'background.default' }}
+        >
+          <Box
+            sx={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 101,
+              height: 64,
+              flexShrink: 0,
+              bgcolor: 'background.default',
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            }}
+          />
+          <Stack sx={{ flex: 1 }} />
+          <Box
+            sx={{ height: 120, flexShrink: 0, bgcolor: 'background.default' }}
+          />
+        </Stack>
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={theme}>

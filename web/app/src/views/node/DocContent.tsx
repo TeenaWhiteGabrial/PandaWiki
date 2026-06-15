@@ -70,7 +70,15 @@ const DocContent = ({
   }, [tree, docId, info?.type]);
 
   const getComment = async () => {
-    const res = await getShareV1CommentList({ id: docId });
+    if (!info?.kb_id) return;
+    const res = await getShareV1CommentList(
+      { id: docId },
+      {
+        headers: {
+          'X-KB-ID': info.kb_id,
+        },
+      },
+    );
     setCommentList(res.data ?? []);
   };
 
@@ -99,17 +107,29 @@ const DocContent = ({
         return;
       }
       try {
+        const kbID = info?.kb_id || '';
+        if (!kbID) {
+          message.error('知识库信息缺失');
+          return;
+        }
         let imageUrls: string[] = [];
         if (commentImages.length > 0 && commentInputRef.current) {
           imageUrls = await commentInputRef.current.uploadImages();
         }
-        await postShareV1Comment({
-          content: data.content,
-          pic_urls: imageUrls,
-          node_id: docId,
-          user_name: data.name,
-          captcha_token: token,
-        });
+        await postShareV1Comment(
+          {
+            content: data.content,
+            pic_urls: imageUrls,
+            node_id: docId,
+            user_name: data.name,
+            captcha_token: token,
+          },
+          {
+            headers: {
+              'X-KB-ID': kbID,
+            },
+          },
+        );
         getComment();
         reset();
         commentInputRef.current?.clearImages();

@@ -205,7 +205,45 @@ func (u *NodeUsecase) Update(ctx context.Context, req *domain.UpdateNodeReq, use
 	return nil
 }
 
-func (u *NodeUsecase) ValidateNodePerm(ctx context.Context, kbID, nodeId string, authId uint) *domain.PWResponseErrCode {
+func (u *NodeUsecase) GetNodeReleaseList(ctx context.Context, kbID, nodeID string) ([]*v1.NodeReleaseListItem, error) {
+	return u.nodeRepo.GetNodeReleaseList(ctx, kbID, nodeID)
+}
+
+func (u *NodeUsecase) GetNodeReleaseDetail(ctx context.Context, kbID, releaseID string) (*v1.GetNodeReleaseDetailResp, error) {
+	return u.nodeRepo.GetNodeReleaseDetail(ctx, kbID, releaseID)
+}
+
+func (u *NodeUsecase) RestoreNodeRelease(ctx context.Context, kbID, releaseID, userID string) error {
+	release, err := u.nodeRepo.GetNodeReleaseByID(ctx, releaseID)
+	if err != nil {
+		return fmt.Errorf("get node release failed: %w", err)
+	}
+	if release.KBID != kbID {
+		return fmt.Errorf("node release does not belong to current knowledge base")
+	}
+
+	contentType := release.Meta.ContentType
+	if contentType == "" {
+		contentType = domain.ContentTypeMD
+	}
+
+	updateReq := &domain.UpdateNodeReq{
+		ID:          release.NodeID,
+		KBID:        kbID,
+		Name:        lo.ToPtr(release.Name),
+		Content:     lo.ToPtr(release.Content),
+		Emoji:       lo.ToPtr(release.Meta.Emoji),
+		Summary:     lo.ToPtr(release.Meta.Summary),
+		ContentType: lo.ToPtr(contentType),
+	}
+	if err := u.nodeRepo.UpdateNodeContent(ctx, updateReq, userID); err != nil {
+		return fmt.Errorf("restore node release failed: %w", err)
+	}
+
+	return nil
+}
+
+func (u *NodeUsecase) ValidateNodePerm(ctx context.Context, kbID, nodeId, userID string) *domain.PWResponseErrCode {
 	node, err := u.nodeRepo.GetNodeReleaseDetailByKBIDAndID(ctx, kbID, nodeId)
 	if err != nil {
 		return &domain.ErrCodeNotFound
@@ -219,7 +257,7 @@ func (u *NodeUsecase) ValidateNodePerm(ctx context.Context, kbID, nodeId string,
 			node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
 		}
 	}
-	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, authId)
+	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
 	if err != nil {
 		return &domain.ErrCodeInternalError
 	}
@@ -429,14 +467,14 @@ func (u *NodeUsecase) convertMDToHTML(mdStr string) string {
 	return string(html)
 }
 
-func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId string, authId uint) ([]*shareV1.NodeListGroupNavResp, error) {
+func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId, userID string) ([]*shareV1.NodeListGroupNavResp, error) {
 
 	nodes, err := u.nodeRepo.GetNodeReleaseListByKBID(ctx, kbId)
 	if err != nil {
 		return nil, err
 	}
 
-	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, authId)
+	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -483,14 +521,14 @@ func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId string, authId 
 	return result, nil
 }
 
-func (u *NodeUsecase) GetNodeReleaseListByParentID(ctx context.Context, kbID, parentID string, authId uint) ([]*domain.ShareNodeDetailItem, error) {
+func (u *NodeUsecase) GetNodeReleaseListByParentID(ctx context.Context, kbID, parentID, userID string) ([]*domain.ShareNodeDetailItem, error) {
 	// 一次性查询所有节点
 	allNodes, err := u.nodeRepo.GetNodeReleaseListByKBID(ctx, kbID)
 	if err != nil {
 		return nil, err
 	}
 
-	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, authId)
+	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

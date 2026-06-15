@@ -17,6 +17,12 @@ type User struct {
 	LastAccess        time.Time       `json:"last_access" gorm:"default:null"`
 }
 
+type UserSummary struct {
+	ID      string `json:"id"`
+	Account string `json:"account"`
+	Name    string `json:"name"`
+}
+
 // KBUsers 知识库用户关联表（多对多关系）
 type KBUsers struct {
 	ID        int64                   `json:"id" gorm:"primaryKey;autoIncrement"`

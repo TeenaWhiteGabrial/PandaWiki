@@ -37,7 +37,11 @@ const getFirstNode = async () => {
 
 const getHomePath = async () => {
   const info = await getShareV1AppWebInfo();
-  return info?.settings?.home_page_setting;
+  return {
+    homePageSetting: info?.settings?.home_page_setting,
+    hasLandingConfigs:
+      (info?.settings?.web_app_landing_configs?.length || 0) > 0,
+  };
 };
 
 const stripBasePath = (pathname: string, basePath: string) => {
@@ -74,18 +78,18 @@ const homeProxy = async (
   try {
     // 获取节点列表
     if (url.pathname === '/') {
-      const homePath = await getHomePath();
-      if (homePath === 'custom') {
+      const { homePageSetting, hasLandingConfigs } = await getHomePath();
+      if (homePageSetting === 'custom' && hasLandingConfigs) {
         return NextResponse.rewrite(new URL('/home', request.url));
-      } else {
-        const [firstNode] = await Promise.all([getFirstNode(), getHomePath()]);
-        if (firstNode) {
-          return NextResponse.rewrite(
-            new URL(`/node/${firstNode.id}`, request.url),
-          );
-        }
-        return NextResponse.rewrite(new URL('/node', request.url));
       }
+
+      const firstNode = await getFirstNode();
+      if (firstNode) {
+        return NextResponse.rewrite(
+          new URL(`/node/${firstNode.id}`, request.url),
+        );
+      }
+      return NextResponse.rewrite(new URL('/node', request.url));
     }
 
     // 页面上报

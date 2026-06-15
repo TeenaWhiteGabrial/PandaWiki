@@ -110,10 +110,9 @@ func (s *AuthUserInfo) Value() (driver.Value, error) {
 	return json.Marshal(s)
 }
 
-func GetAuthID(c echo.Context) uint {
-	userId, ok := c.Get("user_id").(uint)
-	if !ok {
-		return 0
+func GetShareUserID(c echo.Context) string {
+	if authInfo := GetAuthInfoFromCtx(c.Request().Context()); authInfo != nil && authInfo.UserId != "" {
+		return authInfo.UserId
 	}
-	return userId
+	return ""
 }

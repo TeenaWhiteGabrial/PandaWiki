@@ -53,7 +53,7 @@ func (h *ShareNodeHandler) ShareNodeList(c echo.Context) error {
 		return h.NewResponseWithError(c, "kb_id is required", nil)
 	}
 
-	nodes, err := h.usecase.GetShareNodeList(c.Request().Context(), kbId, domain.GetAuthID(c))
+	nodes, err := h.usecase.GetShareNodeList(c.Request().Context(), kbId, domain.GetShareUserID(c))
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to get node list", err)
 	}
@@ -83,7 +83,7 @@ func (h *ShareNodeHandler) GetNodeDetail(c echo.Context) error {
 		return h.NewResponseWithError(c, "id is required", nil)
 	}
 
-	errCode := h.usecase.ValidateNodePerm(c.Request().Context(), kbID, id, domain.GetAuthID(c))
+	errCode := h.usecase.ValidateNodePerm(c.Request().Context(), kbID, id, domain.GetShareUserID(c))
 	if errCode != nil {
 		return h.NewResponseWithErrCode(c, *errCode)
 	}
@@ -95,7 +95,7 @@ func (h *ShareNodeHandler) GetNodeDetail(c echo.Context) error {
 
 	// If the node is a folder, return the list of child nodes
 	if node.Type == domain.NodeTypeFolder {
-		childNodes, err := h.usecase.GetNodeReleaseListByParentID(c.Request().Context(), kbID, id, domain.GetAuthID(c))
+		childNodes, err := h.usecase.GetNodeReleaseListByParentID(c.Request().Context(), kbID, id, domain.GetShareUserID(c))
 		if err != nil {
 			return h.NewResponseWithError(c, "failed to get child nodes", err)
 		}

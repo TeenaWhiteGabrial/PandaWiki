@@ -29,6 +29,7 @@ func NewCommentHandler(e *echo.Echo, baseHandler *handler.BaseHandler, logger *l
 
 	group := e.Group("/api/v1/comment", h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDataOperate))
 	group.GET("", h.GetCommentModeratedList)
+	group.POST("/moderate", h.ModerateCommentList)
 	group.DELETE("/list", h.DeleteCommentList)
 
 	return h
@@ -88,5 +89,32 @@ func (h *CommentHandler) DeleteCommentList(c echo.Context) error {
 	}
 
 	// success
+	return h.NewResponseWithData(c, nil)
+}
+
+// ModerateCommentList
+//
+//	@Summary		ModerateCommentList
+//	@Description	ModerateCommentList
+//	@Tags			comment
+//	@Accept			json
+//	@Produce		json
+//	@Param			req	body		domain.ModerateCommentListReq	true	"ModerateCommentListReq"
+//	@Success		200	{object}	domain.Response					"success"
+//	@Router			/api/v1/comment/moderate [post]
+func (h *CommentHandler) ModerateCommentList(c echo.Context) error {
+	var req domain.ModerateCommentListReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "bind request", err)
+	}
+	if err := c.Validate(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid request", err)
+	}
+
+	ctx := c.Request().Context()
+	if err := h.usecase.ModerateCommentList(ctx, &req); err != nil {
+		return h.NewResponseWithError(c, "failed to moderate comment list", err)
+	}
+
 	return h.NewResponseWithData(c, nil)
 }

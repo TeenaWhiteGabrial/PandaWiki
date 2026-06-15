@@ -234,7 +234,7 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 			}
 		}
 
-		shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.Info.UserInfo.AuthUserID)
+		shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.Info.UserInfo.UserID)
 		if err != nil {
 			u.logger.Error("failed to build enterprise access context", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to build enterprise access context"}
@@ -458,13 +458,7 @@ func (u *ChatUsecase) Search(ctx context.Context, req *domain.ChatSearchReq) (*d
 		return nil, err
 	}
 	groupIds := []int(nil)
-	if !kb.AccessSettings.EnterpriseAuth.Enabled {
-		groupIds, err = u.AuthRepo.GetAuthGroupIdsWithParentsByAuthId(ctx, req.AuthUserID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.AuthUserID)
+	shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.UserID)
 	if err != nil {
 		return nil, err
 	}

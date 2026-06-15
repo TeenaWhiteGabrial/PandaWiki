@@ -51,12 +51,7 @@ func (h *ShareStatHandler) RecordPage(c echo.Context) error {
 	}
 
 	kbID := c.Request().Header.Get("X-KB-ID")
-	// get user info --> no enterprise is nil
-	var userIDValue uint
-	userID := c.Get("user_id")
-	if userID != nil { // can find userinfo from auth
-		userIDValue = userID.(uint)
-	}
+	userID := domain.GetShareUserID(c)
 
 	ua := c.Request().UserAgent()
 	userAgent := useragent.Parse(ua)
@@ -83,7 +78,7 @@ func (h *ShareStatHandler) RecordPage(c echo.Context) error {
 	ip := c.RealIP()
 	stat := &domain.StatPage{
 		KBID:        kbID,
-		UserID:      userIDValue,
+		UserID:      userID,
 		NodeID:      req.NodeID,
 		Scene:       req.Scene,
 		SessionID:   sessionID,

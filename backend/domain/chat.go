@@ -84,8 +84,8 @@ type ChatSearchReq struct {
 
 	KBID string `json:"-" validate:"required"`
 
-	RemoteIP   string `json:"-"`
-	AuthUserID uint   `json:"-"`
+	RemoteIP string `json:"-"`
+	UserID   string `json:"-"`
 }
 
 type ChatSearchResp struct {

@@ -17,19 +17,16 @@ type AuthGetResp struct {
 	LicenseEdition consts.LicenseEdition `json:"license_edition"`
 }
 
+// 保留该类型仅用于兼容仍参与编译的 GitHub OAuth usecase。
+// 分享端运行路由已移除，不再对外暴露该登录入口。
 type AuthGitHubReq struct {
-	KbID        string `json:"kb_id"`
-	RedirectUrl string `json:"redirect_url"`
+	KbID        string `json:"kb_id" validate:"required"`
+	RedirectUrl string `json:"redirect_url" validate:"required"`
 }
 
-type AuthGitHubResp struct {
-	Url string `json:"url"`
-}
-
+// 保留该类型仅用于兼容仍参与编译的 GitHub OAuth usecase。
+// 分享端运行路由已移除，不再对外暴露该回调入口。
 type GitHubCallbackReq struct {
-	Code  string `json:"code" query:"code"`
-	State string `json:"state" query:"state"`
-}
-
-type GitHubCallbackResp struct {
+	Code  string `query:"code" validate:"required"`
+	State string `query:"state" validate:"required"`
 }

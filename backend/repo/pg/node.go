@@ -524,6 +524,69 @@ func (r *NodeRepository) GetLatestNodeReleaseWithPublishAccount(ctx context.Cont
 	return nodeRelease, nil
 }
 
+func (r *NodeRepository) GetNodeReleaseList(ctx context.Context, kbID, nodeID string) ([]*v1.NodeReleaseListItem, error) {
+	var items []*v1.NodeReleaseListItem
+	if err := r.db.WithContext(ctx).
+		Model(&domain.NodeRelease{}).
+		Select(`
+			node_releases.id,
+			node_releases.node_id,
+			node_releases.name,
+			node_releases.meta,
+			node_releases.updated_at,
+			kb_releases.id as release_id,
+			kb_releases.tag as release_name,
+			kb_releases.message as release_message,
+			node_releases.publisher_id,
+			publisher.account as publisher_account,
+			node_releases.editor_id,
+			editor.account as editor_account,
+			nodes.creator_id,
+			creator.account as creator_account
+		`).
+		Joins("left join kb_release_node_releases on kb_release_node_releases.node_release_id = node_releases.id").
+		Joins("left join kb_releases on kb_releases.id = kb_release_node_releases.release_id").
+		Joins("left join nodes on nodes.id = node_releases.node_id").
+		Joins("left join users as publisher on publisher.id = node_releases.publisher_id").
+		Joins("left join users as editor on editor.id = node_releases.editor_id").
+		Joins("left join users as creator on creator.id = nodes.creator_id").
+		Where("node_releases.kb_id = ?", kbID).
+		Where("node_releases.node_id = ?", nodeID).
+		Order("node_releases.updated_at desc").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *NodeRepository) GetNodeReleaseDetail(ctx context.Context, kbID, releaseID string) (*v1.GetNodeReleaseDetailResp, error) {
+	var item v1.GetNodeReleaseDetailResp
+	if err := r.db.WithContext(ctx).
+		Model(&domain.NodeRelease{}).
+		Select(`
+			node_releases.node_id,
+			node_releases.name,
+			node_releases.content,
+			node_releases.meta,
+			node_releases.publisher_id,
+			publisher.account as publisher_account,
+			node_releases.editor_id,
+			editor.account as editor_account,
+			nodes.creator_id,
+			creator.account as creator_account
+		`).
+		Joins("left join nodes on nodes.id = node_releases.node_id").
+		Joins("left join users as publisher on publisher.id = node_releases.publisher_id").
+		Joins("left join users as editor on editor.id = node_releases.editor_id").
+		Joins("left join users as creator on creator.id = nodes.creator_id").
+		Where("node_releases.kb_id = ?", kbID).
+		Where("node_releases.id = ?", releaseID).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 // GetNodeReleaseWithDirPathByID gets a node release by ID and includes its directory path
 func (r *NodeRepository) GetNodeReleaseWithDirPathByID(ctx context.Context, id string) (*domain.NodeReleaseWithDirPath, error) {
 	// First get the node release

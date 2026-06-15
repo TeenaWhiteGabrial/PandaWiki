@@ -173,8 +173,8 @@ func (u *NavUsecase) UpdatePermission(ctx context.Context, req *v1.NavPermission
 	return nil
 }
 
-func (u *NavUsecase) EnterpriseAccessContext(ctx context.Context, authID uint) (*domain.EnterpriseAccessContext, error) {
-	return u.enterprise.BuildShareAccessContext(ctx, authID)
+func (u *NavUsecase) EnterpriseAccessContext(ctx context.Context, userID string) (*domain.EnterpriseAccessContext, error) {
+	return u.enterprise.BuildShareAccessContext(ctx, userID)
 }
 
 func (u *NavUsecase) CanVisible(permissions domain.NodePermissions, access *domain.EnterpriseAccessContext) bool {

@@ -85,7 +85,7 @@ func (h *ShareAppHandler) GetWebAppInfo(c echo.Context) error {
 	}
 	c.Request().Header.Set("X-KB-ID", kbID)
 	ctx := context.WithValue(c.Request().Context(), consts.ContextKeyEdition, consts.GetLicenseEdition(c))
-	appInfo, err := h.usecase.ShareGetWebAppInfo(ctx, kbID, domain.GetAuthID(c))
+	appInfo, err := h.usecase.ShareGetWebAppInfo(ctx, kbID, domain.GetShareUserID(c))
 	if err != nil {
 		return h.NewResponseWithError(c, err.Error(), err)
 	}

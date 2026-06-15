@@ -9,9 +9,9 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/chaitin/panda-wiki/consts"
-	"github.com/chaitin/panda-wiki/usecase"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
+	"github.com/chaitin/panda-wiki/usecase"
 )
 
 type ShareCaptchaHandler struct {
