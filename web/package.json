@@ -18,6 +18,11 @@
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.12.1",
+  "pnpm": {
+    "patchedDependencies": {
+      "@ctzhian/tiptap@3.0.4": "patches/@ctzhian__tiptap@3.0.4.patch"
+    }
+  },
   "dependencies": {
     "@ctzhian/tiptap": "3.0.4",
     "@ctzhian/ui": "^7.1.3",

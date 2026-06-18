@@ -1,0 +1,20 @@
+diff --git a/dist/hook/index.js b/dist/hook/index.js
+index da629e239ec649a97f6b3e38668457759d7dd278..01cdd8a72043494744b184365aaaa284942c710a 100644
+--- a/dist/hook/index.js
++++ b/dist/hook/index.js
+@@ -40,12 +40,14 @@ var useTiptap = function useTiptap(_ref) {
+     onUpload: handleUpload,
+     onUploadImgUrl: handleUploadImgUrl
+   }, options));
++  var editorOptions = _objectSpread({}, options);
++  delete editorOptions.extensions;
+   var editor = useEditor(_objectSpread(_objectSpread(_objectSpread({
+     editable: editable,
+     extensions: extensions
+   }, contentType === 'markdown' ? {
+     contentType: 'markdown'
+-  } : {}), options), {}, {
++  } : {}), editorOptions), {}, {
+     editorProps: {
+       handleKeyDown: function handleKeyDown(view, event) {
+         if (editable && event.key === 's' && (event.metaKey || event.ctrlKey) && onSave) {

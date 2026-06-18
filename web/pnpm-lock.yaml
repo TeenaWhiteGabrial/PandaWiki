@@ -4,13 +4,18 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@ctzhian/tiptap@3.0.4':
+    hash: 1c943100f1967902b91733f5161c4c81ab9e0f62de52125fbdd94005517b8c5d
+    path: patches/@ctzhian__tiptap@3.0.4.patch
+
 importers:
 
   .:
     dependencies:
       '@ctzhian/tiptap':
         specifier: 3.0.4
-        version: 3.0.4(d56320ba6725dcf7b05ee60babb3e5c8)
+        version: 3.0.4(patch_hash=1c943100f1967902b91733f5161c4c81ab9e0f62de52125fbdd94005517b8c5d)(d56320ba6725dcf7b05ee60babb3e5c8)
       '@ctzhian/ui':
         specifier: ^7.1.3
         version: 7.1.3(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@mui/icons-material@7.3.4(@mui/material@7.3.4(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@mui/material@7.3.4(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@mui/utils@9.0.1(@types/react@19.2.7)(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -6949,7 +6954,7 @@ snapshots:
       - react-native
       - typescript
 
-  '@ctzhian/tiptap@3.0.4(d56320ba6725dcf7b05ee60babb3e5c8)':
+  '@ctzhian/tiptap@3.0.4(patch_hash=1c943100f1967902b91733f5161c4c81ab9e0f62de52125fbdd94005517b8c5d)(d56320ba6725dcf7b05ee60babb3e5c8)':
     dependencies:
       '@emotion/react': 11.14.0(@types/react@19.2.7)(react@19.2.3)
       '@emotion/styled': 11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3)

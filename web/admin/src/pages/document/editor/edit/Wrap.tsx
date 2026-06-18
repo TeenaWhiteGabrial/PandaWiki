@@ -254,10 +254,12 @@ const RichTextWrap = ({
       !markdownCollab.enabled &&
       !markdownBlockCollab.enabled
     ) {
-      if (isMarkdown) {
-        setCollabStatus('disabled');
-        setCollabDisabledReason('Markdown 实时协同已暂停');
-      }
+      setCollabStatus('disabled');
+      setCollabDisabledReason(
+        isMarkdown
+          ? 'Markdown 实时协同已暂停'
+          : defaultDetail.collab?.disabled_reason || '',
+      );
       return;
     }
     setCollabStatus(
