@@ -51,10 +51,10 @@ type NavMoveReq struct {
 }
 
 type NavListResp struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Position  float64   `json:"position"`
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	Position    float64                `json:"position"`
 	Permissions domain.NodePermissions `json:"permissions"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
 }

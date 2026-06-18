@@ -105,6 +105,10 @@ export interface DomainDocumentFeedbackListItem {
 }
 
 export interface DomainGetNodeReleaseDetailResp {
+  editor_blocks?: Record<string, unknown>;
+  editor_content?: Record<string, unknown>;
+  editor_format?: string;
+  editor_version?: number;
   content?: string;
   creator_account?: string;
   creator_id?: string;

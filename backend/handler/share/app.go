@@ -10,6 +10,7 @@ import (
 	offConfig "github.com/silenceper/wechat/v2/officialaccount/config"
 	"github.com/silenceper/wechat/v2/officialaccount/message"
 
+	shareV1 "github.com/chaitin/panda-wiki/api/share/v1"
 	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
@@ -22,6 +23,8 @@ type ShareAppHandler struct {
 	logger  *log.Logger
 	usecase *usecase.AppUsecase
 }
+
+var _ shareV1.WechatAppInfoResp
 
 func (h *ShareAppHandler) resolveKBID(ctx context.Context, kbID string) (string, error) {
 	if kbID != "" {
@@ -123,7 +126,7 @@ func (h *ShareAppHandler) GetWidgetAppInfo(c echo.Context) error {
 //	@Accept			json
 //	@Produce		json
 //	@Param			X-KB-ID	header		string	true	"kb id"
-//	@Success		200		{object}	domain.Response{data=v1.WechatAppInfoResp}
+//	@Success		200		{object}	domain.Response{data=shareV1.WechatAppInfoResp}
 //	@Router			/share/v1/app/wechat/info [get]
 func (h *ShareAppHandler) WechatAppInfo(c echo.Context) error {
 	kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))

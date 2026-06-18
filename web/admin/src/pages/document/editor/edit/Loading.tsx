@@ -1,20 +1,11 @@
-import { useTiptap } from '@ctzhian/tiptap';
 import { Box, Skeleton, Stack } from '@mui/material';
 import { useOutletContext } from 'react-router-dom';
 import { WrapContext } from '..';
 import Header from './Header';
-import Toolbar from './Toolbar';
 import { IconAShijian2, IconZiti } from '@panda-wiki/icons';
 
 const LoadingEditorWrap = () => {
   const { catalogOpen } = useOutletContext<WrapContext>();
-
-  const editorRef = useTiptap({
-    editable: false,
-    content: '',
-    exclude: ['invisibleCharacters', 'youtube', 'mention'],
-    baseUrl: window.__BASENAME__ || '',
-  });
 
   return (
     <Box>
@@ -36,7 +27,6 @@ const LoadingEditorWrap = () => {
           handleSave={() => {}}
           handleExport={() => {}}
         />
-        <Toolbar editorRef={editorRef} />
       </Box>
       <Box>
         <Box

@@ -262,7 +262,7 @@ func (h *ModelHandler) GetModelModeSetting(c echo.Context) error {
 			Mode:                consts.ModelSettingModeManual,
 			AutoProviderConfigs: []domain.AutoProviderSettingItem{},
 			ActiveAutoProvider:  "",
-			AutoProvider: nil,
+			AutoProvider:        nil,
 		}
 		return h.NewResponseWithData(c, defaultSetting)
 	}

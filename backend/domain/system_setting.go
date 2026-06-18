@@ -22,13 +22,13 @@ func (SystemSetting) TableName() string {
 
 // ModelModeSetting 模型配置结构体
 type ModelModeSetting struct {
-	Mode                     consts.ModelSettingMode    `json:"mode"`                        // 模式: manual 或 auto
-	AutoProviderConfigs      []AutoProviderSettingItem  `json:"auto_provider_configs"`       // 兼容上一版自动模式多供应商配置
-	ActiveAutoProvider       string                     `json:"active_auto_provider"`        // 兼容上一版自动模式当前供应商 ID
-	AutoProvider             *AutoModeProviderSetting   `json:"auto_provider"`               // 自动模式统一供应商配置
-	AutoModeAPIKey           string                     `json:"auto_mode_api_key"`           // 兼容旧百智云自动模式字段
-	ChatModel                string                     `json:"chat_model"`                  // 兼容旧自动模式字段
-	IsManualEmbeddingUpdated bool                       `json:"is_manual_embedding_updated"` // 手动模式下嵌入模型是否更新
+	Mode                     consts.ModelSettingMode   `json:"mode"`                        // 模式: manual 或 auto
+	AutoProviderConfigs      []AutoProviderSettingItem `json:"auto_provider_configs"`       // 兼容上一版自动模式多供应商配置
+	ActiveAutoProvider       string                    `json:"active_auto_provider"`        // 兼容上一版自动模式当前供应商 ID
+	AutoProvider             *AutoModeProviderSetting  `json:"auto_provider"`               // 自动模式统一供应商配置
+	AutoModeAPIKey           string                    `json:"auto_mode_api_key"`           // 兼容旧百智云自动模式字段
+	ChatModel                string                    `json:"chat_model"`                  // 兼容旧自动模式字段
+	IsManualEmbeddingUpdated bool                      `json:"is_manual_embedding_updated"` // 手动模式下嵌入模型是否更新
 }
 
 type AutoProviderSettingItem struct {
@@ -42,10 +42,10 @@ type AutoProviderSettingItem struct {
 }
 
 type AutoModeProviderSetting struct {
-	Provider ModelProvider           `json:"provider"`
-	BaseURL  string                  `json:"base_url"`
-	APIKey   string                  `json:"api_key"`
-	Models   AutoModeModelSelection  `json:"models"`
+	Provider ModelProvider          `json:"provider"`
+	BaseURL  string                 `json:"base_url"`
+	APIKey   string                 `json:"api_key"`
+	Models   AutoModeModelSelection `json:"models"`
 }
 
 type AutoModeModelSelection struct {
@@ -60,4 +60,12 @@ type AutoModeModelSelection struct {
 // INSERT INTO "public"."system_settings" ("key", "value") VALUES ('upload', '{"denied_extensions": ["jsp"]}')
 type UploadDeniedExtensionsSetting struct {
 	DeniedExtensions []string `json:"denied_extensions"` // 禁止上传的文件扩展名列表，不带点，如 ["jsp", "php", "exe"]
+}
+
+type CollabSetting struct {
+	Mode           string `json:"mode" validate:"required,oneof=disabled prose_mirror"` // 协同模式: disabled 或 prose_mirror
+	MaxDocBytes    int    `json:"max_doc_bytes" validate:"omitempty,min=1024"`          // 协同编辑最大文档字节数
+	BlockMinBytes  int    `json:"block_min_bytes" validate:"omitempty,min=1024"`         // 大文档分块阈值：内容字节数
+	BlockMinCount  int    `json:"block_min_count" validate:"omitempty,min=1"`            // 大文档分块阈值：富文本块数
+	BlockWindow    int    `json:"block_window" validate:"omitempty,min=1,max=48"`        // 块级协同活跃窗口大小
 }

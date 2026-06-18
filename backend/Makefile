@@ -5,11 +5,13 @@ generate:
 	&& wire cmd/migrate/wire.go
 
 generate_pro:
+	@if [ ! -d pro ]; then echo "skip generate_pro: pro directory not found"; else \
 	wire cmd/migrate/wire.go \
 	&& cd pro \
 	&& swag fmt --dir handler && swag init --instanceName pro -g cmd/api_pro/main.go --pd \
 	&& wire cmd/api_pro/wire.go \
-	&& wire cmd/consumer_pro/wire.go
+	&& wire cmd/consumer_pro/wire.go; \
+	fi
 
 lint:generate generate_pro
 	go mod tidy && golangci-lint run

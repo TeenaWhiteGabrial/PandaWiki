@@ -187,24 +187,6 @@ definitions:
     - NodeAccessPermOpen
     - NodeAccessPermPartial
     - NodeAccessPermClosed
-  consts.NodePermName:
-    enum:
-    - visible
-    - visitable
-    - answerable
-    type: string
-    x-enum-comments:
-      NodePermNameAnswerable: 可被问答
-      NodePermNameVisible: 导航内可见
-      NodePermNameVisitable: 可被访问
-    x-enum-descriptions:
-    - 导航内可见
-    - 可被访问
-    - 可被问答
-    x-enum-varnames:
-    - NodePermNameVisible
-    - NodePermNameVisitable
-    - NodePermNameAnswerable
   consts.NodeRagInfoStatus:
     enum:
     - PENDING
@@ -321,16 +303,20 @@ definitions:
   consts.UserRole:
     enum:
     - admin
+    - manager
     - user
     type: string
     x-enum-comments:
-      UserRoleAdmin: 管理员
+      UserRoleAdmin: 超级管理员
+      UserRoleManager: 管理员
       UserRoleUser: 普通用户
     x-enum-descriptions:
+    - 超级管理员
     - 管理员
     - 普通用户
     x-enum-varnames:
     - UserRoleAdmin
+    - UserRoleManager
     - UserRoleUser
   consts.WatermarkSetting:
     enum:
@@ -821,13 +807,73 @@ definitions:
     - AppTypeWecomAIBot
     - AppTypeLarkBot
     - AppTypeMcpServer
-  domain.AuthUserInfo:
+  domain.AutoModeModelSelection:
     properties:
-      avatar_url:
+      analysis:
         type: string
-      email:
+      analysis_vl:
         type: string
-      username:
+      chat:
+        type: string
+      embedding:
+        type: string
+      rerank:
+        type: string
+    type: object
+  domain.AutoModeModels:
+    properties:
+      analysis:
+        type: string
+      analysis_vl:
+        type: string
+      chat:
+        type: string
+      embedding:
+        type: string
+      rerank:
+        type: string
+    type: object
+  domain.AutoModeProviderReq:
+    properties:
+      api_key:
+        type: string
+      base_url:
+        type: string
+      models:
+        $ref: '#/definitions/domain.AutoModeModels'
+      provider:
+        $ref: '#/definitions/github_com_chaitin_panda-wiki_domain.ModelProvider'
+    required:
+    - base_url
+    - provider
+    type: object
+  domain.AutoModeProviderSetting:
+    properties:
+      api_key:
+        type: string
+      base_url:
+        type: string
+      models:
+        $ref: '#/definitions/domain.AutoModeModelSelection'
+      provider:
+        $ref: '#/definitions/github_com_chaitin_panda-wiki_domain.ModelProvider'
+    type: object
+  domain.AutoProviderSettingItem:
+    properties:
+      api_header:
+        type: string
+      api_key:
+        type: string
+      api_version:
+        type: string
+      base_url:
+        type: string
+      extra_config:
+        additionalProperties: true
+        type: object
+      id:
+        type: string
+      provider:
         type: string
     type: object
   domain.BannerConfig:
@@ -1013,6 +1059,30 @@ definitions:
           $ref: '#/definitions/domain.NodeContentChunkSSE'
         type: array
     type: object
+  domain.CollabSetting:
+    properties:
+      block_min_bytes:
+        description: 大文档分块阈值：内容字节数
+        minimum: 1024
+        type: integer
+      block_min_count:
+        description: 大文档分块阈值：富文本块数
+        minimum: 1
+        type: integer
+      block_window:
+        description: 块级协同活跃窗口大小
+        maximum: 48
+        minimum: 1
+        type: integer
+      mode:
+        description: '协同模式: disabled 或 prose_mirror'
+        enum:
+        - disabled
+        - prose_mirror
+        type: string
+    required:
+    - mode
+    type: object
   domain.CommentConfig:
     properties:
       list:
@@ -1037,14 +1107,14 @@ definitions:
     type: object
   domain.CommentInfo:
     properties:
-      auth_user_id:
-        type: integer
       avatar:
         description: avatar
         type: string
       email:
         type: string
       remote_ip:
+        type: string
+      user_id:
         type: string
       user_name:
         type: string
@@ -1347,6 +1417,14 @@ definitions:
         type: string
       content_type:
         type: string
+      editor_blocks:
+        $ref: '#/definitions/domain.JSONB'
+      editor_content:
+        $ref: '#/definitions/domain.JSONB'
+      editor_format:
+        type: string
+      editor_version:
+        type: integer
       emoji:
         type: string
       kb_id:
@@ -1586,7 +1664,7 @@ definitions:
       created_at:
         type: string
       info:
-        $ref: '#/definitions/domain.AuthUserInfo'
+        $ref: '#/definitions/domain.UserSummary'
       ip:
         type: string
       ip_address:
@@ -1598,7 +1676,10 @@ definitions:
       scene:
         $ref: '#/definitions/domain.StatPageScene'
       user_id:
-        type: integer
+        type: string
+    type: object
+  domain.JSONB:
+    additionalProperties: {}
     type: object
   domain.KBReleaseListItemResp:
     properties:
@@ -1715,11 +1796,23 @@ definitions:
     type: object
   domain.ModelModeSetting:
     properties:
-      auto_mode_api_key:
-        description: 百智云 API Key
+      active_auto_provider:
+        description: 兼容上一版自动模式当前供应商 ID
         type: string
+      auto_mode_api_key:
+        description: 兼容旧百智云自动模式字段
+        type: string
+      auto_provider:
+        allOf:
+        - $ref: '#/definitions/domain.AutoModeProviderSetting'
+        description: 自动模式统一供应商配置
+      auto_provider_configs:
+        description: 兼容上一版自动模式多供应商配置
+        items:
+          $ref: '#/definitions/domain.AutoProviderSettingItem'
+        type: array
       chat_model:
-        description: 自定义对话模型名称
+        description: 兼容旧自动模式字段
         type: string
       is_manual_embedding_updated:
         description: 手动模式下嵌入模型是否更新
@@ -1743,6 +1836,22 @@ definitions:
     - ModelTypeRerank
     - ModelTypeAnalysis
     - ModelTypeAnalysisVL
+  domain.ModerateCommentListReq:
+    properties:
+      ids:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      status:
+        allOf:
+        - $ref: '#/definitions/domain.CommentStatus'
+        enum:
+        - -1
+        - 1
+    required:
+    - ids
+    type: object
   domain.MoveNodeReq:
     properties:
       id:
@@ -1800,23 +1909,6 @@ definitions:
       summary:
         type: string
     type: object
-  domain.NodeGroupDetail:
-    properties:
-      auth_group_id:
-        type: integer
-      auth_ids:
-        items:
-          type: integer
-        type: array
-      kb_id:
-        type: string
-      name:
-        type: string
-      node_id:
-        type: string
-      perm:
-        $ref: '#/definitions/consts.NodePermName'
-    type: object
   domain.NodeListItemResp:
     properties:
       content_type:
@@ -1869,18 +1961,44 @@ definitions:
     type: object
   domain.NodePermissions:
     properties:
+      allowed_department_ids:
+        items:
+          type: string
+        type: array
+      allowed_user_ids:
+        items:
+          type: string
+        type: array
       answerable:
         allOf:
         - $ref: '#/definitions/consts.NodeAccessPerm'
-        description: 可被问答
+        description: 兼容旧字段，不再单独作为权限入口
+      denied_department_ids:
+        items:
+          type: string
+        type: array
+      denied_user_ids:
+        items:
+          type: string
+        type: array
+      inherit:
+        description: 目录默认继承父级，可显式覆盖
+        type: boolean
+      min_permission_level_id:
+        type: string
+      min_permission_level_rank:
+        type: integer
+      scope_type:
+        description: public / department
+        type: string
       visible:
         allOf:
         - $ref: '#/definitions/consts.NodeAccessPerm'
-        description: 导航内可见
+        description: 兼容旧字段，不再单独作为权限入口
       visitable:
         allOf:
         - $ref: '#/definitions/consts.NodeAccessPerm'
-        description: 可被访问
+        description: 兼容旧字段，不再单独作为权限入口
     type: object
   domain.NodeStatus:
     enum:
@@ -2351,12 +2469,8 @@ definitions:
     type: object
   domain.SwitchModeReq:
     properties:
-      auto_mode_api_key:
-        description: 百智云 API Key
-        type: string
-      chat_model:
-        description: 自定义对话模型名称
-        type: string
+      auto_provider:
+        $ref: '#/definitions/domain.AutoModeProviderReq'
       mode:
         enum:
         - manual
@@ -2473,6 +2587,14 @@ definitions:
         type: string
       content_type:
         type: string
+      editor_blocks:
+        $ref: '#/definitions/domain.JSONB'
+      editor_content:
+        $ref: '#/definitions/domain.JSONB'
+      editor_format:
+        type: string
+      editor_version:
+        type: integer
       emoji:
         type: string
       id:
@@ -2516,6 +2638,15 @@ definitions:
       real_name:
         type: string
       user_id:
+        type: string
+    type: object
+  domain.UserSummary:
+    properties:
+      account:
+        type: string
+      id:
+        type: string
+      name:
         type: string
     type: object
   domain.WeChatAppAdvancedSetting:
@@ -2741,8 +2872,6 @@ definitions:
       source_type:
         $ref: '#/definitions/consts.SourceType'
     type: object
-  github_com_chaitin_panda-wiki_api_share_v1.GitHubCallbackResp:
-    type: object
   github_com_chaitin_panda-wiki_domain.CheckModelReq:
     properties:
       api_header:
@@ -2832,9 +2961,15 @@ definitions:
   github_com_chaitin_panda-wiki_domain.ModelProvider:
     enum:
     - BaiZhiCloud
+    - CompatiblePlatform
+    - Xinference
+    - gpustack
     type: string
     x-enum-varnames:
     - ModelProviderBrandBaiZhiCloud
+    - ModelProviderCompatibleCloud
+    - ModelProviderXinference
+    - ModelProviderGPUStack
   gocap.ChallengeData:
     properties:
       challenge:
@@ -2891,18 +3026,6 @@ definitions:
         type: array
       total:
         type: integer
-    type: object
-  v1.AuthGitHubReq:
-    properties:
-      kb_id:
-        type: string
-      redirect_url:
-        type: string
-    type: object
-  v1.AuthGitHubResp:
-    properties:
-      url:
-        type: string
     type: object
   v1.AuthItem:
     properties:
@@ -3058,18 +3181,30 @@ definitions:
     properties:
       account:
         type: string
+      department_ids:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      name:
+        type: string
       password:
         minLength: 8
+        type: string
+      primary_department:
         type: string
       role:
         allOf:
         - $ref: '#/definitions/consts.UserRole'
         enum:
-        - admin
+        - manager
         - user
     required:
     - account
+    - department_ids
+    - name
     - password
+    - primary_department
     - role
     type: object
   v1.CreateUserResp:
@@ -3080,6 +3215,37 @@ definitions:
   v1.FileUploadResp:
     properties:
       key:
+        type: string
+    type: object
+  v1.GetNodeReleaseDetailResp:
+    properties:
+      content:
+        type: string
+      creator_account:
+        type: string
+      creator_id:
+        type: string
+      editor_account:
+        type: string
+      editor_blocks:
+        $ref: '#/definitions/domain.JSONB'
+      editor_content:
+        $ref: '#/definitions/domain.JSONB'
+      editor_format:
+        type: string
+      editor_id:
+        type: string
+      editor_version:
+        type: integer
+      meta:
+        $ref: '#/definitions/domain.NodeMeta'
+      name:
+        type: string
+      node_id:
+        type: string
+      publisher_account:
+        type: string
+      publisher_id:
         type: string
     type: object
   v1.KBUserInviteReq:
@@ -3164,6 +3330,8 @@ definitions:
         type: string
       name:
         type: string
+      permissions:
+        $ref: '#/definitions/domain.NodePermissions'
       position:
         type: number
       updated_at:
@@ -3196,8 +3364,59 @@ definitions:
     - kb_id
     - name
     type: object
+  v1.NodeCollabResp:
+    properties:
+      auth_token:
+        type: string
+      auto_save_interval:
+        type: integer
+      block_count:
+        type: integer
+      block_room_prefix:
+        type: string
+      block_window:
+        type: integer
+      content_bytes:
+        type: integer
+      content_type:
+        type: string
+      disabled_reason:
+        type: string
+      doc_name:
+        type: string
+      doc_room_id:
+        type: string
+      enabled:
+        type: boolean
+      endpoint:
+        type: string
+      long_document:
+        type: boolean
+      mode:
+        enum:
+        - disabled
+        - legacy
+        - prose_mirror
+        - markdown
+        - markdown_block
+        - block
+        type: string
+      room_id:
+        type: string
+      snapshot:
+        type: string
+      strategy:
+        enum:
+        - document
+        - text
+        - block
+        - markdown_block
+        type: string
+    type: object
   v1.NodeDetailResp:
     properties:
+      collab:
+        $ref: '#/definitions/v1.NodeCollabResp'
       content:
         type: string
       created_at:
@@ -3208,8 +3427,16 @@ definitions:
         type: string
       editor_account:
         type: string
+      editor_blocks:
+        $ref: '#/definitions/domain.JSONB'
+      editor_content:
+        $ref: '#/definitions/domain.JSONB'
+      editor_format:
+        type: string
       editor_id:
         type: string
+      editor_version:
+        type: integer
       id:
         type: string
       kb_id:
@@ -3255,11 +3482,6 @@ definitions:
     type: object
   v1.NodePermissionEditReq:
     properties:
-      answerable_groups:
-        description: 可被问答
-        items:
-          type: integer
-        type: array
       ids:
         items:
           type: string
@@ -3268,16 +3490,6 @@ definitions:
         type: string
       permissions:
         $ref: '#/definitions/domain.NodePermissions'
-      visible_groups:
-        description: 导航内可见
-        items:
-          type: integer
-        type: array
-      visitable_groups:
-        description: 可被访问
-        items:
-          type: integer
-        type: array
     required:
     - ids
     - kb_id
@@ -3286,25 +3498,41 @@ definitions:
     type: object
   v1.NodePermissionResp:
     properties:
-      answerable_groups:
-        description: 可被问答
-        items:
-          $ref: '#/definitions/domain.NodeGroupDetail'
-        type: array
       id:
         type: string
       permissions:
         $ref: '#/definitions/domain.NodePermissions'
-      visible_groups:
-        description: 导航内可见
-        items:
-          $ref: '#/definitions/domain.NodeGroupDetail'
-        type: array
-      visitable_groups:
-        description: 可被访问
-        items:
-          $ref: '#/definitions/domain.NodeGroupDetail'
-        type: array
+    type: object
+  v1.NodeReleaseListItem:
+    properties:
+      creator_account:
+        type: string
+      creator_id:
+        type: string
+      editor_account:
+        type: string
+      editor_id:
+        type: string
+      id:
+        type: string
+      meta:
+        $ref: '#/definitions/domain.NodeMeta'
+      name:
+        type: string
+      node_id:
+        type: string
+      publisher_account:
+        type: string
+      publisher_id:
+        type: string
+      release_id:
+        type: string
+      release_message:
+        type: string
+      release_name:
+        type: string
+      updated_at:
+        type: string
     type: object
   v1.NodeRestudyReq:
     properties:
@@ -3343,6 +3571,16 @@ definitions:
     required:
     - id
     - new_password
+    type: object
+  v1.RestoreNodeReleaseReq:
+    properties:
+      id:
+        type: string
+      kb_id:
+        type: string
+    required:
+    - id
+    - kb_id
     type: object
   v1.ShareFileUploadUrlReq:
     properties:
@@ -3385,6 +3623,8 @@ definitions:
         $ref: '#/definitions/domain.NodeMeta'
       name:
         type: string
+      nav_id:
+        type: string
       parent_id:
         type: string
       permissions:
@@ -3426,11 +3666,21 @@ definitions:
         type: string
       created_at:
         type: string
+      department_ids:
+        items:
+          type: string
+        type: array
       id:
         type: string
       is_token:
         type: boolean
       last_access:
+        type: string
+      name:
+        type: string
+      permission_level_id:
+        type: string
+      primary_department:
         type: string
       role:
         $ref: '#/definitions/consts.UserRole'
@@ -3441,9 +3691,19 @@ definitions:
         type: string
       created_at:
         type: string
+      department_ids:
+        items:
+          type: string
+        type: array
       id:
         type: string
       last_access:
+        type: string
+      name:
+        type: string
+      permission_level_id:
+        type: string
+      primary_department:
         type: string
       role:
         $ref: '#/definitions/consts.UserRole'
@@ -3474,6 +3734,94 @@ info:
   title: panda-wiki API
   version: "1.0"
 paths:
+  /api/pro/v1/node/release/detail:
+    get:
+      consumes:
+      - application/json
+      description: Get Node Release Detail
+      parameters:
+      - in: query
+        name: id
+        required: true
+        type: string
+      - in: query
+        name: kb_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/domain.PWResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.GetNodeReleaseDetailResp'
+              type: object
+      security:
+      - bearerAuth: []
+      summary: Get Node Release Detail
+      tags:
+      - node
+  /api/pro/v1/node/release/list:
+    get:
+      consumes:
+      - application/json
+      description: Get Node Release List
+      parameters:
+      - in: query
+        name: kb_id
+        required: true
+        type: string
+      - in: query
+        name: node_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/domain.PWResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/v1.NodeReleaseListItem'
+                  type: array
+              type: object
+      security:
+      - bearerAuth: []
+      summary: Get Node Release List
+      tags:
+      - node
+  /api/pro/v1/node/release/restore:
+    post:
+      consumes:
+      - application/json
+      description: Restore Node Release To Current Draft
+      parameters:
+      - description: body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.RestoreNodeReleaseReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.PWResponse'
+      security:
+      - bearerAuth: []
+      summary: Restore Node Release
+      tags:
+      - node
   /api/v1/app:
     delete:
       consumes:
@@ -3680,6 +4028,52 @@ paths:
       summary: 设置授权信息
       tags:
       - Auth
+  /api/v1/collab/setting:
+    get:
+      consumes:
+      - application/json
+      description: get collaboration setting
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/domain.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.CollabSetting'
+              type: object
+      summary: get collaboration setting
+      tags:
+      - collab
+    put:
+      consumes:
+      - application/json
+      description: update collaboration setting
+      parameters:
+      - description: collaboration setting
+        in: body
+        name: setting
+        required: true
+        schema:
+          $ref: '#/definitions/domain.CollabSetting'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/domain.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.CollabSetting'
+              type: object
+      summary: update collaboration setting
+      tags:
+      - collab
   /api/v1/comment:
     get:
       consumes:
@@ -3747,6 +4141,28 @@ paths:
           schema:
             $ref: '#/definitions/domain.Response'
       summary: DeleteCommentList
+      tags:
+      - comment
+  /api/v1/comment/moderate:
+    post:
+      consumes:
+      - application/json
+      description: ModerateCommentList
+      parameters:
+      - description: ModerateCommentListReq
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/domain.ModerateCommentListReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            $ref: '#/definitions/domain.Response'
+      summary: ModerateCommentList
       tags:
       - comment
   /api/v1/conversation:
@@ -4471,8 +4887,8 @@ paths:
     get:
       consumes:
       - application/json
-      description: get current model mode setting including mode, API key and chat
-        model
+      description: get current model mode setting including mode and auto provider
+        configs
       produces:
       - application/json
       responses:
@@ -4753,6 +5169,37 @@ paths:
       security:
       - bearerAuth: []
       summary: Batch Move Node
+      tags:
+      - node
+  /api/v1/node/collab:
+    get:
+      consumes:
+      - application/json
+      description: Get node collaboration metadata for draft editing
+      parameters:
+      - in: query
+        name: id
+        required: true
+        type: string
+      - in: query
+        name: kb_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/domain.PWResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.NodeCollabResp'
+              type: object
+      security:
+      - bearerAuth: []
+      summary: Get Node Collaboration Metadata
       tags:
       - node
   /api/v1/node/detail:
@@ -5692,39 +6139,6 @@ paths:
       summary: AuthGet
       tags:
       - share_auth
-  /share/v1/auth/github:
-    post:
-      consumes:
-      - application/json
-      description: GitHub登录
-      operationId: v1-AuthGitHub
-      parameters:
-      - description: kb id
-        in: header
-        name: X-KB-ID
-        required: true
-        type: string
-      - description: para
-        in: body
-        name: param
-        required: true
-        schema:
-          $ref: '#/definitions/v1.AuthGitHubReq'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/domain.PWResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/v1.AuthGitHubResp'
-              type: object
-      summary: GitHub登录
-      tags:
-      - ShareAuth
   /share/v1/auth/login/simple:
     post:
       consumes:
@@ -6188,34 +6602,6 @@ paths:
       summary: ShareNodeList
       tags:
       - share_node
-  /share/v1/openapi/github/callback:
-    get:
-      consumes:
-      - application/json
-      description: GitHub回调
-      operationId: v1-GitHubCallback
-      parameters:
-      - in: query
-        name: code
-        type: string
-      - in: query
-        name: state
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/domain.PWResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/github_com_chaitin_panda-wiki_api_share_v1.GitHubCallbackResp'
-              type: object
-      summary: GitHub回调
-      tags:
-      - ShareOpenapi
   /share/v1/openapi/lark/bot/{kb_id}:
     post:
       consumes:

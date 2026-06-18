@@ -15,9 +15,9 @@ import (
 )
 
 type APITokenUsecase struct {
-	repo       *pg.APITokenRepo
-	kbUsecase  *KnowledgeBaseUsecase
-	logger     *log.Logger
+	repo      *pg.APITokenRepo
+	kbUsecase *KnowledgeBaseUsecase
+	logger    *log.Logger
 }
 
 func NewAPITokenUsecase(

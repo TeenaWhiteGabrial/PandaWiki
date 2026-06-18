@@ -26,6 +26,7 @@ import dayjs from 'dayjs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { WrapContext } from '..';
+import EditorCollaboration from '../../component/EditorCollaboration';
 import DocAddByCustomText from '../../component/DocAddByCustomText';
 import DocDelete from '../../component/DocDelete';
 
@@ -35,6 +36,7 @@ interface HeaderProps {
   updateDetail: (detail: V1NodeDetailResp) => void;
   handleSave: () => void;
   handleExport: (type: string) => void;
+  handleConvertContentType?: (type: 'html' | 'md') => void;
   readOnlyUser?: boolean;
 }
 
@@ -44,11 +46,13 @@ const Header = ({
   updateDetail,
   handleSave,
   handleExport,
+  handleConvertContentType,
   readOnlyUser = false,
 }: HeaderProps) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const firstLoad = useRef(true);
+  const saveTipTimerRef = useRef<number | null>(null);
   const [wikiUrl, setWikiUrl] = useState<string>('');
   const wikiUrlRef = useRef(wikiUrl);
 
@@ -64,6 +68,8 @@ const Header = ({
     setCatalogOpen,
     refreshCatalog,
     catalogData,
+    collabStatus,
+    collabDisabledReason,
   } = useOutletContext<WrapContext>();
 
   const [renameOpen, setRenameOpen] = useState(false);
@@ -161,14 +167,25 @@ const Header = ({
   };
 
   useEffect(() => {
-    if (nodeDetail?.updated_at && !firstLoad.current) {
+    const updatedAt = detail.updated_at || nodeDetail?.updated_at;
+    if (updatedAt && !firstLoad.current && !edit) {
       setShowSaveTip(true);
-      setTimeout(() => {
+      if (saveTipTimerRef.current) {
+        window.clearTimeout(saveTipTimerRef.current);
+      }
+      saveTipTimerRef.current = window.setTimeout(() => {
         setShowSaveTip(false);
+        saveTipTimerRef.current = null;
       }, 1500);
     }
     firstLoad.current = false;
-  }, [nodeDetail?.updated_at]);
+    return () => {
+      if (saveTipTimerRef.current) {
+        window.clearTimeout(saveTipTimerRef.current);
+        saveTipTimerRef.current = null;
+      }
+    };
+  }, [detail.updated_at, edit, nodeDetail?.updated_at]);
 
   return (
     <Box sx={{ p: 1 }}>
@@ -241,14 +258,22 @@ const Header = ({
             <IconBaocun sx={{ fontSize: 12 }} />
             {showSaveTip ? (
               '已保存'
-            ) : nodeDetail?.updated_at ? (
-              dayjs(nodeDetail.updated_at).format('YYYY-MM-DD HH:mm:ss')
+            ) : detail.updated_at || nodeDetail?.updated_at ? (
+              dayjs(detail.updated_at || nodeDetail?.updated_at).format(
+                'YYYY-MM-DD HH:mm:ss',
+              )
             ) : (
               <Skeleton variant='text' width={100} height={24} />
             )}
           </Stack>
         </Stack>
         <Stack direction={'row'} gap={1}>
+          {!readOnlyUser && (
+            <EditorCollaboration
+              status={collabStatus}
+              disabledReason={collabDisabledReason}
+            />
+          )}
           {!readOnlyUser && (
             <Cascader
               list={[
@@ -286,6 +311,24 @@ const Header = ({
                     window.open(
                       `${wikiUrlRef.current}/node/${detail.id}`,
                       '_blank',
+                    );
+                  },
+                },
+                {
+                  key: 'convert_content_type',
+                  textSx: { flex: 1 },
+                  label: (
+                    <StyledMenuSelect>
+                      转为
+                      {detail.meta?.content_type === 'md'
+                        ? '富文本'
+                        : 'Markdown'}
+                    </StyledMenuSelect>
+                  ),
+                  onClick: () => {
+                    if (readOnlyUser) return;
+                    handleConvertContentType?.(
+                      detail.meta?.content_type === 'md' ? 'html' : 'md',
                     );
                   },
                 },

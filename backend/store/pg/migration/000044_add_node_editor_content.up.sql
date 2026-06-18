@@ -1,0 +1,3 @@
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS editor_content jsonb;
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS editor_format text NOT NULL DEFAULT '';
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS editor_version integer NOT NULL DEFAULT 0;

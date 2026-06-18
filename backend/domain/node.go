@@ -37,26 +37,51 @@ const (
 	ContentTypeHTML string = "html"
 )
 
+type JSONB map[string]any
+
+func (d JSONB) Value() (driver.Value, error) {
+	if d == nil {
+		return nil, nil
+	}
+	return json.Marshal(d)
+}
+
+func (d *JSONB) Scan(value any) error {
+	if value == nil {
+		*d = nil
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New(fmt.Sprint("invalid jsonb type:", value))
+	}
+	return json.Unmarshal(bytes, d)
+}
+
 // table: nodes
 type Node struct {
-	ID          string          `json:"id" gorm:"primaryKey"`
-	KBID        string          `json:"kb_id" gorm:"index"`
-	NavId       string          `json:"nav_id"`
-	Type        NodeType        `json:"type"`
-	Status      NodeStatus      `json:"status"`
-	RagInfo     RagInfo         `json:"rag_info" gorm:"type:jsonb"`
-	Name        string          `json:"name"`
-	Content     string          `json:"content"`
-	Meta        NodeMeta        `json:"meta" gorm:"type:jsonb"` // summary
-	ParentID    string          `json:"parent_id"`
-	Position    float64         `json:"position"`
-	DocID       string          `json:"doc_id"` // DEPRECATED: for rag service
-	CreatorId   string          `json:"creator_id"`
-	EditorId    string          `json:"editor_id"`
-	EditTime    time.Time       `json:"edit_time"`
-	Permissions NodePermissions `json:"permissions" gorm:"type:jsonb"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID            string          `json:"id" gorm:"primaryKey"`
+	KBID          string          `json:"kb_id" gorm:"index"`
+	NavId         string          `json:"nav_id"`
+	Type          NodeType        `json:"type"`
+	Status        NodeStatus      `json:"status"`
+	RagInfo       RagInfo         `json:"rag_info" gorm:"type:jsonb"`
+	Name          string          `json:"name"`
+	Content       string          `json:"content"`
+	EditorContent JSONB           `json:"editor_content" gorm:"type:jsonb"`
+	EditorBlocks  JSONB           `json:"editor_blocks" gorm:"type:jsonb"`
+	EditorFormat  string          `json:"editor_format"`
+	EditorVersion int             `json:"editor_version"`
+	Meta          NodeMeta        `json:"meta" gorm:"type:jsonb"` // summary
+	ParentID      string          `json:"parent_id"`
+	Position      float64         `json:"position"`
+	DocID         string          `json:"doc_id"` // DEPRECATED: for rag service
+	CreatorId     string          `json:"creator_id"`
+	EditorId      string          `json:"editor_id"`
+	EditTime      time.Time       `json:"edit_time"`
+	Permissions   NodePermissions `json:"permissions" gorm:"type:jsonb"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
 }
 
 func (Node) TableName() string {
@@ -82,17 +107,17 @@ func (d *RagInfo) Scan(value any) error {
 }
 
 type NodePermissions struct {
-	Answerable            consts.NodeAccessPerm `json:"answerable"`                        // 兼容旧字段，不再单独作为权限入口
-	Visitable             consts.NodeAccessPerm `json:"visitable"`                         // 兼容旧字段，不再单独作为权限入口
-	Visible               consts.NodeAccessPerm `json:"visible"`                           // 兼容旧字段，不再单独作为权限入口
-	ScopeType             string                `json:"scope_type,omitempty"`              // public / department
-	Inherit               *bool                 `json:"inherit,omitempty"`                 // 目录默认继承父级，可显式覆盖
-	MinPermissionLevelID  string                `json:"min_permission_level_id,omitempty"`
-	MinPermissionLevelRank int                  `json:"min_permission_level_rank,omitempty"`
-	AllowedDepartmentIDs  []string              `json:"allowed_department_ids,omitempty"`
-	AllowedUserIDs        []string              `json:"allowed_user_ids,omitempty"`
-	DeniedDepartmentIDs   []string              `json:"denied_department_ids,omitempty"`
-	DeniedUserIDs         []string              `json:"denied_user_ids,omitempty"`
+	Answerable             consts.NodeAccessPerm `json:"answerable"`           // 兼容旧字段，不再单独作为权限入口
+	Visitable              consts.NodeAccessPerm `json:"visitable"`            // 兼容旧字段，不再单独作为权限入口
+	Visible                consts.NodeAccessPerm `json:"visible"`              // 兼容旧字段，不再单独作为权限入口
+	ScopeType              string                `json:"scope_type,omitempty"` // public / department
+	Inherit                *bool                 `json:"inherit,omitempty"`    // 目录默认继承父级，可显式覆盖
+	MinPermissionLevelID   string                `json:"min_permission_level_id,omitempty"`
+	MinPermissionLevelRank int                   `json:"min_permission_level_rank,omitempty"`
+	AllowedDepartmentIDs   []string              `json:"allowed_department_ids,omitempty"`
+	AllowedUserIDs         []string              `json:"allowed_user_ids,omitempty"`
+	DeniedDepartmentIDs    []string              `json:"denied_department_ids,omitempty"`
+	DeniedUserIDs          []string              `json:"denied_user_ids,omitempty"`
 }
 
 const (
@@ -161,16 +186,20 @@ func (d *NodeMeta) Scan(value any) error {
 }
 
 type CreateNodeReq struct {
-	KBID        string   `json:"kb_id" validate:"required"`
-	NavId       string   `json:"nav_id" validate:"required"`
-	ParentID    string   `json:"parent_id"`
-	Type        NodeType `json:"type" validate:"required,oneof=1 2"`
-	Name        string   `json:"name" validate:"required"`
-	Content     string   `json:"content"`
-	Emoji       string   `json:"emoji"`
-	Summary     *string  `json:"summary"`
-	ContentType *string  `json:"content_type"`
-	Position    *float64 `json:"position"`
+	KBID          string   `json:"kb_id" validate:"required"`
+	NavId         string   `json:"nav_id" validate:"required"`
+	ParentID      string   `json:"parent_id"`
+	Type          NodeType `json:"type" validate:"required,oneof=1 2"`
+	Name          string   `json:"name" validate:"required"`
+	Content       string   `json:"content"`
+	EditorContent JSONB    `json:"editor_content"`
+	EditorBlocks  JSONB    `json:"editor_blocks"`
+	EditorFormat  string   `json:"editor_format"`
+	EditorVersion int      `json:"editor_version"`
+	Emoji         string   `json:"emoji"`
+	Summary       *string  `json:"summary"`
+	ContentType   *string  `json:"content_type"`
+	Position      *float64 `json:"position"`
 }
 
 type GetNodeListReq struct {
@@ -260,15 +289,19 @@ type NodeActionReq struct {
 }
 
 type UpdateNodeReq struct {
-	ID          string   `json:"id" validate:"required"`
-	KBID        string   `json:"kb_id" validate:"required"`
-	Name        *string  `json:"name"`
-	Content     *string  `json:"content"`
-	Emoji       *string  `json:"emoji"`
-	Summary     *string  `json:"summary"`
-	Position    *float64 `json:"position"`
-	ContentType *string  `json:"content_type"`
-	NavId       *string  `json:"nav_id"`
+	ID            string   `json:"id" validate:"required"`
+	KBID          string   `json:"kb_id" validate:"required"`
+	Name          *string  `json:"name"`
+	Content       *string  `json:"content"`
+	EditorContent *JSONB   `json:"editor_content"`
+	EditorBlocks  *JSONB   `json:"editor_blocks"`
+	EditorFormat  *string  `json:"editor_format"`
+	EditorVersion *int     `json:"editor_version"`
+	Emoji         *string  `json:"emoji"`
+	Summary       *string  `json:"summary"`
+	Position      *float64 `json:"position"`
+	ContentType   *string  `json:"content_type"`
+	NavId         *string  `json:"nav_id"`
 }
 
 type ShareNodeListItemResp struct {
@@ -335,6 +368,11 @@ type NodeRelease struct {
 	Meta    NodeMeta `json:"meta" gorm:"type:jsonb"`
 	Content string   `json:"content"`
 
+	EditorContent JSONB  `json:"editor_content" gorm:"type:jsonb"`
+	EditorBlocks  JSONB  `json:"editor_blocks" gorm:"type:jsonb"`
+	EditorFormat  string `json:"editor_format"`
+	EditorVersion int    `json:"editor_version"`
+
 	Position float64 `json:"position"`
 	ParentID string  `json:"parent_id"`
 
@@ -348,21 +386,25 @@ func (NodeRelease) TableName() string {
 
 // table: node_release_backup
 type NodeReleaseBackup struct {
-	ID          string    `json:"id" gorm:"primaryKey"`
-	KBID        string    `json:"kb_id" gorm:"index"`
-	PublisherId string    `json:"publisher_id"`
-	EditorId    string    `json:"editor_id"`
-	NodeID      string    `json:"node_id" gorm:"index"`
-	DocID       string    `json:"doc_id"`
-	Type        NodeType  `json:"type"`
-	Name        string    `json:"name"`
-	Meta        NodeMeta  `json:"meta" gorm:"type:jsonb"`
-	Content     string    `json:"content"`
-	Position    float64   `json:"position"`
-	ParentID    string    `json:"parent_id"`
-	DeletedAt   time.Time `json:"deleted_at"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            string    `json:"id" gorm:"primaryKey"`
+	KBID          string    `json:"kb_id" gorm:"index"`
+	PublisherId   string    `json:"publisher_id"`
+	EditorId      string    `json:"editor_id"`
+	NodeID        string    `json:"node_id" gorm:"index"`
+	DocID         string    `json:"doc_id"`
+	Type          NodeType  `json:"type"`
+	Name          string    `json:"name"`
+	Meta          NodeMeta  `json:"meta" gorm:"type:jsonb"`
+	Content       string    `json:"content"`
+	EditorContent JSONB     `json:"editor_content" gorm:"type:jsonb"`
+	EditorBlocks  JSONB     `json:"editor_blocks" gorm:"type:jsonb"`
+	EditorFormat  string    `json:"editor_format"`
+	EditorVersion int       `json:"editor_version"`
+	Position      float64   `json:"position"`
+	ParentID      string    `json:"parent_id"`
+	DeletedAt     time.Time `json:"deleted_at"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func (NodeReleaseBackup) TableName() string {

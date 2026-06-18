@@ -56,3 +56,4 @@ backend/migration/migration
 
 .gocache/
 .pnpm-store/
+web/packages/collab-service/data/

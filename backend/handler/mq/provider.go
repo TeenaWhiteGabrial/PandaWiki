@@ -25,6 +25,7 @@ var ProviderSet = wire.NewSet(
 	s3.ProviderSet,
 
 	usecase.NewLLMUsecase,
+	usecase.NewEnterpriseUsecase,
 	usecase.NewStatUseCase,
 	usecase.NewNodeUsecase,
 	usecase.NewModelUsecase,

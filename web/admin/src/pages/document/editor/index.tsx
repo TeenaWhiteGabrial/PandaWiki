@@ -19,13 +19,22 @@ import { Box, Drawer, Stack, useMediaQuery } from '@mui/material';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Catalog from './Catalog';
+import { CollabStatus } from '../component/EditorCollaboration';
 
 export interface WrapContext {
   catalogOpen: boolean;
   setCatalogOpen: (open: boolean) => void;
   nodeDetail: V1NodeDetailResp | null;
   setNodeDetail: (detail: V1NodeDetailResp) => void;
-  onSave: (content: string) => void;
+  onSave: (
+    content: string,
+    editorState?: {
+      editor_blocks?: Record<string, unknown>;
+      editor_content?: Record<string, unknown>;
+      editor_format?: string;
+      editor_version?: number;
+    },
+  ) => void;
   docWidth: string;
   catalogData: ITreeItem[];
   groups: GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[];
@@ -34,6 +43,10 @@ export interface WrapContext {
     GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
   >;
   saveCurrentDocRef: React.MutableRefObject<(() => Promise<void>) | null>;
+  collabStatus: CollabStatus;
+  setCollabStatus: (status: CollabStatus) => void;
+  collabDisabledReason: string;
+  setCollabDisabledReason: (reason: string) => void;
 }
 
 const DocEditor = () => {
@@ -51,6 +64,8 @@ const DocEditor = () => {
 
   const [docWidth, setDocWidth] = useState<string>('full');
   const saveCurrentDocRef = useRef<(() => Promise<void>) | null>(null);
+  const [collabStatus, setCollabStatus] = useState<CollabStatus>('idle');
+  const [collabDisabledReason, setCollabDisabledReason] = useState('');
 
   const catalogData = useMemo(() => {
     const curGroup = groups.find(g => g.nav_id === nav_id);
@@ -106,7 +121,15 @@ const DocEditor = () => {
     }
   }, [dispatch, kb_id]);
 
-  const onSave = async (content: string) => {
+  const onSave = async (
+    content: string,
+    editorState?: {
+      editor_blocks?: Record<string, unknown>;
+      editor_content?: Record<string, unknown>;
+      editor_format?: string;
+      editor_version?: number;
+    },
+  ) => {
     if (!kb_id || !nodeDetail.id) return;
     try {
       await putApiV1NodeDetail({
@@ -114,6 +137,14 @@ const DocEditor = () => {
         id: nodeDetail.id,
         nav_id: nodeDetail.nav_id || '',
         content,
+        editor_format: editorState?.editor_format || 'legacy-string',
+        editor_version: editorState?.editor_version || 1,
+        ...(editorState?.editor_content
+          ? { editor_content: editorState.editor_content }
+          : {}),
+        ...(editorState?.editor_blocks
+          ? { editor_blocks: editorState.editor_blocks }
+          : {}),
         name: nodeDetail.name || '',
       });
       message.success('保存成功');
@@ -193,6 +224,10 @@ const DocEditor = () => {
             nav_id,
             refreshCatalog,
             saveCurrentDocRef,
+            collabStatus,
+            setCollabStatus,
+            collabDisabledReason,
+            setCollabDisabledReason,
           }}
         />
       </Box>

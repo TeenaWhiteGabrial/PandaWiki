@@ -173,11 +173,11 @@ func (u *ModelUsecase) validateAutoProviderConfig(ctx context.Context, config *d
 			checkType = domain.ModelTypeChat
 		}
 		check, err := u.modelkit.CheckModel(ctx, &modelkitDomain.CheckModelReq{
-			Provider:   string(config.Provider),
-			Model:      modelName,
-			BaseURL:    config.BaseURL,
-			APIKey:     config.APIKey,
-			Type:       string(checkType),
+			Provider: string(config.Provider),
+			Model:    modelName,
+			BaseURL:  config.BaseURL,
+			APIKey:   config.APIKey,
+			Type:     string(checkType),
 		})
 		if err != nil {
 			return fmt.Errorf("auto provider %s model %s check failed: %w", config.Provider, modelName, err)
@@ -279,12 +279,12 @@ func (u *ModelUsecase) GetChatModel(ctx context.Context) (*domain.Model, error) 
 		activeProvider, providerErr := u.getAutoModeProvider(modelModeSetting)
 		if providerErr == nil {
 			model = &domain.Model{
-				Model:      activeProvider.Models.Chat,
-				Type:       domain.ModelTypeChat,
-				IsActive:   true,
-				BaseURL:    activeProvider.BaseURL,
-				APIKey:     activeProvider.APIKey,
-				Provider:   activeProvider.Provider,
+				Model:    activeProvider.Models.Chat,
+				Type:     domain.ModelTypeChat,
+				IsActive: true,
+				BaseURL:  activeProvider.BaseURL,
+				APIKey:   activeProvider.APIKey,
+				Provider: activeProvider.Provider,
 			}
 			return model, nil
 		}
@@ -473,12 +473,12 @@ func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, m
 				return fmt.Errorf("auto mode %s model is required", modelType)
 			}
 			model = &domain.Model{
-				Model:      modelName,
-				Type:       modelType,
-				IsActive:   true,
-				BaseURL:    activeProvider.BaseURL,
-				APIKey:     activeProvider.APIKey,
-				Provider:   activeProvider.Provider,
+				Model:    modelName,
+				Type:     modelType,
+				IsActive: true,
+				BaseURL:  activeProvider.BaseURL,
+				APIKey:   activeProvider.APIKey,
+				Provider: activeProvider.Provider,
 			}
 		}
 

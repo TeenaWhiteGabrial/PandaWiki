@@ -11,6 +11,10 @@ interface ToolbarProps {
 }
 
 const Toolbar = ({ editorRef, handleAiGenerate }: ToolbarProps) => {
+  if (!editorRef.editor) {
+    return null;
+  }
+
   return (
     <Box
       sx={{

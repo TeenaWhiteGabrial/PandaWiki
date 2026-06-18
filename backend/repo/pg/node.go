@@ -81,21 +81,25 @@ func (r *NodeRepository) Create(ctx context.Context, req *domain.CreateNodeReq, 
 		}
 
 		node := &domain.Node{
-			ID:        nodeIDStr,
-			KBID:      req.KBID,
-			NavId:     req.NavId,
-			Name:      req.Name,
-			Content:   req.Content,
-			Meta:      meta,
-			Type:      req.Type,
-			ParentID:  req.ParentID,
-			Position:  newPos,
-			Status:    domain.NodeStatusUnreleased,
-			CreatorId: userId,
-			EditorId:  userId,
-			CreatedAt: now,
-			UpdatedAt: now,
-			EditTime:  now,
+			ID:            nodeIDStr,
+			KBID:          req.KBID,
+			NavId:         req.NavId,
+			Name:          req.Name,
+			Content:       req.Content,
+			EditorContent: req.EditorContent,
+			EditorBlocks:  req.EditorBlocks,
+			EditorFormat:  req.EditorFormat,
+			EditorVersion: req.EditorVersion,
+			Meta:          meta,
+			Type:          req.Type,
+			ParentID:      req.ParentID,
+			Position:      newPos,
+			Status:        domain.NodeStatusUnreleased,
+			CreatorId:     userId,
+			EditorId:      userId,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+			EditTime:      now,
 			RagInfo: domain.RagInfo{
 				Status:  consts.NodeRagStatusPending,
 				Message: "",
@@ -206,6 +210,26 @@ func (r *NodeRepository) UpdateNodeContent(ctx context.Context, req *domain.Upda
 			updateStatus = true
 		}
 
+		if req.EditorContent != nil {
+			updateMap["editor_content"] = *req.EditorContent
+			updateStatus = true
+		}
+
+		if req.EditorBlocks != nil {
+			updateMap["editor_blocks"] = *req.EditorBlocks
+			updateStatus = true
+		}
+
+		if req.EditorFormat != nil && *req.EditorFormat != currentNode.EditorFormat {
+			updateMap["editor_format"] = *req.EditorFormat
+			updateStatus = true
+		}
+
+		if req.EditorVersion != nil && *req.EditorVersion != currentNode.EditorVersion {
+			updateMap["editor_version"] = *req.EditorVersion
+			updateStatus = true
+		}
+
 		if req.NavId != nil && *req.NavId != currentNode.NavId {
 			updateMap["nav_id"] = *req.NavId
 			updateStatus = true
@@ -242,13 +266,10 @@ func (r *NodeRepository) UpdateNodeContent(ctx context.Context, req *domain.Upda
 			}
 
 			// Compare and update ContentType
-			if currentNode.Meta.ContentType == "" { // can only modify content_type if it was empty before
-				if req.ContentType != nil && *req.ContentType != currentNode.Meta.ContentType {
-					// Second jsonb_set: jsonb_set(previous_expr, '{content_type}', to_jsonb(?::text))
-					metaExpr = "jsonb_set(" + metaExpr + ", '{content_type}', to_jsonb(?::text))"
-					args = append(args, *req.ContentType) // Second parameter for content_type
-					metaUpdated = true
-				}
+			if req.ContentType != nil && *req.ContentType != currentNode.Meta.ContentType {
+				metaExpr = "jsonb_set(" + metaExpr + ", '{content_type}', to_jsonb(?::text))"
+				args = append(args, *req.ContentType)
+				metaUpdated = true
 			}
 
 			if metaUpdated {
@@ -351,21 +372,25 @@ func (r *NodeRepository) backupNodeReleasesTx(tx *gorm.DB, nodeIDs []string) err
 	backups := make([]*domain.NodeReleaseBackup, len(nodeReleases))
 	for i, nr := range nodeReleases {
 		backups[i] = &domain.NodeReleaseBackup{
-			ID:          nr.ID,
-			KBID:        nr.KBID,
-			PublisherId: nr.PublisherId,
-			EditorId:    nr.EditorId,
-			NodeID:      nr.NodeID,
-			DocID:       nr.DocID,
-			Type:        nr.Type,
-			Name:        nr.Name,
-			Meta:        nr.Meta,
-			Content:     nr.Content,
-			Position:    nr.Position,
-			ParentID:    nr.ParentID,
-			DeletedAt:   now,
-			CreatedAt:   nr.CreatedAt,
-			UpdatedAt:   nr.UpdatedAt,
+			ID:            nr.ID,
+			KBID:          nr.KBID,
+			PublisherId:   nr.PublisherId,
+			EditorId:      nr.EditorId,
+			NodeID:        nr.NodeID,
+			DocID:         nr.DocID,
+			Type:          nr.Type,
+			Name:          nr.Name,
+			Meta:          nr.Meta,
+			Content:       nr.Content,
+			EditorContent: nr.EditorContent,
+			EditorBlocks:  nr.EditorBlocks,
+			EditorFormat:  nr.EditorFormat,
+			EditorVersion: nr.EditorVersion,
+			Position:      nr.Position,
+			ParentID:      nr.ParentID,
+			DeletedAt:     now,
+			CreatedAt:     nr.CreatedAt,
+			UpdatedAt:     nr.UpdatedAt,
 		}
 	}
 	return tx.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(&backups, 500).Error
@@ -567,6 +592,10 @@ func (r *NodeRepository) GetNodeReleaseDetail(ctx context.Context, kbID, release
 			node_releases.node_id,
 			node_releases.name,
 			node_releases.content,
+			node_releases.editor_content,
+			node_releases.editor_blocks,
+			node_releases.editor_format,
+			node_releases.editor_version,
 			node_releases.meta,
 			node_releases.publisher_id,
 			publisher.account as publisher_account,
@@ -1026,19 +1055,23 @@ func (r *NodeRepository) CreateNodeReleases(ctx context.Context, kbID, userId st
 		for i, updatedNode := range updatedNodes {
 			// create node release
 			nodeRelease := &domain.NodeRelease{
-				ID:          uuid.New().String(),
-				KBID:        kbID,
-				PublisherId: userId,
-				EditorId:    updatedNode.EditorId,
-				NodeID:      updatedNode.ID,
-				Type:        updatedNode.Type,
-				Name:        updatedNode.Name,
-				Meta:        updatedNode.Meta,
-				Content:     updatedNode.Content,
-				ParentID:    updatedNode.ParentID,
-				Position:    updatedNode.Position,
-				CreatedAt:   updatedNode.CreatedAt,
-				UpdatedAt:   time.Now(),
+				ID:            uuid.New().String(),
+				KBID:          kbID,
+				PublisherId:   userId,
+				EditorId:      updatedNode.EditorId,
+				NodeID:        updatedNode.ID,
+				Type:          updatedNode.Type,
+				Name:          updatedNode.Name,
+				Meta:          updatedNode.Meta,
+				Content:       updatedNode.Content,
+				EditorContent: updatedNode.EditorContent,
+				EditorBlocks:  updatedNode.EditorBlocks,
+				EditorFormat:  updatedNode.EditorFormat,
+				EditorVersion: updatedNode.EditorVersion,
+				ParentID:      updatedNode.ParentID,
+				Position:      updatedNode.Position,
+				CreatedAt:     updatedNode.CreatedAt,
+				UpdatedAt:     time.Now(),
 			}
 			nodeReleases[i] = nodeRelease
 			releaseIDs = append(releaseIDs, nodeRelease.ID)

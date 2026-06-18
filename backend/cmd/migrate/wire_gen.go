@@ -49,26 +49,26 @@ func createApp() (*App, error) {
 	}
 	knowledgeBaseRepository := pg2.NewKnowledgeBaseRepository(db, configConfig, logger, ragService)
 	conversationRepository := pg2.NewConversationRepository(db, logger)
-	modelRepository := pg2.NewModelRepository(db, logger)
-	promptRepo := pg2.NewPromptRepo(db, logger)
-	minioClient, err := s3.NewMinioClient(configConfig)
-	if err != nil {
-		return nil, err
-	}
+	enterpriseRepository := pg2.NewEnterpriseRepository(db, logger)
 	cacheCache, err := cache.NewCache(configConfig)
 	if err != nil {
 		return nil, err
 	}
 	authRepo := pg2.NewAuthRepo(db, logger, cacheCache)
-	enterpriseRepository := pg2.NewEnterpriseRepository(db, logger)
 	enterpriseUsecase, err := usecase.NewEnterpriseUsecase(enterpriseRepository, authRepo, nodeRepository, navRepository, logger)
 	if err != nil {
 		return nil, err
 	}
+	modelRepository := pg2.NewModelRepository(db, logger)
+	promptRepo := pg2.NewPromptRepo(db, logger)
 	llmUsecase := usecase.NewLLMUsecase(configConfig, ragService, conversationRepository, knowledgeBaseRepository, nodeRepository, enterpriseUsecase, modelRepository, promptRepo, logger)
+	minioClient, err := s3.NewMinioClient(configConfig)
+	if err != nil {
+		return nil, err
+	}
 	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
 	modelUsecase := usecase.NewModelUsecase(modelRepository, nodeRepository, ragRepository, ragService, logger, configConfig, knowledgeBaseRepository, systemSettingRepo)
-	nodeUsecase := usecase.NewNodeUsecase(nodeRepository, navRepository, appRepository, ragRepository, userRepository, knowledgeBaseRepository, llmUsecase, ragService, logger, minioClient, modelRepository, authRepo, modelUsecase, enterpriseUsecase)
+	nodeUsecase := usecase.NewNodeUsecase(nodeRepository, navRepository, appRepository, ragRepository, userRepository, knowledgeBaseRepository, llmUsecase, ragService, logger, minioClient, modelRepository, authRepo, modelUsecase, enterpriseUsecase, systemSettingRepo, configConfig)
 	kbRepo := cache2.NewKBRepo(cacheCache)
 	knowledgeBaseUsecase, err := usecase.NewKnowledgeBaseUsecase(knowledgeBaseRepository, nodeRepository, navRepository, ragRepository, userRepository, ragService, kbRepo, logger, configConfig)
 	if err != nil {

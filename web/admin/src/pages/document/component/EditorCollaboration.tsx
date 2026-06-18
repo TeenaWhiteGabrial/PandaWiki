@@ -1,59 +1,99 @@
-// import { V1NodeDetailResp } from '@/request/types';
-// import { useAppSelector } from '@/store';
-// import { Editor, useTiptap } from '@ctzhian/tiptap';
-// import Collaboration from '@tiptap/extension-collaboration';
-// import CollaborationCaret from '@tiptap/extension-collaboration-caret';
-// import { useEffect, useMemo } from 'react';
-// import { useParams } from 'react-router-dom';
-// import { WebsocketProvider } from 'y-websocket';
-// import * as Y from 'yjs';
+import { Box, Stack } from '@mui/material';
+import { useEffect, useRef, useState } from 'react';
 
-// const EditorCollaboration = ({ detail }: { detail: V1NodeDetailResp }) => {
-//   const { id = '' } = useParams();
-//   const { user } = useAppSelector(state => state.config);
+export type CollabStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'disabled';
 
-//   const { ydoc, provider } = useMemo(() => {
-//     const doc = new Y.Doc();
-//     const wsProvider = new WebsocketProvider('ws://localhost:1234', id, doc);
-//     return { ydoc: doc, provider: wsProvider };
-//   }, [id, detail?.id]);
+interface EditorCollaborationProps {
+  status: CollabStatus;
+  disabledReason?: string;
+}
 
-//   const editorRef = useTiptap({
-//     editable: true,
-//     content: detail.content || '',
-//     exclude: ['invisibleCharacters', 'youtube', 'mention', 'undoRedo'],
-//     extensions: [
-//       Collaboration.configure({
-//         document: ydoc,
-//       }),
-//       CollaborationCaret.configure({
-//         provider,
-//         user: {
-//           id: user.id,
-//           name: user.account,
-//           color: 'red',
-//         },
-//       }),
-//     ],
-//     immediatelyRender: true,
-//   });
+const statusText: Record<Exclude<CollabStatus, 'idle'>, string> = {
+  connecting: '协同连接中',
+  connected: '协同已连接',
+  disconnected: '协同未连接',
+  disabled: '协同已暂停',
+};
 
-//   useEffect(() => {
-//     return () => {
-//       provider.disconnect();
-//       ydoc.destroy();
-//     };
-//   }, [provider, ydoc]);
+const statusColor: Record<Exclude<CollabStatus, 'idle'>, string> = {
+  connecting: 'warning.main',
+  connected: 'success.main',
+  disconnected: 'text.disabled',
+  disabled: 'text.disabled',
+};
 
-//   useEffect(() => {
-//     return () => {
-//       if (editorRef?.editor) {
-//         editorRef.editor.destroy();
-//       }
-//     };
-//   }, [editorRef]);
+const EditorCollaboration = ({
+  status,
+  disabledReason,
+}: EditorCollaborationProps) => {
+  const [displayStatus, setDisplayStatus] = useState<CollabStatus>(status);
+  const connectedAtRef = useRef<number | null>(null);
+  const timerRef = useRef<number | null>(null);
 
-//   return <Editor editor={editorRef.editor} />;
-// };
+  useEffect(() => {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
 
-// export default EditorCollaboration;
+    if (status === 'connected') {
+      connectedAtRef.current = Date.now();
+      setDisplayStatus('connected');
+      return;
+    }
+
+    if (
+      status === 'connecting' &&
+      displayStatus === 'connected' &&
+      connectedAtRef.current
+    ) {
+      const elapsed = Date.now() - connectedAtRef.current;
+      if (elapsed < 2000) {
+        timerRef.current = window.setTimeout(() => {
+          setDisplayStatus('connecting');
+          timerRef.current = null;
+        }, 2000 - elapsed);
+        return;
+      }
+    }
+
+    setDisplayStatus(status);
+
+    return () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [displayStatus, status]);
+
+  if (displayStatus === 'idle') return null;
+
+  const color = statusColor[displayStatus];
+
+  return (
+    <Stack
+      direction='row'
+      alignItems='center'
+      gap={0.75}
+      sx={{ fontSize: 12, color }}
+    >
+      <Box
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          bgcolor: color,
+        }}
+      />
+      <Box title={disabledReason}>{statusText[displayStatus]}</Box>
+    </Stack>
+  );
+};
+
+export default EditorCollaboration;

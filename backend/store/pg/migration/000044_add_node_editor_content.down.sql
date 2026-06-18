@@ -1,0 +1,3 @@
+ALTER TABLE nodes DROP COLUMN IF EXISTS editor_version;
+ALTER TABLE nodes DROP COLUMN IF EXISTS editor_format;
+ALTER TABLE nodes DROP COLUMN IF EXISTS editor_content;

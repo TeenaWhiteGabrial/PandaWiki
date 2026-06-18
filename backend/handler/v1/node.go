@@ -44,6 +44,7 @@ func NewNodeHandler(
 	readGroup.GET("/list/group/nav", h.NodeListGroupNav)
 	readGroup.GET("/stats", h.NodeStats)
 	readGroup.GET("/detail", h.GetNodeDetail)
+	readGroup.GET("/collab", h.GetNodeCollab)
 	readGroup.GET("/recommend_nodes", h.RecommendNodes)
 	readGroup.GET("/permission", h.NodePermission)
 	readGroup.GET("/release/list", h.GetNodeReleaseList)
@@ -210,6 +211,33 @@ func (h *NodeHandler) GetNodeDetail(c echo.Context) error {
 		return h.NewResponseWithError(c, "get node detail failed", err)
 	}
 	return h.NewResponseWithData(c, node)
+}
+
+// GetNodeCollab
+//
+//	@Summary		Get Node Collaboration Metadata
+//	@Description	Get node collaboration metadata for draft editing
+//	@Tags			node
+//	@Accept			json
+//	@Produce		json
+//	@Security		bearerAuth
+//	@Param			param	query		v1.GetNodeCollabReq	true	"node id"
+//	@Success		200		{object}	domain.PWResponse{data=v1.NodeCollabResp}
+//	@Router			/api/v1/node/collab [get]
+func (h *NodeHandler) GetNodeCollab(c echo.Context) error {
+	var req v1.GetNodeCollabReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid request", err)
+	}
+	if err := c.Validate(&req); err != nil {
+		return h.NewResponseWithError(c, "validate request failed", err)
+	}
+
+	resp, err := h.usecase.GetNodeCollab(c.Request().Context(), req.ID, req.KbId)
+	if err != nil {
+		return h.NewResponseWithError(c, "get node collab failed", err)
+	}
+	return h.NewResponseWithData(c, resp)
 }
 
 // GetNodeReleaseList

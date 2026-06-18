@@ -81,20 +81,20 @@ func createApp() (*App, error) {
 	shareAuthMiddleware := middleware.NewShareAuthMiddleware(configConfig, logger, knowledgeBaseUsecase, apiTokenRepo)
 	captchaCaptcha := captcha.NewCaptcha()
 	baseHandler := handler.NewBaseHandler(echo, logger, configConfig, authMiddleware, shareAuthMiddleware, captchaCaptcha)
-	conversationRepository := pg2.NewConversationRepository(db, logger)
-	modelRepository := pg2.NewModelRepository(db, logger)
-	promptRepo := pg2.NewPromptRepo(db, logger)
-	authRepo := pg2.NewAuthRepo(db, logger, cacheCache)
 	enterpriseRepository := pg2.NewEnterpriseRepository(db, logger)
 	userUsecase, err := usecase.NewUserUsecase(userRepository, enterpriseRepository, logger, configConfig)
 	if err != nil {
 		return nil, err
 	}
 	userHandler := v1.NewUserHandler(echo, baseHandler, logger, userUsecase, authMiddleware, configConfig, cacheCache)
+	conversationRepository := pg2.NewConversationRepository(db, logger)
+	authRepo := pg2.NewAuthRepo(db, logger, cacheCache)
 	enterpriseUsecase, err := usecase.NewEnterpriseUsecase(enterpriseRepository, authRepo, nodeRepository, navRepository, logger)
 	if err != nil {
 		return nil, err
 	}
+	modelRepository := pg2.NewModelRepository(db, logger)
+	promptRepo := pg2.NewPromptRepo(db, logger)
 	llmUsecase := usecase.NewLLMUsecase(configConfig, ragService, conversationRepository, knowledgeBaseRepository, nodeRepository, enterpriseUsecase, modelRepository, promptRepo, logger)
 	knowledgeBaseHandler := v1.NewKnowledgeBaseHandler(baseHandler, echo, knowledgeBaseUsecase, llmUsecase, authMiddleware, logger)
 	appRepository := pg2.NewAppRepository(db, logger)
@@ -104,7 +104,7 @@ func createApp() (*App, error) {
 	}
 	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
 	modelUsecase := usecase.NewModelUsecase(modelRepository, nodeRepository, ragRepository, ragService, logger, configConfig, knowledgeBaseRepository, systemSettingRepo)
-	nodeUsecase := usecase.NewNodeUsecase(nodeRepository, navRepository, appRepository, ragRepository, userRepository, knowledgeBaseRepository, llmUsecase, ragService, logger, minioClient, modelRepository, authRepo, modelUsecase, enterpriseUsecase)
+	nodeUsecase := usecase.NewNodeUsecase(nodeRepository, navRepository, appRepository, ragRepository, userRepository, knowledgeBaseRepository, llmUsecase, ragService, logger, minioClient, modelRepository, authRepo, modelUsecase, enterpriseUsecase, systemSettingRepo, configConfig)
 	nodeHandler := v1.NewNodeHandler(baseHandler, echo, nodeUsecase, authMiddleware, logger)
 	geoRepo := cache2.NewGeoCache(cacheCache, db, logger)
 	ipdbIPDB, err := ipdb.NewIPDB(configConfig, logger)
@@ -120,10 +120,8 @@ func createApp() (*App, error) {
 	}
 	appUsecase := usecase.NewAppUsecase(appRepository, authRepo, navRepository, nodeRepository, knowledgeBaseRepository, nodeUsecase, logger, configConfig, chatUsecase, cacheCache)
 	appHandler := v1.NewAppHandler(echo, baseHandler, logger, authMiddleware, appUsecase, modelUsecase, conversationUsecase, configConfig)
+	mcpRepository := pg2.NewMCPRepository(db, logger)
 	fileUsecase := usecase.NewFileUsecase(logger, minioClient, configConfig, systemSettingRepo)
-	fileHandler := v1.NewFileHandler(echo, baseHandler, logger, authMiddleware, minioClient, configConfig, fileUsecase)
-	modelHandler := v1.NewModelHandler(echo, baseHandler, logger, authMiddleware, modelUsecase, llmUsecase)
-	conversationHandler := v1.NewConversationHandler(echo, baseHandler, logger, authMiddleware, conversationUsecase)
 	mqConsumer, err := mq.NewMQConsumer(configConfig, logger)
 	if err != nil {
 		return nil, err
@@ -132,6 +130,13 @@ func createApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	mcpUsecase := usecase.NewMCPUsecase(nodeRepository, navRepository, mcpRepository, userUsecase, nodeUsecase, knowledgeBaseUsecase, enterpriseUsecase, fileUsecase, crawlerUsecase, logger)
+	mcpHandler := v1.NewMCPHandler(baseHandler, echo, mcpUsecase, authMiddleware, logger)
+	apiTokenUsecase := usecase.NewAPITokenUsecase(apiTokenRepo, knowledgeBaseUsecase, logger)
+	apiTokenHandler := v1.NewAPITokenHandler(baseHandler, echo, apiTokenUsecase, authMiddleware, logger)
+	fileHandler := v1.NewFileHandler(echo, baseHandler, logger, authMiddleware, minioClient, configConfig, fileUsecase)
+	modelHandler := v1.NewModelHandler(echo, baseHandler, logger, authMiddleware, modelUsecase, llmUsecase)
+	conversationHandler := v1.NewConversationHandler(echo, baseHandler, logger, authMiddleware, conversationUsecase)
 	crawlerHandler := v1.NewCrawlerHandler(echo, baseHandler, authMiddleware, logger, configConfig, crawlerUsecase, fileUsecase)
 	creationUsecase := usecase.NewCreationUsecase(logger, llmUsecase, modelUsecase)
 	creationHandler := v1.NewCreationHandler(echo, baseHandler, logger, creationUsecase)
@@ -152,17 +157,14 @@ func createApp() (*App, error) {
 	navUsecase := usecase.NewNavUsecase(navRepository, nodeRepository, ragRepository, enterpriseUsecase, logger)
 	navHandler := v1.NewNavHandler(baseHandler, echo, navUsecase, authMiddleware, logger)
 	enterpriseHandler := v1.NewEnterpriseHandler(echo, baseHandler, enterpriseUsecase, userUsecase, authMiddleware)
-	apiTokenUsecase := usecase.NewAPITokenUsecase(apiTokenRepo, knowledgeBaseUsecase, logger)
-	apiTokenHandler := v1.NewAPITokenHandler(baseHandler, echo, apiTokenUsecase, authMiddleware, logger)
-	mcpRepository := pg2.NewMCPRepository(db, logger)
-	mcpUsecase := usecase.NewMCPUsecase(nodeRepository, navRepository, mcpRepository, userUsecase, nodeUsecase, knowledgeBaseUsecase, enterpriseUsecase, fileUsecase, crawlerUsecase, logger)
-	mcpHandler := v1.NewMCPHandler(baseHandler, echo, mcpUsecase, authMiddleware, logger)
+	collabHandler := v1.NewCollabHandler(echo, baseHandler, logger, authMiddleware, nodeUsecase)
 	apiHandlers := &v1.APIHandlers{
 		UserHandler:          userHandler,
 		KnowledgeBaseHandler: knowledgeBaseHandler,
 		NodeHandler:          nodeHandler,
 		AppHandler:           appHandler,
 		MCPHandler:           mcpHandler,
+		APITokenHandler:      apiTokenHandler,
 		FileHandler:          fileHandler,
 		ModelHandler:         modelHandler,
 		ConversationHandler:  conversationHandler,
@@ -174,7 +176,7 @@ func createApp() (*App, error) {
 		AuthV1Handler:        authV1Handler,
 		NavHandler:           navHandler,
 		EnterpriseHandler:    enterpriseHandler,
-		APITokenHandler:      apiTokenHandler,
+		CollabHandler:        collabHandler,
 	}
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)

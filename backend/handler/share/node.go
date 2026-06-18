@@ -3,6 +3,7 @@ package share
 import (
 	"github.com/labstack/echo/v4"
 
+	shareV1 "github.com/chaitin/panda-wiki/api/share/v1"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
@@ -14,6 +15,8 @@ type ShareNodeHandler struct {
 	logger  *log.Logger
 	usecase *usecase.NodeUsecase
 }
+
+var _ shareV1.ShareNodeDetailResp
 
 func NewShareNodeHandler(
 	baseHandler *handler.BaseHandler,
@@ -71,7 +74,7 @@ func (h *ShareNodeHandler) ShareNodeList(c echo.Context) error {
 //	@Param			X-KB-ID	header		string	true	"kb id"
 //	@Param			id		query		string	true	"node id"
 //	@Param			format	query		string	true	"format"
-//	@Success		200		{object}	domain.Response{data=v1.ShareNodeDetailResp}
+//	@Success		200		{object}	domain.Response{data=shareV1.ShareNodeDetailResp}
 //	@Router			/share/v1/node/detail [get]
 func (h *ShareNodeHandler) GetNodeDetail(c echo.Context) error {
 	kbID := c.Request().Header.Get("X-KB-ID")

@@ -66,4 +66,3 @@ type EnterpriseAccessContext struct {
 	PermissionLevelID   string   `json:"permission_level_id"`
 	PermissionLevelRank int      `json:"permission_level_rank"`
 }
-

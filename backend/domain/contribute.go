@@ -49,9 +49,9 @@ type SubmitContributeResp struct {
 }
 
 type ContributeListReq struct {
-	KbID     string                  `json:"kb_id" query:"kb_id" validate:"required"`
-	AuthName string                  `json:"auth_name" query:"auth_name"`
-	NodeName string                  `json:"node_name" query:"node_name"`
+	KbID     string                   `json:"kb_id" query:"kb_id" validate:"required"`
+	AuthName string                   `json:"auth_name" query:"auth_name"`
+	NodeName string                   `json:"node_name" query:"node_name"`
 	Status   *consts.ContributeStatus `json:"status" query:"status"`
 	Pager
 }
@@ -88,9 +88,9 @@ func (d *ContributeNodeMeta) Scan(value any) error {
 }
 
 type OriginalContributeNodeInfo struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	Content string            `json:"content"`
+	ID      string             `json:"id"`
+	Name    string             `json:"name"`
+	Content string             `json:"content"`
 	Meta    ContributeNodeMeta `json:"meta"`
 }
 
@@ -121,22 +121,22 @@ type ContributeListResp struct {
 }
 
 type ContributeDetailResp struct {
-	ID           string                   `json:"id"`
-	AuthID       *int64                   `json:"auth_id"`
-	UserID       string                   `json:"user_id"`
-	AuthName     string                   `json:"auth_name"`
-	KBId         string                   `json:"kb_id"`
-	NodeID       string                   `json:"node_id"`
-	NodeName     string                   `json:"node_name"`
-	Status       consts.ContributeStatus  `json:"status"`
-	Type         consts.ContributeType    `json:"type"`
-	Name         string                   `json:"name"`
-	Content      string                   `json:"content"`
-	Reason       string                   `json:"reason"`
-	Meta         ContributeNodeMeta       `json:"meta"`
+	ID           string                      `json:"id"`
+	AuthID       *int64                      `json:"auth_id"`
+	UserID       string                      `json:"user_id"`
+	AuthName     string                      `json:"auth_name"`
+	KBId         string                      `json:"kb_id"`
+	NodeID       string                      `json:"node_id"`
+	NodeName     string                      `json:"node_name"`
+	Status       consts.ContributeStatus     `json:"status"`
+	Type         consts.ContributeType       `json:"type"`
+	Name         string                      `json:"name"`
+	Content      string                      `json:"content"`
+	Reason       string                      `json:"reason"`
+	Meta         ContributeNodeMeta          `json:"meta"`
 	OriginalNode *OriginalContributeNodeInfo `json:"original_node,omitempty"`
-	AuditUserID  string                   `json:"audit_user_id"`
-	CreatedAt    time.Time                `json:"created_at"`
-	UpdatedAt    time.Time                `json:"updated_at"`
-	AuditTime    *time.Time               `json:"audit_time"`
+	AuditUserID  string                      `json:"audit_user_id"`
+	CreatedAt    time.Time                   `json:"created_at"`
+	UpdatedAt    time.Time                   `json:"updated_at"`
+	AuditTime    *time.Time                  `json:"audit_time"`
 }

@@ -54,7 +54,7 @@ services:
     volumes:
       - panda_wiki_nats:/data
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 4222 || exit 1']
+      test: ['CMD', '/nats-server', '--version']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -135,6 +135,23 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+
+  collab:
+    image: node:22-alpine
+    container_name: panda-wiki-collab
+    working_dir: /workspace/web
+    command:
+      - sh
+      - -lc
+      - corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm dev:collab
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-panda-wiki-dev-secret}
+      COLLAB_PORT: 1234
+    ports:
+      - '1234:1234'
+    volumes:
+      - .:/workspace
+    restart: unless-stopped
 
 volumes:
   panda_wiki_caddy_config:

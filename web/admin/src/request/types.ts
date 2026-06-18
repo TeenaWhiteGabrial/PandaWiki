@@ -1389,6 +1389,10 @@ export interface DomainUpdateModelReq {
 export interface DomainUpdateNodeReq {
   content?: string;
   content_type?: string;
+  editor_blocks?: Record<string, unknown>;
+  editor_content?: Record<string, unknown>;
+  editor_format?: string;
+  editor_version?: number;
   emoji?: string;
   id: string;
   kb_id: string;
@@ -1780,6 +1784,10 @@ export interface V1NodeDetailResp {
   created_at?: string;
   creator_account?: string;
   creator_id?: string;
+  editor_blocks?: Record<string, unknown>;
+  editor_content?: Record<string, unknown>;
+  editor_format?: string;
+  editor_version?: number;
   editor_account?: string;
   editor_id?: string;
   id?: string;

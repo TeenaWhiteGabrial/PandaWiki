@@ -15,6 +15,156 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/pro/v1/node/release/detail": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Get Node Release Detail",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "node"
+                ],
+                "summary": "Get Node Release Detail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "name": "kb_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/domain.PWResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/v1.GetNodeReleaseDetailResp"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/pro/v1/node/release/list": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Get Node Release List",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "node"
+                ],
+                "summary": "Get Node Release List",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "kb_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "name": "node_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/domain.PWResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/v1.NodeReleaseListItem"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/pro/v1/node/release/restore": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Restore Node Release To Current Draft",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "node"
+                ],
+                "summary": "Restore Node Release",
+                "parameters": [
+                    {
+                        "description": "body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.RestoreNodeReleaseReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.PWResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/app": {
             "put": {
                 "security": [
@@ -331,6 +481,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/collab/setting": {
+            "get": {
+                "description": "get collaboration setting",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "collab"
+                ],
+                "summary": "get collaboration setting",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/domain.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/domain.CollabSetting"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update collaboration setting",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "collab"
+                ],
+                "summary": "update collaboration setting",
+                "parameters": [
+                    {
+                        "description": "collaboration setting",
+                        "name": "setting",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.CollabSetting"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/domain.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/domain.CollabSetting"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/comment": {
             "get": {
                 "description": "GetCommentModeratedList",
@@ -431,6 +660,40 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "total",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/comment/moderate": {
+            "post": {
+                "description": "ModerateCommentList",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comment"
+                ],
+                "summary": "ModerateCommentList",
+                "parameters": [
+                    {
+                        "description": "ModerateCommentListReq",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.ModerateCommentListReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success",
                         "schema": {
                             "$ref": "#/definitions/domain.Response"
                         }
@@ -1615,7 +1878,7 @@ const docTemplate = `{
         },
         "/api/v1/model/mode-setting": {
             "get": {
-                "description": "get current model mode setting including mode, API key and chat model",
+                "description": "get current model mode setting including mode and auto provider configs",
                 "consumes": [
                     "application/json"
                 ],
@@ -2092,6 +2355,60 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/domain.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/node/collab": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Get node collaboration metadata for draft editing",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "node"
+                ],
+                "summary": "Get Node Collaboration Metadata",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "name": "kb_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/domain.PWResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/v1.NodeCollabResp"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -3647,60 +3964,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/share/v1/auth/github": {
-            "post": {
-                "description": "GitHub登录",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ShareAuth"
-                ],
-                "summary": "GitHub登录",
-                "operationId": "v1-AuthGitHub",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "kb id",
-                        "name": "X-KB-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "description": "para",
-                        "name": "param",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.AuthGitHubReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/domain.PWResponse"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/v1.AuthGitHubResp"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
         "/share/v1/auth/login/simple": {
             "post": {
                 "description": "AuthLoginSimple",
@@ -4439,54 +4702,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/share/v1/openapi/github/callback": {
-            "get": {
-                "description": "GitHub回调",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ShareOpenapi"
-                ],
-                "summary": "GitHub回调",
-                "operationId": "v1-GitHubCallback",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "name": "code",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "name": "state",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/domain.PWResponse"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/github_com_chaitin_panda-wiki_api_share_v1.GitHubCallbackResp"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
         "/share/v1/openapi/lark/bot/{kb_id}": {
             "post": {
                 "description": "Lark机器人请求",
@@ -4802,29 +5017,6 @@ const docTemplate = `{
                 "NodeAccessPermClosed"
             ]
         },
-        "consts.NodePermName": {
-            "type": "string",
-            "enum": [
-                "visible",
-                "visitable",
-                "answerable"
-            ],
-            "x-enum-comments": {
-                "NodePermNameAnswerable": "可被问答",
-                "NodePermNameVisible": "导航内可见",
-                "NodePermNameVisitable": "可被访问"
-            },
-            "x-enum-descriptions": [
-                "导航内可见",
-                "可被访问",
-                "可被问答"
-            ],
-            "x-enum-varnames": [
-                "NodePermNameVisible",
-                "NodePermNameVisitable",
-                "NodePermNameAnswerable"
-            ]
-        },
         "consts.NodeRagInfoStatus": {
             "type": "string",
             "enum": [
@@ -4963,18 +5155,22 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "admin",
+                "manager",
                 "user"
             ],
             "x-enum-comments": {
-                "UserRoleAdmin": "管理员",
+                "UserRoleAdmin": "超级管理员",
+                "UserRoleManager": "管理员",
                 "UserRoleUser": "普通用户"
             },
             "x-enum-descriptions": [
+                "超级管理员",
                 "管理员",
                 "普通用户"
             ],
             "x-enum-varnames": [
                 "UserRoleAdmin",
+                "UserRoleManager",
                 "UserRoleUser"
             ]
         },
@@ -5732,16 +5928,107 @@ const docTemplate = `{
                 "AppTypeMcpServer"
             ]
         },
-        "domain.AuthUserInfo": {
+        "domain.AutoModeModelSelection": {
             "type": "object",
             "properties": {
-                "avatar_url": {
+                "analysis": {
                     "type": "string"
                 },
-                "email": {
+                "analysis_vl": {
                     "type": "string"
                 },
-                "username": {
+                "chat": {
+                    "type": "string"
+                },
+                "embedding": {
+                    "type": "string"
+                },
+                "rerank": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.AutoModeModels": {
+            "type": "object",
+            "properties": {
+                "analysis": {
+                    "type": "string"
+                },
+                "analysis_vl": {
+                    "type": "string"
+                },
+                "chat": {
+                    "type": "string"
+                },
+                "embedding": {
+                    "type": "string"
+                },
+                "rerank": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.AutoModeProviderReq": {
+            "type": "object",
+            "required": [
+                "base_url",
+                "provider"
+            ],
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "models": {
+                    "$ref": "#/definitions/domain.AutoModeModels"
+                },
+                "provider": {
+                    "$ref": "#/definitions/github_com_chaitin_panda-wiki_domain.ModelProvider"
+                }
+            }
+        },
+        "domain.AutoModeProviderSetting": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "models": {
+                    "$ref": "#/definitions/domain.AutoModeModelSelection"
+                },
+                "provider": {
+                    "$ref": "#/definitions/github_com_chaitin_panda-wiki_domain.ModelProvider"
+                }
+            }
+        },
+        "domain.AutoProviderSettingItem": {
+            "type": "object",
+            "properties": {
+                "api_header": {
+                    "type": "string"
+                },
+                "api_key": {
+                    "type": "string"
+                },
+                "api_version": {
+                    "type": "string"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "extra_config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "id": {
+                    "type": "string"
+                },
+                "provider": {
                     "type": "string"
                 }
             }
@@ -6028,6 +6315,38 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.CollabSetting": {
+            "type": "object",
+            "required": [
+                "mode"
+            ],
+            "properties": {
+                "block_min_bytes": {
+                    "description": "大文档分块阈值：内容字节数",
+                    "type": "integer",
+                    "minimum": 1024
+                },
+                "block_min_count": {
+                    "description": "大文档分块阈值：富文本块数",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "block_window": {
+                    "description": "块级协同活跃窗口大小",
+                    "type": "integer",
+                    "maximum": 48,
+                    "minimum": 1
+                },
+                "mode": {
+                    "description": "协同模式: disabled 或 prose_mirror",
+                    "type": "string",
+                    "enum": [
+                        "disabled",
+                        "prose_mirror"
+                    ]
+                }
+            }
+        },
         "domain.CommentConfig": {
             "type": "object",
             "properties": {
@@ -6065,9 +6384,6 @@ const docTemplate = `{
         "domain.CommentInfo": {
             "type": "object",
             "properties": {
-                "auth_user_id": {
-                    "type": "integer"
-                },
                 "avatar": {
                     "description": "avatar",
                     "type": "string"
@@ -6076,6 +6392,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "remote_ip": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 },
                 "user_name": {
@@ -6550,6 +6869,18 @@ const docTemplate = `{
                 "content_type": {
                     "type": "string"
                 },
+                "editor_blocks": {
+                    "$ref": "#/definitions/domain.JSONB"
+                },
+                "editor_content": {
+                    "$ref": "#/definitions/domain.JSONB"
+                },
+                "editor_format": {
+                    "type": "string"
+                },
+                "editor_version": {
+                    "type": "integer"
+                },
                 "emoji": {
                     "type": "string"
                 },
@@ -6913,7 +7244,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "info": {
-                    "$ref": "#/definitions/domain.AuthUserInfo"
+                    "$ref": "#/definitions/domain.UserSummary"
                 },
                 "ip": {
                     "type": "string"
@@ -6931,9 +7262,13 @@ const docTemplate = `{
                     "$ref": "#/definitions/domain.StatPageScene"
                 },
                 "user_id": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
+        },
+        "domain.JSONB": {
+            "type": "object",
+            "additionalProperties": {}
         },
         "domain.KBReleaseListItemResp": {
             "type": "object",
@@ -7113,12 +7448,31 @@ const docTemplate = `{
         "domain.ModelModeSetting": {
             "type": "object",
             "properties": {
-                "auto_mode_api_key": {
-                    "description": "百智云 API Key",
+                "active_auto_provider": {
+                    "description": "兼容上一版自动模式当前供应商 ID",
                     "type": "string"
                 },
+                "auto_mode_api_key": {
+                    "description": "兼容旧百智云自动模式字段",
+                    "type": "string"
+                },
+                "auto_provider": {
+                    "description": "自动模式统一供应商配置",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.AutoModeProviderSetting"
+                        }
+                    ]
+                },
+                "auto_provider_configs": {
+                    "description": "兼容上一版自动模式多供应商配置",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.AutoProviderSettingItem"
+                    }
+                },
                 "chat_model": {
-                    "description": "自定义对话模型名称",
+                    "description": "兼容旧自动模式字段",
                     "type": "string"
                 },
                 "is_manual_embedding_updated": {
@@ -7151,6 +7505,32 @@ const docTemplate = `{
                 "ModelTypeAnalysis",
                 "ModelTypeAnalysisVL"
             ]
+        },
+        "domain.ModerateCommentListReq": {
+            "type": "object",
+            "required": [
+                "ids"
+            ],
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "enum": [
+                        -1,
+                        1
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.CommentStatus"
+                        }
+                    ]
+                }
+            }
         },
         "domain.MoveNodeReq": {
             "type": "object",
@@ -7238,32 +7618,6 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.NodeGroupDetail": {
-            "type": "object",
-            "properties": {
-                "auth_group_id": {
-                    "type": "integer"
-                },
-                "auth_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "kb_id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "node_id": {
-                    "type": "string"
-                },
-                "perm": {
-                    "$ref": "#/definitions/consts.NodePermName"
-                }
-            }
-        },
         "domain.NodeListItemResp": {
             "type": "object",
             "properties": {
@@ -7343,16 +7697,54 @@ const docTemplate = `{
         "domain.NodePermissions": {
             "type": "object",
             "properties": {
+                "allowed_department_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "allowed_user_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "answerable": {
-                    "description": "可被问答",
+                    "description": "兼容旧字段，不再单独作为权限入口",
                     "allOf": [
                         {
                             "$ref": "#/definitions/consts.NodeAccessPerm"
                         }
                     ]
                 },
+                "denied_department_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "denied_user_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "inherit": {
+                    "description": "目录默认继承父级，可显式覆盖",
+                    "type": "boolean"
+                },
+                "min_permission_level_id": {
+                    "type": "string"
+                },
+                "min_permission_level_rank": {
+                    "type": "integer"
+                },
+                "scope_type": {
+                    "description": "public / department",
+                    "type": "string"
+                },
                 "visible": {
-                    "description": "导航内可见",
+                    "description": "兼容旧字段，不再单独作为权限入口",
                     "allOf": [
                         {
                             "$ref": "#/definitions/consts.NodeAccessPerm"
@@ -7360,7 +7752,7 @@ const docTemplate = `{
                     ]
                 },
                 "visitable": {
-                    "description": "可被访问",
+                    "description": "兼容旧字段，不再单独作为权限入口",
                     "allOf": [
                         {
                             "$ref": "#/definitions/consts.NodeAccessPerm"
@@ -8084,13 +8476,8 @@ const docTemplate = `{
                 "mode"
             ],
             "properties": {
-                "auto_mode_api_key": {
-                    "description": "百智云 API Key",
-                    "type": "string"
-                },
-                "chat_model": {
-                    "description": "自定义对话模型名称",
-                    "type": "string"
+                "auto_provider": {
+                    "$ref": "#/definitions/domain.AutoModeProviderReq"
                 },
                 "mode": {
                     "type": "string",
@@ -8269,6 +8656,18 @@ const docTemplate = `{
                 "content_type": {
                     "type": "string"
                 },
+                "editor_blocks": {
+                    "$ref": "#/definitions/domain.JSONB"
+                },
+                "editor_content": {
+                    "$ref": "#/definitions/domain.JSONB"
+                },
+                "editor_format": {
+                    "type": "string"
+                },
+                "editor_version": {
+                    "type": "integer"
+                },
                 "emoji": {
                     "type": "string"
                 },
@@ -8329,6 +8728,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.UserSummary": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }
@@ -8673,9 +9086,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_chaitin_panda-wiki_api_share_v1.GitHubCallbackResp": {
-            "type": "object"
-        },
         "github_com_chaitin_panda-wiki_domain.CheckModelReq": {
             "type": "object",
             "required": [
@@ -8808,10 +9218,16 @@ const docTemplate = `{
         "github_com_chaitin_panda-wiki_domain.ModelProvider": {
             "type": "string",
             "enum": [
-                "BaiZhiCloud"
+                "BaiZhiCloud",
+                "CompatiblePlatform",
+                "Xinference",
+                "gpustack"
             ],
             "x-enum-varnames": [
-                "ModelProviderBrandBaiZhiCloud"
+                "ModelProviderBrandBaiZhiCloud",
+                "ModelProviderCompatibleCloud",
+                "ModelProviderXinference",
+                "ModelProviderGPUStack"
             ]
         },
         "gocap.ChallengeData": {
@@ -8892,25 +9308,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                }
-            }
-        },
-        "v1.AuthGitHubReq": {
-            "type": "object",
-            "properties": {
-                "kb_id": {
-                    "type": "string"
-                },
-                "redirect_url": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.AuthGitHubResp": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string"
                 }
             }
         },
@@ -9151,20 +9548,36 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "account",
+                "department_ids",
+                "name",
                 "password",
+                "primary_department",
                 "role"
             ],
             "properties": {
                 "account": {
                     "type": "string"
                 },
+                "department_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
                 "password": {
                     "type": "string",
                     "minLength": 8
                 },
+                "primary_department": {
+                    "type": "string"
+                },
                 "role": {
                     "enum": [
-                        "admin",
+                        "manager",
                         "user"
                     ],
                     "allOf": [
@@ -9187,6 +9600,53 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "key": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1.GetNodeReleaseDetailResp": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "creator_account": {
+                    "type": "string"
+                },
+                "creator_id": {
+                    "type": "string"
+                },
+                "editor_account": {
+                    "type": "string"
+                },
+                "editor_blocks": {
+                    "$ref": "#/definitions/domain.JSONB"
+                },
+                "editor_content": {
+                    "$ref": "#/definitions/domain.JSONB"
+                },
+                "editor_format": {
+                    "type": "string"
+                },
+                "editor_id": {
+                    "type": "string"
+                },
+                "editor_version": {
+                    "type": "integer"
+                },
+                "meta": {
+                    "$ref": "#/definitions/domain.NodeMeta"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "publisher_account": {
+                    "type": "string"
+                },
+                "publisher_id": {
                     "type": "string"
                 }
             }
@@ -9317,6 +9777,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "permissions": {
+                    "$ref": "#/definitions/domain.NodePermissions"
+                },
                 "position": {
                     "type": "number"
                 },
@@ -9365,9 +9828,82 @@ const docTemplate = `{
                 }
             }
         },
+        "v1.NodeCollabResp": {
+            "type": "object",
+            "properties": {
+                "auth_token": {
+                    "type": "string"
+                },
+                "auto_save_interval": {
+                    "type": "integer"
+                },
+                "block_count": {
+                    "type": "integer"
+                },
+                "block_room_prefix": {
+                    "type": "string"
+                },
+                "block_window": {
+                    "type": "integer"
+                },
+                "content_bytes": {
+                    "type": "integer"
+                },
+                "content_type": {
+                    "type": "string"
+                },
+                "disabled_reason": {
+                    "type": "string"
+                },
+                "doc_name": {
+                    "type": "string"
+                },
+                "doc_room_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "long_document": {
+                    "type": "boolean"
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "disabled",
+                        "legacy",
+                        "prose_mirror",
+                        "markdown",
+                        "markdown_block",
+                        "block"
+                    ]
+                },
+                "room_id": {
+                    "type": "string"
+                },
+                "snapshot": {
+                    "type": "string"
+                },
+                "strategy": {
+                    "type": "string",
+                    "enum": [
+                        "document",
+                        "text",
+                        "block",
+                        "markdown_block"
+                    ]
+                }
+            }
+        },
         "v1.NodeDetailResp": {
             "type": "object",
             "properties": {
+                "collab": {
+                    "$ref": "#/definitions/v1.NodeCollabResp"
+                },
                 "content": {
                     "type": "string"
                 },
@@ -9383,8 +9919,20 @@ const docTemplate = `{
                 "editor_account": {
                     "type": "string"
                 },
+                "editor_blocks": {
+                    "$ref": "#/definitions/domain.JSONB"
+                },
+                "editor_content": {
+                    "$ref": "#/definitions/domain.JSONB"
+                },
+                "editor_format": {
+                    "type": "string"
+                },
                 "editor_id": {
                     "type": "string"
+                },
+                "editor_version": {
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -9457,13 +10005,6 @@ const docTemplate = `{
                 "kb_id"
             ],
             "properties": {
-                "answerable_groups": {
-                    "description": "可被问答",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
                 "ids": {
                     "type": "array",
                     "items": {
@@ -9475,20 +10016,6 @@ const docTemplate = `{
                 },
                 "permissions": {
                     "$ref": "#/definitions/domain.NodePermissions"
-                },
-                "visible_groups": {
-                    "description": "导航内可见",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "visitable_groups": {
-                    "description": "可被访问",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
                 }
             }
         },
@@ -9498,32 +10025,58 @@ const docTemplate = `{
         "v1.NodePermissionResp": {
             "type": "object",
             "properties": {
-                "answerable_groups": {
-                    "description": "可被问答",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/domain.NodeGroupDetail"
-                    }
-                },
                 "id": {
                     "type": "string"
                 },
                 "permissions": {
                     "$ref": "#/definitions/domain.NodePermissions"
+                }
+            }
+        },
+        "v1.NodeReleaseListItem": {
+            "type": "object",
+            "properties": {
+                "creator_account": {
+                    "type": "string"
                 },
-                "visible_groups": {
-                    "description": "导航内可见",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/domain.NodeGroupDetail"
-                    }
+                "creator_id": {
+                    "type": "string"
                 },
-                "visitable_groups": {
-                    "description": "可被访问",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/domain.NodeGroupDetail"
-                    }
+                "editor_account": {
+                    "type": "string"
+                },
+                "editor_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/domain.NodeMeta"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "publisher_account": {
+                    "type": "string"
+                },
+                "publisher_id": {
+                    "type": "string"
+                },
+                "release_id": {
+                    "type": "string"
+                },
+                "release_message": {
+                    "type": "string"
+                },
+                "release_name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -9579,6 +10132,21 @@ const docTemplate = `{
                 "new_password": {
                     "type": "string",
                     "minLength": 8
+                }
+            }
+        },
+        "v1.RestoreNodeReleaseReq": {
+            "type": "object",
+            "required": [
+                "id",
+                "kb_id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "kb_id": {
+                    "type": "string"
                 }
             }
         },
@@ -9644,6 +10212,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "nav_id": {
+                    "type": "string"
+                },
                 "parent_id": {
                     "type": "string"
                 },
@@ -9707,6 +10278,12 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "department_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "id": {
                     "type": "string"
                 },
@@ -9714,6 +10291,15 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "last_access": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "permission_level_id": {
+                    "type": "string"
+                },
+                "primary_department": {
                     "type": "string"
                 },
                 "role": {
@@ -9730,10 +10316,25 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "department_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "id": {
                     "type": "string"
                 },
                 "last_access": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "permission_level_id": {
+                    "type": "string"
+                },
+                "primary_department": {
                     "type": "string"
                 },
                 "role": {

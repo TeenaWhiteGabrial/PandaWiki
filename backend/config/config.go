@@ -21,6 +21,7 @@ type Config struct {
 	Sentry        SentryConfig `mapstructure:"sentry"`
 	CaddyAPI      string       `mapstructure:"caddy_api"`
 	SubnetPrefix  string       `mapstructure:"subnet_prefix"`
+	Collab        CollabConfig `mapstructure:"collab"`
 }
 
 type LogConfig struct {
@@ -81,6 +82,15 @@ type SentryConfig struct {
 	DSN     string `mapstructure:"dsn"`
 }
 
+type CollabConfig struct {
+	Endpoint      string `mapstructure:"endpoint"`
+	Mode          string `mapstructure:"mode"`
+	MaxDocBytes   int    `mapstructure:"max_doc_bytes"`
+	BlockMinBytes int    `mapstructure:"block_min_bytes"`
+	BlockMinCount int    `mapstructure:"block_min_count"`
+	BlockWindow   int    `mapstructure:"block_window"`
+}
+
 func NewConfig() (*Config, error) {
 	// set default config
 	SUBNET_PREFIX := os.Getenv("SUBNET_PREFIX")
@@ -119,7 +129,7 @@ func NewConfig() (*Config, error) {
 		},
 		Auth: AuthConfig{
 			Type: "jwt",
-			JWT:  JWTConfig{Secret: ""},
+			JWT:  JWTConfig{Secret: "panda-wiki-dev-secret"},
 		},
 		S3: S3Config{
 			Endpoint:  "panda-wiki-minio:9000",
@@ -129,6 +139,13 @@ func NewConfig() (*Config, error) {
 		Sentry: SentryConfig{
 			Enabled: true,
 			DSN:     "https://2a4cff1ae04b624ffc72663f523024ff@sentry.baizhi.cloud/4",
+		},
+		Collab: CollabConfig{
+			Endpoint:      "ws://127.0.0.1:1234/collab/ws",
+			Mode:          "disabled",
+			BlockMinBytes: 200 * 1024,
+			BlockMinCount: 120,
+			BlockWindow:   12,
 		},
 		CaddyAPI:     "/app/run/caddy-admin.sock",
 		SubnetPrefix: "169.254.15",
@@ -211,6 +228,27 @@ func overrideWithEnv(c *Config) {
 	// caddy api
 	if env := os.Getenv("CADDY_API"); env != "" {
 		c.CaddyAPI = env
+	}
+	if env := os.Getenv("COLLAB_ENDPOINT"); env != "" {
+		c.Collab.Endpoint = env
+	}
+	if env := os.Getenv("COLLAB_MODE"); env != "" {
+		c.Collab.Mode = env
+	}
+	if env := os.Getenv("COLLAB_BLOCK_MIN_BYTES"); env != "" {
+		if i, err := strconv.Atoi(env); err == nil {
+			c.Collab.BlockMinBytes = i
+		}
+	}
+	if env := os.Getenv("COLLAB_BLOCK_MIN_COUNT"); env != "" {
+		if i, err := strconv.Atoi(env); err == nil {
+			c.Collab.BlockMinCount = i
+		}
+	}
+	if env := os.Getenv("COLLAB_BLOCK_WINDOW"); env != "" {
+		if i, err := strconv.Atoi(env); err == nil {
+			c.Collab.BlockWindow = i
+		}
 	}
 	// log level
 	if env := os.Getenv("LOG_LEVEL"); env != "" {

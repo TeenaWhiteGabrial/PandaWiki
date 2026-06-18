@@ -182,7 +182,7 @@ type ActivateModelReq struct {
 }
 
 type SwitchModeReq struct {
-	Mode         string                `json:"mode" validate:"required,oneof=manual auto"`
+	Mode         string               `json:"mode" validate:"required,oneof=manual auto"`
 	AutoProvider *AutoModeProviderReq `json:"auto_provider"`
 }
 
@@ -201,9 +201,9 @@ type AutoProviderConfig struct {
 }
 
 type AutoModeProviderReq struct {
-	Provider ModelProvider `json:"provider" validate:"required"`
-	BaseURL  string        `json:"base_url" validate:"required"`
-	APIKey   string        `json:"api_key"`
+	Provider ModelProvider  `json:"provider" validate:"required"`
+	BaseURL  string         `json:"base_url" validate:"required"`
+	APIKey   string         `json:"api_key"`
 	Models   AutoModeModels `json:"models"`
 }
 
