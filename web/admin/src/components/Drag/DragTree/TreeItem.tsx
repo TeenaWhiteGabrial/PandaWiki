@@ -16,7 +16,8 @@ import {
   hasSelectedDescendant,
   updateAllParentStatus,
 } from '@/utils/tree';
-import { Ellipsis, message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
+import { Ellipsis } from '@/components/ui';
 import {
   Box,
   Button,

@@ -11,6 +11,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,15 @@ type FileUsecase struct {
 	config            *config.Config
 	systemSettingRepo *pg.SystemSettingRepo
 	httpClient        *http.Client
+}
+
+var officePreviewExtensions = map[string]struct{}{
+	".doc":  {},
+	".docx": {},
+	".ppt":  {},
+	".pptx": {},
+	".xls":  {},
+	".xlsx": {},
 }
 
 func NewFileUsecase(logger *log.Logger, s3Client *s3.MinioClient, config *config.Config, systemSettingRepo *pg.SystemSettingRepo) *FileUsecase {
@@ -156,6 +166,76 @@ func (u *FileUsecase) UploadFileFromBytes(ctx context.Context, kbID string, file
 	}
 
 	return resp.Key, nil
+}
+
+func (u *FileUsecase) ConvertOfficeToPDF(ctx context.Context, kbID string, filename string, fileBytes []byte) (string, error) {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if _, ok := officePreviewExtensions[ext]; !ok {
+		return "", nil
+	}
+
+	previewBaseURL := strings.TrimSpace(u.config.Preview.BaseURL)
+	if previewBaseURL == "" {
+		return "", fmt.Errorf("preview service is not configured")
+	}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("files", filename)
+	if err != nil {
+		return "", fmt.Errorf("create preview form file failed: %w", err)
+	}
+	if _, err := part.Write(fileBytes); err != nil {
+		return "", fmt.Errorf("write preview form file failed: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return "", fmt.Errorf("close preview form writer failed: %w", err)
+	}
+
+	previewURL, err := url.JoinPath(previewBaseURL, "/forms/libreoffice/convert")
+	if err != nil {
+		return "", fmt.Errorf("build preview url failed: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, previewURL, body)
+	if err != nil {
+		return "", fmt.Errorf("create preview request failed: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := u.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request preview service failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("preview service failed: %s", strings.TrimSpace(string(respBody)))
+	}
+
+	pdfBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read preview pdf failed: %w", err)
+	}
+
+	previewFilename := strings.TrimSuffix(filename, filepath.Ext(filename)) + ".preview.pdf"
+	return u.UploadFileFromBytes(ctx, kbID, previewFilename, pdfBytes)
+}
+
+func (u *FileUsecase) GeneratePreviewByKey(ctx context.Context, kbID string, fileKey string, fileName string) (string, error) {
+	object, err := u.s3Client.GetObject(ctx, domain.Bucket, fileKey, minio.GetObjectOptions{})
+	if err != nil {
+		return "", fmt.Errorf("get source file failed: %w", err)
+	}
+	defer object.Close()
+
+	fileBytes, err := io.ReadAll(object)
+	if err != nil {
+		return "", fmt.Errorf("read source file failed: %w", err)
+	}
+
+	return u.ConvertOfficeToPDF(ctx, kbID, fileName, fileBytes)
 }
 
 func (u *FileUsecase) UploadFileFromReader(

@@ -2,7 +2,7 @@ import Emoji from '@/components/Emoji';
 import { DomainCreateNodeReq, V1NodeDetailResp } from '@/request';
 import { postApiV1Node, putApiV1NodeDetail } from '@/request/Node';
 import { useAppSelector } from '@/store';
-import { message, Modal } from '@ctzhian/ui';
+import { message, Modal } from '@/components/ui';
 import {
   Box,
   FormControlLabel,

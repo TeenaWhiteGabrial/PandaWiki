@@ -1,7 +1,16 @@
 import Logo from '@/assets/images/logo.png';
-import { Box, Button, Stack, useTheme } from '@mui/material';
+import { message, Modal } from '@/components/ui';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import {
+  Box,
+  Button,
+  IconButton,
+  Stack,
+  Tooltip,
+  useTheme,
+} from '@mui/material';
 import { ConstsUserKBPermission, ConstsUserRole } from '@/request/types';
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import Avatar from '../Avatar';
 import { useAppSelector } from '@/store';
@@ -13,6 +22,7 @@ import {
   IconChilun,
   IconKehupingjia,
   IconTianjia,
+  IconDengchu,
 } from '@panda-wiki/icons';
 
 const MENUS = [
@@ -97,9 +107,10 @@ const MENUS = [
 
 const Sidebar = () => {
   const { pathname } = useLocation();
-  const { kbDetail, user } = useAppSelector(state => state.config);
+  const { kbDetail, user, appBrand } = useAppSelector(state => state.config);
   const theme = useTheme();
   const navigate = useNavigate();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const menus = useMemo(() => {
     return MENUS.filter(it => {
       if (
@@ -156,7 +167,7 @@ const Sidebar = () => {
         justifyContent={'center'}
         sx={{ flexShrink: 0 }}
       >
-        <Avatar src={Logo} sx={{ width: 30, height: 30 }} />
+        <Avatar src={appBrand.icon || Logo} sx={{ width: 30, height: 30 }} />
       </Stack>
       <Box
         sx={{
@@ -168,7 +179,7 @@ const Sidebar = () => {
           borderBottom: `1px solid ${theme.palette.divider}`,
         }}
       >
-        知识库
+        {appBrand.title || '知识库管理台'}
       </Box>
       <Stack sx={{ py: 2, flexGrow: 1 }} gap={1}>
         {menus.map(it => {
@@ -222,30 +233,80 @@ const Sidebar = () => {
         })}
       </Stack>
       <Stack gap={1} sx={{ flexShrink: 0 }}>
-        <Button
-          variant='outlined'
-          color='dark'
+        <Stack
+          direction='row'
+          alignItems='center'
+          justifyContent='space-between'
           sx={{
-            fontSize: 14,
-            flexShrink: 0,
-            fontWeight: 400,
-            pr: 1.5,
-            pl: 1.5,
-            gap: 0.5,
-            justifyContent: 'flex-start',
-            border: `1px solid ${theme.palette.divider}`,
-            '.MuiButton-startIcon': {
-              mr: '3px',
-            },
-            '&:hover': {
-              color: 'primary.main',
-            },
+            px: 1,
+            py: 1.25,
+            borderTop: `1px solid ${theme.palette.divider}`,
+            gap: 1,
           }}
-          disabled
         >
-          内部使用
-        </Button>
+          <Box
+            sx={{
+              flexGrow: 1,
+              minWidth: 0,
+              fontSize: 13,
+              color: 'text.secondary',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {user.account || '当前用户'}
+          </Box>
+          <Tooltip arrow title='退出登录'>
+            <IconButton
+              size='small'
+              sx={{
+                flexShrink: 0,
+                color: 'text.secondary',
+                '&:hover': {
+                  color: 'primary.main',
+                },
+              }}
+              onClick={() => {
+                setLogoutConfirmOpen(true);
+              }}
+            >
+              <IconDengchu sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       </Stack>
+      <Modal
+        open={logoutConfirmOpen}
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onOk={() => {
+          message.success('退出登录成功，请重新登录');
+          setTimeout(() => {
+            localStorage.removeItem('panda_wiki_token');
+            navigate('/login');
+          }, 1500);
+        }}
+        cancelButtonProps={{
+          variant: 'outlined',
+          sx: { '&:hover': { borderColor: 'grey.300' } },
+        }}
+        okButtonProps={{
+          variant: 'contained',
+          sx: {
+            bgcolor: 'primary.main',
+            '&:hover': { bgcolor: 'primary.dark' },
+          },
+        }}
+        title={
+          <Stack direction='column' gap={3}>
+            <Stack direction='row' alignItems='center' gap={1}>
+              <ErrorOutlineIcon sx={{ color: 'error.main', fontSize: 24 }} />
+              <span style={{ fontWeight: 'bold' }}>确定要退出当前账号？</span>
+            </Stack>
+          </Stack>
+        }
+        transitionDuration={300}
+      />
     </Stack>
   );
 };

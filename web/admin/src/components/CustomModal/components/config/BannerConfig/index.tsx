@@ -12,7 +12,7 @@ import UploadFile from '@/components/UploadFile';
 import { DEFAULT_DATA } from '../../../constants';
 import useDebounceAppPreviewData from '@/hooks/useDebounceAppPreviewData';
 import { handleLandingConfigs, findConfigById } from '../../../utils';
-import { Empty } from '@ctzhian/ui';
+import { Empty } from '@/components/ui';
 
 const Config: React.FC<ConfigProps> = ({ setIsEdit, id }) => {
   const { appPreviewData } = useAppSelector(state => state.config);

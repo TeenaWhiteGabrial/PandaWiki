@@ -1,6 +1,6 @@
 import { useAppSelector } from '@/store';
 import { Box, Stack, useColorScheme, createTheme } from '@mui/material';
-import { ThemeProvider } from '@ctzhian/ui';
+import { ThemeProvider } from '@/components/ui';
 
 import {
   Dispatch,
@@ -388,7 +388,6 @@ const ThemeWrapper = ({ children }: { children: React.ReactNode }) => {
     const themeName =
       appPreviewData?.settings?.web_app_landing_theme?.name || 'blue';
     return createTheme(
-      // @ts-expect-error themeOptions is not typed
       {
         ...themeOptions[0],
         palette:

@@ -3,7 +3,7 @@ import welcomePng from '@/assets/images/welcome.png';
 import CustomModal from '@/components/CustomModal';
 import { putApiV1AppCompat } from '@/request/appCompat';
 import { ConstsHomePageSetting, DomainAppDetailResp } from '@/request/types';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import {
   Box,
   Button,

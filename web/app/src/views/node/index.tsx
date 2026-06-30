@@ -9,7 +9,7 @@ import { getDocContentSx } from '@/utils/getDocContentSx';
 import useCopy from '@/hooks/useCopy';
 import { useStore } from '@/provider';
 import { ConstsCopySetting } from '@/request/types';
-import { TocList, useTiptap } from '@ctzhian/tiptap';
+import { TocList, useTiptap, UseTiptapReturn } from '@ctzhian/tiptap';
 import { Box } from '@mui/material';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -25,6 +25,7 @@ const Doc = ({
 }) => {
   const { kbDetail, mobile, catalogWidth } = useStore();
   const [loading, setLoading] = useState(true);
+  const [editorReady, setEditorReady] = useState(false);
   const [headings, setHeadings] = useState<TocList>([]);
   const [characterCount, setCharacterCount] = useState(0);
   const pathname = usePathname();
@@ -32,7 +33,18 @@ const Doc = ({
     return node?.meta?.content_type === 'md';
   }, [node?.meta?.content_type]);
   const baseUrl = useBasePath();
-  const editorRef = useTiptap({
+  const isReadonlyFilePreview = useMemo(() => {
+    return !!node?.meta?.file_key && !!node?.meta?.file_readonly;
+  }, [node?.meta?.file_key, node?.meta?.file_readonly]);
+  useEffect(() => {
+    if (isReadonlyFilePreview) {
+      setLoading(false);
+      setEditorReady(false);
+      setHeadings([]);
+      setCharacterCount(0);
+    }
+  }, [isReadonlyFilePreview]);
+  const tiptapRef = useTiptap({
     content: node?.content || '',
     editable: false,
     contentType: isMarkdown ? 'markdown' : 'html',
@@ -43,12 +55,19 @@ const Doc = ({
     },
     onBeforeCreate: () => {
       setLoading(true);
+      setEditorReady(false);
     },
     onCreate: ({ editor }) => {
       setLoading(false);
+      setEditorReady(true);
       setCharacterCount((editor.storage as any).characterCount.characters());
     },
   });
+  const editorRef = (
+    isReadonlyFilePreview
+      ? ({ editor: null } as unknown as UseTiptapReturn)
+      : tiptapRef
+  ) as UseTiptapReturn;
 
   const docWidth = useMemo(() => {
     return kbDetail?.settings?.theme_and_style?.doc_width || 'full';
@@ -67,16 +86,18 @@ const Doc = ({
   });
 
   useEffect(() => {
-    if (!node || !editorRef.editor) return;
+    if (isReadonlyFilePreview || !node || !editorRef.editor) return;
 
+    setEditorReady(false);
     setHeadings([]);
     requestAnimationFrame(() => {
       editorRef.setContent(
         node?.content || '',
         isMarkdown ? 'markdown' : 'html',
       );
+      setEditorReady(true);
     });
-  }, [editorRef.editor, isMarkdown, node]);
+  }, [editorRef.editor, isMarkdown, isReadonlyFilePreview, node]);
 
   useEffect(() => {
     document.querySelector('#scroll-container')?.scrollTo({ top: 0 });
@@ -100,7 +121,7 @@ const Doc = ({
         </Box>
       ) : (
         <>
-          {loading ? (
+          {loading && !isReadonlyFilePreview ? (
             <Box
               sx={getDocContentSx({
                 docWidth,
@@ -115,10 +136,13 @@ const Doc = ({
               info={node}
               docWidth={docWidth}
               editorRef={editorRef}
+              editorReady={editorReady}
               characterCount={characterCount}
             />
           )}
-          {!mobile && <DocAnchor headings={headings} />}
+          {!mobile && !isReadonlyFilePreview && (
+            <DocAnchor headings={headings} />
+          )}
           <DocFab />
           {!mobile && <ScrollToTopFab />}
         </>

@@ -1,5 +1,5 @@
 import { useAppSelector } from '@/store';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import { Stack } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { IconZuzhi } from '@panda-wiki/icons';

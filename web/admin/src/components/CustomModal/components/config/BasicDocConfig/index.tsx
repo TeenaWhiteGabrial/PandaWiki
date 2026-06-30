@@ -6,7 +6,7 @@ import DragList from '../../components/DragList';
 import SortableItem from '../../components/SortableItem';
 import Item from './Item';
 import type { ConfigProps } from '../type';
-import { Empty } from '@ctzhian/ui';
+import { Empty } from '@/components/ui';
 import { useAppSelector } from '@/store';
 import AddRecommendContent from '@/pages/setting/component/AddRecommendContent';
 import { getApiV1NodeRecommendNodes } from '@/request/Node';

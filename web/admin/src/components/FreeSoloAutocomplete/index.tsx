@@ -1,13 +1,8 @@
 import { useCommitPendingInput } from '@/hooks';
-import {
-  Autocomplete,
-  AutocompleteProps,
-  Box,
-  Chip,
-  TextField,
-  TextFieldProps,
-} from '@mui/material';
-import { ReactNode } from 'react';
+import { Select } from 'antd';
+import type { DefaultOptionType } from 'antd/es/select';
+import { Box, type TextFieldProps } from '@mui/material';
+import type { ReactNode } from 'react';
 
 export type FreeSoloAutocompleteProps<T> = {
   width?: number;
@@ -16,13 +11,8 @@ export type FreeSoloAutocompleteProps<T> = {
   options?: T[];
 } & ReturnType<typeof useCommitPendingInput<T>> &
   Omit<
-    AutocompleteProps<T, true, false, true>,
-    | 'renderInput'
-    | 'value'
-    | 'onChange'
-    | 'inputValue'
-    | 'onInputChange'
-    | 'options'
+    React.ComponentProps<typeof Select>,
+    'mode' | 'value' | 'onChange' | 'options'
   >;
 
 export function FreeSoloAutocomplete<T>({
@@ -33,52 +23,72 @@ export function FreeSoloAutocomplete<T>({
   inputValue,
   setInputValue,
   commit,
-  inputProps = {},
+  inputProps,
   options = [],
-  ...autocompleteProps
+  ...selectProps
 }: FreeSoloAutocompleteProps<T>) {
+  const selectOptions: DefaultOptionType[] = options.map(option => ({
+    value: option as string | number,
+    label: option as ReactNode,
+  }));
+
   return (
-    <Autocomplete<T, true, false, true>
-      multiple
-      fullWidth
-      freeSolo
-      options={options}
-      sx={width ? { width } : {}}
-      slotProps={{
-        listbox: {
-          sx: {
-            bgcolor: 'background.paper3',
-          },
-        },
-      }}
+    <Select
+      mode='tags'
       value={value}
-      onChange={(_, newValue) => setValue(newValue as T[])}
-      inputValue={inputValue}
-      onInputChange={(_, newInputValue) => setInputValue(newInputValue)}
+      onChange={newValue => setValue(newValue as T[])}
+      searchValue={inputValue}
+      onSearch={setInputValue}
       onBlur={commit}
-      renderInput={params => (
-        <TextField
-          {...params}
-          {...inputProps}
-          variant='outlined'
-          placeholder={placeholder}
-        />
+      options={selectOptions}
+      placeholder={placeholder || inputProps?.placeholder}
+      tokenSeparators={[',']}
+      optionFilterProp='label'
+      style={width ? { width } : { width: '100%' }}
+      tagRender={({ label, closable, onClose }) => (
+        <Box
+          component='span'
+          onMouseDown={event => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+            px: 1,
+            py: 0.25,
+            mr: 0.5,
+            mb: 0.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: '16px',
+            fontSize: '12px',
+            lineHeight: '20px',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box component='span'>{label as ReactNode}</Box>
+          {closable ? (
+            <Box
+              component='button'
+              type='button'
+              onClick={onClose}
+              sx={{
+                border: 0,
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: '12px',
+                lineHeight: 1,
+                p: 0,
+              }}
+            >
+              x
+            </Box>
+          ) : null}
+        </Box>
       )}
-      renderValue={(value, getTagProps) => {
-        return value.map((option, index: number) => {
-          return (
-            <Chip
-              variant='outlined'
-              size='small'
-              label={<Box sx={{ fontSize: '12px' }}>{option as ReactNode}</Box>}
-              {...getTagProps({ index })}
-              key={index}
-            />
-          );
-        });
-      }}
-      blurOnSelect={false}
-      {...autocompleteProps}
+      {...selectProps}
     />
   );
 }

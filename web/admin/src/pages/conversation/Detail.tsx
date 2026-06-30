@@ -18,7 +18,7 @@ import {
   alpha,
   Typography,
 } from '@mui/material';
-import { Ellipsis, Modal, Image } from '@ctzhian/ui';
+import { Ellipsis, Modal, Image } from '@/components/ui';
 import { useEffect, useState } from 'react';
 import { IconDitu_diqiu } from '@panda-wiki/icons';
 

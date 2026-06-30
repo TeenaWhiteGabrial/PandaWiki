@@ -3,7 +3,7 @@ import { useAppSelector } from '@/store';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ErrorIcon from '@mui/icons-material/Error';
 import { Box, Stack, useTheme } from '@mui/material';
-import { Modal } from '@ctzhian/ui';
+import { Modal } from '@/components/ui';
 
 interface VersionDeleteProps {
   open: boolean;

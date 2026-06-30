@@ -11,7 +11,7 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { useEffect, useState } from 'react';
 
 const CardProxy = ({

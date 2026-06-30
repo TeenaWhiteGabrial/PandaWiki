@@ -1,18 +1,9 @@
 import { CardWebHeaderBtn } from '@/api';
 import UploadFile from '@/components/UploadFile';
 import { useAppDispatch, useAppSelector } from '@/store';
+import { Select } from 'antd';
 
-import {
-  Box,
-  Checkbox,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-} from '@mui/material';
+import { Box, Checkbox, IconButton, Stack, TextField } from '@mui/material';
 import { IconShanchu2, IconDrag } from '@panda-wiki/icons';
 import {
   CSSProperties,
@@ -85,23 +76,11 @@ const Item = forwardRef<HTMLDivElement, ItemProps>(
               return (
                 <Stack direction={'column'} gap={'20px'}>
                   <Stack direction={'row'} gap={1}>
-                    <FormControl>
-                      <InputLabel
-                        id={curBtn.id + '_button_style'}
-                        sx={{
-                          '&.Mui-focused': {
-                            color: 'black',
-                          },
-                        }}
-                      >
-                        按钮样式
-                      </InputLabel>
+                    <Box>
+                      <Box sx={{ fontSize: 12, mb: 0.5 }}>按钮样式</Box>
                       <Select
-                        labelId={curBtn.id + '_button_style'}
-                        id={curBtn.id + '_button_style'}
                         value={curBtn.variant}
-                        label='按钮样式'
-                        onChange={e => {
+                        onChange={value => {
                           const newBtns = [
                             ...(appPreviewData?.settings?.btns || []),
                           ];
@@ -110,38 +89,24 @@ const Item = forwardRef<HTMLDivElement, ItemProps>(
                           );
                           newBtns[index] = {
                             ...curBtn,
-                            variant: e.target.value as 'contained' | 'outlined',
+                            variant: value as 'contained' | 'outlined' | 'text',
                           };
                           field.onChange(newBtns);
                           setIsEdit(true);
                         }}
-                        sx={{
-                          width: '144px',
-                          height: '36px',
-                        }}
-                      >
-                        <MenuItem value={'contained'}>实心</MenuItem>
-                        <MenuItem value={'outlined'}>描边</MenuItem>
-                        <MenuItem value={'text'}>文字</MenuItem>
-                      </Select>
-                    </FormControl>
-                    <FormControl>
-                      <InputLabel
-                        id={curBtn.id + '_button_target'}
-                        sx={{
-                          '&.Mui-focused': {
-                            color: 'black',
-                          },
-                        }}
-                      >
-                        打开方式
-                      </InputLabel>
+                        style={{ width: 144 }}
+                        options={[
+                          { value: 'contained', label: '实心' },
+                          { value: 'outlined', label: '描边' },
+                          { value: 'text', label: '文字' },
+                        ]}
+                      />
+                    </Box>
+                    <Box>
+                      <Box sx={{ fontSize: 12, mb: 0.5 }}>打开方式</Box>
                       <Select
-                        labelId={curBtn.id + '_button_target'}
-                        id={curBtn.id + '_button_target'}
                         value={curBtn.target}
-                        label='打开方式'
-                        onChange={e => {
+                        onChange={value => {
                           const newBtns = [
                             ...(appPreviewData?.settings?.btns || []),
                           ];
@@ -150,20 +115,18 @@ const Item = forwardRef<HTMLDivElement, ItemProps>(
                           );
                           newBtns[index] = {
                             ...curBtn,
-                            target: e.target.value as '_blank' | '_self',
+                            target: value as '_blank' | '_self',
                           };
                           field.onChange(newBtns);
                           setIsEdit(true);
                         }}
-                        sx={{
-                          width: '144px',
-                          height: '36px',
-                        }}
-                      >
-                        <MenuItem value={'_self'}>当前窗口</MenuItem>
-                        <MenuItem value={'_blank'}>新窗口</MenuItem>
-                      </Select>
-                    </FormControl>
+                        style={{ width: 144 }}
+                        options={[
+                          { value: '_self', label: '当前窗口' },
+                          { value: '_blank', label: '新窗口' },
+                        ]}
+                      />
+                    </Box>
                   </Stack>
                   <Stack direction={'row'} gap={2}>
                     <Stack direction={'row'} alignItems={'center'} gap={1}>

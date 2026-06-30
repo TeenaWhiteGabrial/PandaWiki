@@ -1,7 +1,11 @@
 import '@/assets/fonts/font.css';
 import '@/assets/styles/index.css';
 import '@/assets/styles/markdown.css';
+import 'antd/dist/reset.css';
+import { ConfigProvider } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
 import { wrapWindowOpen } from './utils/getBasename';
+import { applyAppBrand, loadAppBrand } from './utils/appBrand';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import duration from 'dayjs/plugin/duration';
@@ -21,6 +25,10 @@ const loadCSS = (href: string) => {
 };
 
 loadCSS(`${window.__BASENAME__}/panda-wiki.css`);
+const cachedBrand = loadAppBrand();
+if (cachedBrand) {
+  applyAppBrand(cachedBrand);
+}
 
 wrapWindowOpen(window.__BASENAME__ || '');
 dayjs.extend(duration);
@@ -30,7 +38,9 @@ dayjs.locale('zh-cn');
 createRoot(document.getElementById('root')!).render(
   <BrowserRouter basename={window.__BASENAME__}>
     <Provider store={store}>
-      <App />
+      <ConfigProvider locale={zhCN}>
+        <App />
+      </ConfigProvider>
     </Provider>
   </BrowserRouter>,
 );

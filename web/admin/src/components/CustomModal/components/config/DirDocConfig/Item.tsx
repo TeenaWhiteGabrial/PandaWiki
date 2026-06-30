@@ -6,7 +6,8 @@ import {
 import { DomainRecommendNodeListResp } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { Box, IconButton, Stack } from '@mui/material';
-import { Ellipsis, message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
+import { Ellipsis } from '@/components/ui';
 import {
   IconShanchu2,
   IconDrag,

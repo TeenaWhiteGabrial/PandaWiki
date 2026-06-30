@@ -6,6 +6,7 @@ import {
 } from '@/request/types';
 import { UserInfoCompat } from '@/request/userCompat';
 import { createSlice } from '@reduxjs/toolkit';
+import { loadAppBrand, type AppBrand } from '@/utils/appBrand';
 
 export interface config {
   user: UserInfoCompat;
@@ -16,9 +17,15 @@ export interface config {
   modelStatus: boolean;
   kbDetail: DomainKnowledgeBaseDetail;
   appPreviewData: DomainAppDetailResp | null;
+  appBrand: AppBrand;
   refreshAdminRequest: () => void;
   isRefreshDocList: boolean;
 }
+
+const initialBrand = loadAppBrand() || {
+  title: '知识库管理台',
+  icon: `${window.__BASENAME__ || ''}/logo.png`,
+};
 
 const initialState: config = {
   user: {
@@ -33,6 +40,7 @@ const initialState: config = {
   modelStatus: false,
   kbDetail: {} as DomainKnowledgeBaseDetail,
   appPreviewData: null,
+  appBrand: initialBrand,
   refreshAdminRequest: () => {},
   isRefreshDocList: false,
 };
@@ -70,6 +78,9 @@ const configSlice = createSlice({
     setAppPreviewData(state, { payload }) {
       state.appPreviewData = payload;
     },
+    setAppBrand(state, { payload }) {
+      state.appBrand = payload;
+    },
     setKbDetail(state, { payload }) {
       state.kbDetail = payload;
     },
@@ -89,6 +100,7 @@ export const {
   setKbList,
   setModelStatus,
   setAppPreviewData,
+  setAppBrand,
   setKbDetail,
   setRefreshAdminRequest,
   setModelList,

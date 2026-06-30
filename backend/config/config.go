@@ -22,6 +22,7 @@ type Config struct {
 	CaddyAPI      string       `mapstructure:"caddy_api"`
 	SubnetPrefix  string       `mapstructure:"subnet_prefix"`
 	Collab        CollabConfig `mapstructure:"collab"`
+	Preview       PreviewConfig `mapstructure:"preview"`
 }
 
 type LogConfig struct {
@@ -91,6 +92,10 @@ type CollabConfig struct {
 	BlockWindow   int    `mapstructure:"block_window"`
 }
 
+type PreviewConfig struct {
+	BaseURL string `mapstructure:"base_url"`
+}
+
 func NewConfig() (*Config, error) {
 	// set default config
 	SUBNET_PREFIX := os.Getenv("SUBNET_PREFIX")
@@ -146,6 +151,9 @@ func NewConfig() (*Config, error) {
 			BlockMinBytes: 200 * 1024,
 			BlockMinCount: 120,
 			BlockWindow:   12,
+		},
+		Preview: PreviewConfig{
+			BaseURL: "http://panda-wiki-preview:3000",
 		},
 		CaddyAPI:     "/app/run/caddy-admin.sock",
 		SubnetPrefix: "169.254.15",
@@ -249,6 +257,9 @@ func overrideWithEnv(c *Config) {
 		if i, err := strconv.Atoi(env); err == nil {
 			c.Collab.BlockWindow = i
 		}
+	}
+	if env := os.Getenv("PREVIEW_BASE_URL"); env != "" {
+		c.Preview.BaseURL = env
 	}
 	// log level
 	if env := os.Getenv("LOG_LEVEL"); env != "" {

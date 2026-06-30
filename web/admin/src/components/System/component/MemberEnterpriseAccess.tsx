@@ -1,5 +1,6 @@
 import { FormItem } from '@/components/Form';
 import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
+import { Modal } from '@/components/ui';
 import {
   getApiV1EnterpriseDepartments,
   getApiV1EnterprisePermissionLevels,
@@ -9,8 +10,7 @@ import type { Department, PermissionLevel } from '@/request/Enterprise';
 import type { UserListItemCompat } from '@/request/userCompat';
 import { ConstsUserRole } from '@/request/types';
 import { useAppSelector } from '@/store';
-import { Modal } from '@ctzhian/ui';
-import { MenuItem, TextField } from '@mui/material';
+import { Select } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -85,7 +85,7 @@ const MemberEnterpriseAccess = ({
 
   return (
     <Modal
-      title='编辑组织权限'
+      title='编辑组织和权限'
       open={open}
       onCancel={onClose}
       okButtonProps={{ loading, disabled: !canEdit }}
@@ -115,14 +115,18 @@ const MemberEnterpriseAccess = ({
           name='permission_level_id'
           control={control}
           render={({ field }) => (
-            <TextField {...field} fullWidth select>
-              <MenuItem value=''>默认</MenuItem>
-              {levels.map(item => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.name}（{item.rank}）
-                </MenuItem>
-              ))}
-            </TextField>
+            <Select
+              value={field.value}
+              onChange={field.onChange}
+              style={{ width: '100%' }}
+              options={[
+                { value: '', label: '默认' },
+                ...levels.map(item => ({
+                  value: item.id,
+                  label: `${item.name}（${item.rank}）`,
+                })),
+              ]}
+            />
           )}
         />
       </FormItem>

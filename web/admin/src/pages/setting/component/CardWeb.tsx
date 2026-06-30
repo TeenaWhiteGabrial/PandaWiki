@@ -3,6 +3,9 @@ import {
   DomainAppDetailResp,
   DomainKnowledgeBaseDetail,
 } from '@/request/types';
+import { useAppDispatch } from '@/store';
+import { setAppBrand } from '@/store/slices/config';
+import { applyAppBrand, getAppBrandFromDetail } from '@/utils/appBrand';
 import { Box } from '@mui/material';
 import { useEffect, useState } from 'react';
 import CardBasicInfo from './CardBasicInfo';
@@ -21,10 +24,18 @@ interface CardWebProps {
 }
 
 const CardWeb = ({ kb, refresh }: CardWebProps) => {
+  const dispatch = useAppDispatch();
   const [info, setInfo] = useState<DomainAppDetailResp | null>(null);
+
+  const syncBrand = (nextInfo: DomainAppDetailResp) => {
+    const brand = getAppBrandFromDetail(nextInfo);
+    dispatch(setAppBrand(brand));
+    applyAppBrand(brand);
+  };
 
   const getInfo = async () => {
     const res = await getApiV1AppDetailCompat({ type: '1' });
+    syncBrand(res);
     setInfo(res);
   };
 
@@ -44,13 +55,15 @@ const CardWeb = ({ kb, refresh }: CardWebProps) => {
     >
       <CardCustom
         refresh={value => {
-          setInfo({
+          const nextInfo = {
             ...info,
             settings: {
               ...info.settings,
               ...value,
             },
-          });
+          } as DomainAppDetailResp;
+          syncBrand(nextInfo);
+          setInfo(nextInfo);
         }}
         info={info}
       />
@@ -107,13 +120,15 @@ const CardWeb = ({ kb, refresh }: CardWebProps) => {
         id={info.id}
         data={info}
         refresh={value => {
-          setInfo({
+          const nextInfo = {
             ...info,
             settings: {
               ...info.settings,
               ...value,
             },
-          });
+          } as DomainAppDetailResp;
+          syncBrand(nextInfo);
+          setInfo(nextInfo);
         }}
       />
 

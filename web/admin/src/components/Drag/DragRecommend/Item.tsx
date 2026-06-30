@@ -1,6 +1,6 @@
 import { DomainRecommendNodeListResp } from '@/request/types';
 import { useAppSelector } from '@/store';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import { IconWenjianjia, IconWenjian, IconShanchu2 } from '@panda-wiki/icons';
 import { Box, IconButton, Stack } from '@mui/material';
 import { IconDrag } from '@panda-wiki/icons';

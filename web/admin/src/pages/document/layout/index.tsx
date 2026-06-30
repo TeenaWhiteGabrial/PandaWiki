@@ -10,7 +10,7 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { setIsRefreshDocList, setNavId } from '@/store/slices/config';
 import type { TreeDragHandlers } from '@/utils/drag';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import {
   DndContext,
   DragEndEvent,

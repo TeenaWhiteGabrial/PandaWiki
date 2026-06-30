@@ -19,3 +19,13 @@ type AnydocUploadResp struct {
 	Err  string `json:"err"`
 	Data string `json:"data"`
 }
+
+type GenerateFilePreviewReq struct {
+	KBID     string `json:"kb_id" validate:"required"`
+	FileKey  string `json:"file_key" validate:"required"`
+	FileName string `json:"file_name" validate:"required"`
+}
+
+type GenerateFilePreviewResp struct {
+	PreviewKey string `json:"preview_key"`
+}

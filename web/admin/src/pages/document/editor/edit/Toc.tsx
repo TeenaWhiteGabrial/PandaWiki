@@ -7,7 +7,7 @@ import {
   H6Icon,
   TocList,
 } from '@ctzhian/tiptap';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import { Box, Drawer, IconButton, Stack } from '@mui/material';
 import { useState } from 'react';
 import { IconDingzi, IconIcon_tool_close } from '@panda-wiki/icons';

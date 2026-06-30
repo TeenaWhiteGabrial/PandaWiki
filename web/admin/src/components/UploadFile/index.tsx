@@ -1,6 +1,6 @@
 import { uploadFile } from '@/api';
 import { Box, IconButton, LinearProgress, Stack } from '@mui/material';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { useEffect, useRef, useState } from 'react';
 import CustomImage from '../CustomImage';
 import { IconShangchuan, IconIcon_tool_close } from '@panda-wiki/icons';

@@ -11,7 +11,7 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { setNavId } from '@/store/slices/config';
 import { addOpacityToColor } from '@/utils';
 import { convertToTree } from '@/utils/drag';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import {
   alpha,
   Box,

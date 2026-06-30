@@ -3,7 +3,7 @@ import {
   getApiV1CollabSetting,
   putApiV1CollabSetting,
 } from '@/request/collabSetting';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import {
   FormControlLabel,
   Radio,

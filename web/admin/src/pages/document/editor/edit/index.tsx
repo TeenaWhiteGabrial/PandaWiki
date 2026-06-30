@@ -10,6 +10,7 @@ import { Box } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { WrapContext } from '..';
+import FilePreview from './FilePreview';
 import LoadingEditorWrap from './Loading';
 import EditorWrap from './Wrap';
 
@@ -43,6 +44,8 @@ const Edit = () => {
   const { setNodeDetail } = useOutletContext<WrapContext>();
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<CollabNodeDetailResp | null>(null);
+  const isReadonlyFilePreview =
+    !!detail?.meta?.file_key && !!detail?.meta?.file_readonly;
 
   const getDetail = () => {
     const startedAt = performance.now();
@@ -145,11 +148,14 @@ const Edit = () => {
         },
       }}
     >
-      {loading ? (
-        <LoadingEditorWrap />
-      ) : (
-        detail && <EditorWrap detail={detail} readOnlyUser={readOnlyUser} />
-      )}
+      {loading ? <LoadingEditorWrap /> : null}
+      {!loading && detail ? (
+        isReadonlyFilePreview ? (
+          <FilePreview detail={detail} />
+        ) : (
+          <EditorWrap detail={detail} readOnlyUser={readOnlyUser} />
+        )
+      ) : null}
     </Box>
   );
 };

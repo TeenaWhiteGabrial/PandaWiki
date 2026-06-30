@@ -10,7 +10,7 @@ import {
 } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { convertToTree } from '@/utils/drag';
-import { Modal } from '@ctzhian/ui';
+import { Modal } from '@/components/ui';
 import { Box, Checkbox, IconButton, Skeleton, Stack } from '@mui/material';
 import { IconXiajiantou } from '@panda-wiki/icons';
 import { memo } from 'react';

@@ -1,14 +1,14 @@
 import Logo from '@/assets/images/logo.png';
 import NoData from '@/assets/images/nodata.png';
 import Card from '@/components/Card';
+import { AntdTable } from '@/components/ui';
+import type { ColumnType } from '@/components/ui';
 import { AppType } from '@/constant/enums';
-import { tableSx } from '@/constant/styles';
 import { useURLSearchParams } from '@/hooks';
 import { getApiV1Conversation } from '@/request/Conversation';
 import { DomainConversationListItem } from '@/request/types';
 import { useAppSelector } from '@/store';
-import { Ellipsis, Table } from '@ctzhian/ui';
-import { ColumnType } from '@ctzhian/ui/dist/Table';
+import { Ellipsis } from '@/components/ui';
 import { Box, Stack } from '@mui/material';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
@@ -155,7 +155,7 @@ const Conversation = () => {
       >
         <Search />
       </Stack>
-      <Table
+      <AntdTable
         columns={columns}
         dataSource={data}
         rowKey='id'
@@ -163,10 +163,6 @@ const Conversation = () => {
         size='small'
         sx={{
           overflow: 'hidden',
-          ...tableSx,
-          '.MuiTableContainer-root': {
-            height: 'calc(100vh - 148px - 70px)',
-          },
         }}
         pagination={{
           total,
@@ -174,16 +170,6 @@ const Conversation = () => {
           pageSize,
           onChange: (page, pageSize) => {
             setSearchParams({ page: String(page), pageSize: String(pageSize) });
-          },
-        }}
-        PaginationProps={{
-          sx: {
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            p: 2,
-            '.MuiSelect-root': {
-              width: 100,
-            },
           },
         }}
         renderEmpty={

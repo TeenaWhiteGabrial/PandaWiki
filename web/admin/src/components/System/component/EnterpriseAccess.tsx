@@ -1,6 +1,8 @@
 import Card from '@/components/Card';
 import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import { FormItem } from '@/components/Form';
+import { AntdTable, Modal } from '@/components/ui';
+import type { ColumnType } from '@/components/ui';
 import {
   deleteApiV1EnterpriseDepartments,
   deleteApiV1EnterprisePermissionLevels,
@@ -13,17 +15,15 @@ import {
   putApiV1EnterpriseDepartments,
   putApiV1EnterprisePermissionLevels,
 } from '@/request/Enterprise';
-import { Modal, Table } from '@ctzhian/ui';
+import { Select } from 'antd';
 import {
   Box,
   Button,
   IconButton,
-  MenuItem,
   Stack,
   Switch,
   TextField,
 } from '@mui/material';
-import { ColumnType } from '@ctzhian/ui/dist/Table';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -49,6 +49,10 @@ type PermissionLevelForm = {
   description: string;
   status: 'active' | 'disabled';
   is_default: boolean;
+};
+
+type DepartmentRow = Omit<Department, 'children'> & {
+  hasChildren: boolean;
 };
 
 const EnterpriseAccess = () => {
@@ -143,14 +147,21 @@ const EnterpriseAccess = () => {
     () => flattenExpandedDepartmentTree(departmentTree, expandedDepartmentIds),
     [departmentTree, expandedDepartmentIds],
   );
+  const visibleDepartmentRows = useMemo(
+    () =>
+      visibleDepartments.map(({ children, ...rest }) => ({
+        ...rest,
+        hasChildren: !!children?.length,
+      })),
+    [visibleDepartments],
+  );
 
-  const departmentColumns: ColumnType<Department>[] = useMemo(
+  const departmentColumns: ColumnType<DepartmentRow>[] = useMemo(
     () => [
       {
         title: '部门名称',
         dataIndex: 'name',
         render: (value: string, record) => {
-          const hasChildren = !!record.children?.length;
           const isExpanded = expandedDepartmentIds.has(record.id);
           const depth = record.path
             ? Math.max(0, record.path.split('/').length - 1)
@@ -158,7 +169,7 @@ const EnterpriseAccess = () => {
           return (
             <Stack direction='row' alignItems='center' spacing={0.5}>
               <Box sx={{ width: `${depth * 24}px`, flexShrink: 0 }} />
-              {hasChildren ? (
+              {record.hasChildren ? (
                 <IconButton
                   size='small'
                   sx={{ p: 0.25 }}
@@ -349,9 +360,9 @@ const EnterpriseAccess = () => {
             添加一级部门
           </Button>
         </Stack>
-        <Table
+        <AntdTable
           rowKey='id'
-          dataSource={visibleDepartments}
+          dataSource={visibleDepartmentRows}
           columns={departmentColumns}
           loading={loading}
           pagination={false}
@@ -386,7 +397,7 @@ const EnterpriseAccess = () => {
             添加等级
           </Button>
         </Stack>
-        <Table
+        <AntdTable
           rowKey='id'
           dataSource={levels}
           columns={levelColumns}
@@ -494,10 +505,15 @@ const EnterpriseAccess = () => {
             name='status'
             control={departmentControl}
             render={({ field }) => (
-              <TextField {...field} fullWidth select>
-                <MenuItem value='active'>启用</MenuItem>
-                <MenuItem value='disabled'>停用</MenuItem>
-              </TextField>
+              <Select
+                value={field.value}
+                onChange={field.onChange}
+                style={{ width: '100%' }}
+                options={[
+                  { value: 'active', label: '启用' },
+                  { value: 'disabled', label: '停用' },
+                ]}
+              />
             )}
           />
         </FormItem>
@@ -583,10 +599,15 @@ const EnterpriseAccess = () => {
             name='status'
             control={levelControl}
             render={({ field }) => (
-              <TextField {...field} fullWidth select>
-                <MenuItem value='active'>启用</MenuItem>
-                <MenuItem value='disabled'>停用</MenuItem>
-              </TextField>
+              <Select
+                value={field.value}
+                onChange={field.onChange}
+                style={{ width: '100%' }}
+                options={[
+                  { value: 'active', label: '启用' },
+                  { value: 'disabled', label: '停用' },
+                ]}
+              />
             )}
           />
         </FormItem>

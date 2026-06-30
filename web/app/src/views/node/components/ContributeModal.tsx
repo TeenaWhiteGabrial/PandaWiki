@@ -4,7 +4,7 @@ import { useBasePath } from '@/hooks';
 import { useStore } from '@/provider';
 import { postShareProV1ContributeSubmit } from '@/request/pro';
 import { V1ShareNodeDetailResp } from '@/request/types';
-import { Editor, useTiptap } from '@ctzhian/tiptap';
+import { useTiptap } from '@ctzhian/tiptap';
 import { Modal, message } from '@ctzhian/ui';
 import {
   Box,
@@ -16,8 +16,16 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
+import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+
+const TiptapEditor = dynamic(
+  () => import('@ctzhian/tiptap').then(mod => mod.Editor),
+  {
+    ssr: false,
+  },
+);
 
 interface ContributeModalProps {
   open: boolean;
@@ -181,7 +189,7 @@ const ContributeModal = ({ open, onClose, info }: ContributeModalProps) => {
             }}
           >
             {editorRef.editor && editorReady ? (
-              <Editor editor={editorRef.editor} />
+              <TiptapEditor editor={editorRef.editor} />
             ) : (
               <Stack sx={{ p: 2 }} gap={1}>
                 <Skeleton height={24} width='30%' />

@@ -225,7 +225,18 @@ func (u *CrawlerUsecase) ScrapeGetResult(ctx context.Context, taskId string) (*v
 func (u *CrawlerUsecase) ScrapeGetResults(ctx context.Context, taskIds []string) (*v1.CrawlerResultsResp, error) {
 	taskRes, err := u.anydocClient.TaskList(ctx, taskIds)
 	if err != nil {
-		return nil, err
+		u.logger.Warn("task list for scrape results is not ready", log.Error(err), log.Any("task_ids", taskIds))
+		list := make([]v1.CrawlerResultItem, 0, len(taskIds))
+		for _, taskID := range taskIds {
+			list = append(list, v1.CrawlerResultItem{
+				TaskId: taskID,
+				Status: consts.CrawlerStatusPending,
+			})
+		}
+		return &v1.CrawlerResultsResp{
+			Status: consts.CrawlerStatusPending,
+			List:   list,
+		}, nil
 	}
 	if len(taskRes.Data) == 0 {
 		return &v1.CrawlerResultsResp{
@@ -234,14 +245,29 @@ func (u *CrawlerUsecase) ScrapeGetResults(ctx context.Context, taskIds []string)
 		}, nil
 	}
 
-	list := make([]v1.CrawlerResultItem, 0)
+	taskMap := make(map[string]anydoc.TaskItem, len(taskRes.Data))
+	for _, item := range taskRes.Data {
+		taskMap[item.TaskId] = item
+	}
+
+	list := make([]v1.CrawlerResultItem, 0, len(taskIds))
 	status := consts.CrawlerStatusCompleted
-	for i, data := range taskRes.Data {
-		currentStatus := taskRes.Data[i].Status
+	for _, taskID := range taskIds {
+		data, exists := taskMap[taskID]
+		if !exists {
+			status = consts.CrawlerStatusPending
+			list = append(list, v1.CrawlerResultItem{
+				TaskId: taskID,
+				Status: consts.CrawlerStatusPending,
+			})
+			continue
+		}
+
+		currentStatus := data.Status
 		if slices.Contains([]anydoc.Status{anydoc.StatusPending, anydoc.StatusInProgress}, currentStatus) {
 			status = consts.CrawlerStatusPending
 			list = append(list, v1.CrawlerResultItem{
-				TaskId: taskRes.Data[i].TaskId,
+				TaskId: data.TaskId,
 				Status: consts.CrawlerStatus(currentStatus),
 			})
 			continue
@@ -250,7 +276,7 @@ func (u *CrawlerUsecase) ScrapeGetResults(ctx context.Context, taskIds []string)
 		if currentStatus == anydoc.StatusFailed {
 			status = consts.CrawlerStatusFailed
 			list = append(list, v1.CrawlerResultItem{
-				TaskId: taskRes.Data[i].TaskId,
+				TaskId: data.TaskId,
 				Status: consts.CrawlerStatus(currentStatus),
 			})
 			continue
@@ -261,14 +287,14 @@ func (u *CrawlerUsecase) ScrapeGetResults(ctx context.Context, taskIds []string)
 			u.logger.Warn("download crawl result failed", log.Error(err), log.String("task_id", data.TaskId))
 			status = consts.CrawlerStatusPending
 			list = append(list, v1.CrawlerResultItem{
-				TaskId: taskRes.Data[i].TaskId,
+				TaskId: data.TaskId,
 				Status: consts.CrawlerStatusPending,
 			})
 			continue
 		}
 
 		list = append(list, v1.CrawlerResultItem{
-			TaskId:  taskRes.Data[i].TaskId,
+			TaskId:  data.TaskId,
 			Status:  consts.CrawlerStatus(currentStatus),
 			Content: string(fileBytes),
 		})

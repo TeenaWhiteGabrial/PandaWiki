@@ -69,7 +69,7 @@ const HomePage = () => {
         THEME_TO_PALETTE[themeMode]?.palette ||
         THEME_TO_PALETTE['blue'].palette,
       typography: {
-        fontFamily: 'var(--font-gilory), PingFang SC, sans-serif',
+        fontFamily: 'var(--font-alibaba-puhuiti), PingFang SC, sans-serif',
       },
       components: createComponentStyleOverrides(true),
     });

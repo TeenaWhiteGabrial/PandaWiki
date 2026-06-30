@@ -6,7 +6,7 @@ import {
 } from '@/request/nodeStream';
 import { useAppSelector } from '@/store';
 import SSEClient from '@/utils/fetch';
-import { message, Modal } from '@ctzhian/ui';
+import { message, Modal } from '@/components/ui';
 import { Button, CircularProgress, Stack, TextField } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';

@@ -12,15 +12,9 @@ import {
 import { useAppSelector } from '@/store';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { copyText } from '@/utils';
-import { message } from '@ctzhian/ui';
-import {
-  Box,
-  Button,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { message } from '@/components/ui';
+import { Select } from 'antd';
+import { Box, Button, Stack, TextField, Typography } from '@mui/material';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -124,17 +118,22 @@ const MCPAccess = () => {
               onChange={e => setName(e.target.value)}
               fullWidth
             />
-            <TextField
-              select
-              label='权限'
-              value={permission}
-              onChange={() => undefined}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value={permission}>
-                {readOnlyMCP ? '只读' : '文档管理'}
-              </MenuItem>
-            </TextField>
+            <Box sx={{ minWidth: 180 }}>
+              <Typography fontSize={12} color='text.secondary' mb={0.5}>
+                权限
+              </Typography>
+              <Select
+                value={permission}
+                disabled
+                style={{ width: '100%' }}
+                options={[
+                  {
+                    value: permission,
+                    label: readOnlyMCP ? '只读' : '文档管理',
+                  },
+                ]}
+              />
+            </Box>
             <Button
               variant='contained'
               onClick={handleCreate}

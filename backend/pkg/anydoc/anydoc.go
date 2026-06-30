@@ -330,9 +330,6 @@ func (c *Client) TaskList(ctx context.Context, ids []string) (*TaskRes, error) {
 	if !res.Success {
 		return nil, errors.New(res.Msg)
 	}
-	if len(res.Data) == 0 {
-		return nil, errors.New("data list is empty")
-	}
 	return &res, nil
 }
 

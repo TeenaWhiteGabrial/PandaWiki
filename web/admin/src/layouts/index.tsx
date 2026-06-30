@@ -2,11 +2,13 @@ import { Box } from '@mui/material';
 import { Outlet, useLocation } from 'react-router-dom';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
+import { getApiV1AppDetailCompat } from '@/request/appCompat';
 import { getApiV1ModelList } from '@/request/Model';
 import { getApiV1KnowledgeBaseList } from '@/request/KnowledgeBase';
 import { getApiV1UserCompat } from '@/request/userCompat';
 import { useAppDispatch } from '@/store';
 import {
+  setAppBrand,
   setModelStatus,
   setModelList,
   setKbList,
@@ -16,6 +18,7 @@ import {
 import { ConstsUserRole } from '@/request/types';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { applyAppBrand, getAppBrandFromDetail } from '@/utils/appBrand';
 
 const useAuth = (hasAuth: boolean) => {
   const { pathname } = useLocation();
@@ -56,14 +59,24 @@ const useAuth = (hasAuth: boolean) => {
     });
   };
 
+  const getAppBrand = () => {
+    return getApiV1AppDetailCompat({ type: '1' }).then(res => {
+      const brand = getAppBrandFromDetail(res);
+      dispatch(setAppBrand(brand));
+      applyAppBrand(brand);
+      return res;
+    });
+  };
+
   const initData = () => {
     getUser().then(user => {
       Promise.all([
         user.role === ConstsUserRole.UserRoleAdmin
           ? getModel()
           : Promise.resolve(null),
+        getAppBrand(),
         getKbList(),
-      ]).then(([, kbList]) => {
+      ]).then(([, , kbList]) => {
         if (
           (user.role === ConstsUserRole.UserRoleUser ||
             user.role === ConstsUserRole.UserRoleManager) &&

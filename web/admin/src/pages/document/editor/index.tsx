@@ -14,7 +14,7 @@ import {
   setNavId,
 } from '@/store/slices/config';
 import { convertToTree } from '@/utils/drag';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { Box, Drawer, Stack, useMediaQuery } from '@mui/material';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';

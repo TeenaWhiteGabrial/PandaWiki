@@ -1,13 +1,5 @@
-import {
-  Box,
-  IconButton,
-  Stack,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-} from '@mui/material';
+import { Select } from 'antd';
+import { Box, IconButton, Stack, TextField } from '@mui/material';
 import { IconShanchu2, IconDrag } from '@panda-wiki/icons';
 import {
   CSSProperties,
@@ -116,30 +108,23 @@ const Item = forwardRef<HTMLDivElement, ItemProps>(
                 setIsEdit(true);
               }}
             />
-            <FormControl>
-              <InputLabel
-                sx={{
-                  '&.Mui-focused': {
-                    color: 'black',
-                  },
-                }}
-              >
-                按钮样式
-              </InputLabel>
+            <Box sx={{ minWidth: 144 }}>
+              <Box sx={{ fontSize: 12, mb: 0.5 }}>按钮样式</Box>
               <Select
                 value={item.type}
-                label='按钮样式'
-                onChange={e => {
-                  const updatedItem = { ...item, type: e.target.value };
+                onChange={value => {
+                  const updatedItem = { ...item, type: value };
                   handleUpdateItem?.(updatedItem);
                   setIsEdit(true);
                 }}
-              >
-                <MenuItem value={'contained'}>实心</MenuItem>
-                <MenuItem value={'outlined'}>描边</MenuItem>
-                <MenuItem value={'text'}>文字</MenuItem>
-              </Select>
-            </FormControl>
+                style={{ width: '100%' }}
+                options={[
+                  { value: 'contained', label: '实心' },
+                  { value: 'outlined', label: '描边' },
+                  { value: 'text', label: '文字' },
+                ]}
+              />
+            </Box>
           </Stack>
 
           <Stack

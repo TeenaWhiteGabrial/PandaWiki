@@ -12,7 +12,7 @@ import { SettingCardItem, FormItem, SecretTextField } from './Common';
 import ShowText from '@/components/ShowText';
 import { Controller, useForm } from 'react-hook-form';
 import { useMemo, useState, useEffect } from 'react';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { getApiV1AppDetail, putApiV1App } from '@/request/App';
 import { DomainAppDetailResp, ConstsLicenseEdition } from '@/request/types';
 

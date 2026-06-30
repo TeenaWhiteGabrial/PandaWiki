@@ -1,5 +1,5 @@
 import { Box, Stack, useMediaQuery } from '@mui/material';
-import { CusTabs } from '@ctzhian/ui';
+import { CusTabs } from '@/components/ui';
 import { useState } from 'react';
 import AreaMap from './AreaMap';
 import ClientStat from './ClientStat';

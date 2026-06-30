@@ -1,6 +1,6 @@
 import { CustomCodeSetting } from '@/api';
 import { TextField } from '@mui/material';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { DomainKnowledgeBaseDetail } from '@/request/types';

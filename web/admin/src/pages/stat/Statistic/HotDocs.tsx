@@ -3,7 +3,7 @@ import Nodata from '@/assets/images/nodata.png';
 import Card from '@/components/Card';
 import { useAppSelector } from '@/store';
 import { Box, Stack } from '@mui/material';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import { useEffect, useState } from 'react';
 import { ActiveTab, TimeList } from '.';
 import { DomainHotPage } from '@/request/types';

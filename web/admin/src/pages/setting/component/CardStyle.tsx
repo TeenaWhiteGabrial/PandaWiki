@@ -4,7 +4,7 @@ import doc_width_normal from '@/assets/images/normal.png';
 import doc_width_wide from '@/assets/images/wide.png';
 import { putApiV1AppCompat } from '@/request/appCompat';
 import { DomainAppDetailResp } from '@/request/types';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import {
   Box,
   FormControlLabel,

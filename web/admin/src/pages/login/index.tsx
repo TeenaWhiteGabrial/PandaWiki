@@ -4,9 +4,9 @@ import Logo from '@/assets/images/logo.png';
 import Avatar from '@/components/Avatar';
 import Card from '@/components/Card';
 import { useURLSearchParams } from '@/hooks';
+import { AutoComplete, Input } from 'antd';
 import {
   alpha,
-  Autocomplete,
   Box,
   Button,
   Checkbox,
@@ -16,9 +16,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAppSelector } from '@/store';
 import {
   IconZhanghao,
   IconIcon_tool_close,
@@ -69,6 +70,7 @@ const saveRememberedLogins = (items: RememberedLogin[]) => {
 
 const Login = () => {
   const navigate = useNavigate();
+  const { appBrand } = useAppSelector(state => state.config);
   const [searchParams] = useURLSearchParams();
   const redirect = searchParams.get('redirect') || '/';
   const [account, setAccount] = useState('');
@@ -178,7 +180,10 @@ const Login = () => {
           }}
         >
           <Stack alignItems={'center'}>
-            <Avatar src={Logo} sx={{ width: 68, height: 68, mb: 1.5 }} />
+            <Avatar
+              src={appBrand.icon || Logo}
+              sx={{ width: 68, height: 68, mb: 1.5 }}
+            />
             <Stack
               direction={'row'}
               alignItems={'center'}
@@ -190,7 +195,7 @@ const Login = () => {
                 mb: 1,
               }}
             >
-              知识库管理台
+              {appBrand.title || '知识库管理台'}
             </Stack>
             <Typography
               sx={{
@@ -201,85 +206,62 @@ const Login = () => {
             >
               支持保存多个登录账号，选择后可直接带出密码
             </Typography>
-            <Autocomplete
-              freeSolo
-              fullWidth
-              options={rememberedLogins.map(item => item.account)}
+            <AutoComplete
+              style={{ width: '100%', marginBottom: 24 }}
+              options={rememberedLogins.map(item => ({
+                value: item.account,
+                label: item.account,
+              }))}
               value={account}
-              onChange={(_, value) => handleAccountChange(value || '')}
-              onInputChange={(_, value, reason) => {
-                if (reason === 'input' || reason === 'clear') {
-                  handleAccountChange(value);
+              onSelect={value => handleAccountChange(value)}
+              onChange={value => handleAccountChange(value)}
+              onSearch={value => handleAccountChange(value)}
+              allowClear
+              popupMatchSelectWidth
+            >
+              <Input
+                size='large'
+                placeholder='账号'
+                autoFocus
+                tabIndex={1}
+                prefix={<IconZhanghao sx={{ fontSize: 16, mr: 1 }} />}
+                suffix={
+                  account ? (
+                    <IconButton
+                      onClick={() => handleAccountChange('')}
+                      size='small'
+                      tabIndex={-1}
+                    >
+                      <IconIcon_tool_close
+                        sx={{
+                          fontSize: 14,
+                          color: 'text.tertiary',
+                        }}
+                      />
+                    </IconButton>
+                  ) : null
                 }
-              }}
-              slotProps={{
-                paper: {
-                  sx: {
-                    mt: 1,
-                    borderRadius: '16px',
-                    boxShadow: '0px 18px 48px rgba(15, 23, 42, 0.18)',
-                    border: `1px solid ${alpha('#D7DEEA', 0.9)}`,
+                styles={{
+                  input: {
+                    fontSize: 14,
                   },
-                },
-                listbox: {
-                  sx: {
-                    py: 1,
-                    '& .MuiAutocomplete-option': {
-                      minHeight: 48,
-                      px: 2,
-                      fontSize: 14,
-                    },
-                  },
-                },
+                }}
+              />
+            </AutoComplete>
+            <Typography
+              sx={{
+                width: '100%',
+                mt: -2,
+                mb: 3,
+                minHeight: 20,
+                fontSize: 12,
+                color: 'text.secondary',
               }}
-              renderInput={params => (
-                <TextField
-                  {...params}
-                  fullWidth
-                  sx={{ mb: 3 }}
-                  placeholder='账号'
-                  autoFocus
-                  tabIndex={1}
-                  helperText={
-                    rememberedLogins.length
-                      ? `已保存 ${rememberedLogins.length} 个账号，可下拉选择`
-                      : ' '
-                  }
-                  slotProps={{
-                    input: {
-                      ...params.InputProps,
-                      startAdornment: (
-                        <>
-                          <IconZhanghao
-                            sx={{ fontSize: 16, mr: 2, flexShrink: 0 }}
-                          />
-                          {params.InputProps.startAdornment}
-                        </>
-                      ),
-                      endAdornment: (
-                        <>
-                          {account ? (
-                            <IconButton
-                              onClick={() => handleAccountChange('')}
-                              size='small'
-                              tabIndex={-1}
-                            >
-                              <IconIcon_tool_close
-                                sx={{
-                                  fontSize: 14,
-                                  color: 'text.tertiary',
-                                }}
-                              />
-                            </IconButton>
-                          ) : null}
-                          {params.InputProps.endAdornment}
-                        </>
-                      ),
-                    },
-                  }}
-                />
-              )}
-            />
+            >
+              {rememberedLogins.length
+                ? `已保存 ${rememberedLogins.length} 个账号，可下拉选择`
+                : ' '}
+            </Typography>
             <TextField
               value={password}
               fullWidth

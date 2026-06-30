@@ -5,7 +5,7 @@ import { Controller, useForm } from 'react-hook-form';
 import DragList from '../../components/DragList';
 import SortableItem from '../../components/SortableItem';
 import Item from './Item';
-import { Empty } from '@ctzhian/ui';
+import { Empty } from '@/components/ui';
 import type { ConfigProps } from '../type';
 import { useAppSelector } from '@/store';
 import { getApiV1NodeListGroupNav } from '@/request/Node';

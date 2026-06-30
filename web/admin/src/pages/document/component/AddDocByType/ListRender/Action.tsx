@@ -6,8 +6,9 @@ import {
   postApiV1FileUpload,
   postApiV1Node,
 } from '@/request';
+import { postApiV1FilePreviewGenerate } from '@/request/FilePreview';
 import { useAppSelector } from '@/store';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import {
   alpha,
   Box,
@@ -258,10 +259,32 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               );
 
               // 3. 创建文档节点
+              const normalizedFileType = (item.file_type || '').toLowerCase();
+              const previewKey =
+                normalizedFileType === 'pdf'
+                  ? item.file_key || item.id
+                  : ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(
+                        normalizedFileType,
+                      )
+                    ? (
+                        await postApiV1FilePreviewGenerate({
+                          file_key: item.file_key || item.id || '',
+                          file_name: item.file_name || item.title || 'file',
+                          kb_id,
+                        })
+                      )?.preview_key
+                    : undefined;
               const nodeResp = await postApiV1Node({
                 name: item.title!,
                 content: pollResult.content || '',
                 content_type: item.file_type === 'md' ? 'md' : undefined,
+                meta: {
+                  file_key: item.file_key || item.id,
+                  file_name: item.file_name || item.title,
+                  file_type: item.file_type,
+                  preview_key: previewKey,
+                  file_readonly: true,
+                },
                 parent_id: actualParentId,
                 type: 2, // 文件类型
                 kb_id,
@@ -377,6 +400,8 @@ const BatchActionBar = (props: BatchActionBarProps) => {
                     ? {
                         ...prevItem,
                         id: resp.key,
+                        file_key: resp.key,
+                        file_name: resp.filename,
                         file_type: resp.filename?.split('.').pop(),
                         progress: 100,
                       }

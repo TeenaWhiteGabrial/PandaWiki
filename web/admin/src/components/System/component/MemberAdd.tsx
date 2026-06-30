@@ -1,5 +1,6 @@
 import { postApiV1UserCreate } from '@/request/User';
 import Card from '@/components/Card';
+import { message, Modal } from '@/components/ui';
 import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import { FormItem } from '@/components/Form';
 import { getApiV1EnterpriseDepartments } from '@/request/Enterprise';
@@ -11,8 +12,8 @@ import {
   getAncestorIds,
 } from '@/utils/enterprise';
 import { CheckCircle } from '@mui/icons-material';
-import { Box, Button, MenuItem, Stack, TextField } from '@mui/material';
-import { message, Modal } from '@ctzhian/ui';
+import { Select } from 'antd';
+import { Box, Button, Stack, TextField } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { V1CreateUserReq } from '@/request/types';
@@ -244,10 +245,15 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
             control={control}
             name='role'
             render={({ field }) => (
-              <TextField {...field} fullWidth select>
-                <MenuItem value='manager'>管理员</MenuItem>
-                <MenuItem value='user'>普通用户</MenuItem>
-              </TextField>
+              <Select
+                value={field.value}
+                onChange={field.onChange}
+                style={{ width: '100%' }}
+                options={[
+                  { value: 'manager', label: '管理员' },
+                  { value: 'user', label: '普通用户' },
+                ]}
+              />
             )}
           />
         </FormItem>

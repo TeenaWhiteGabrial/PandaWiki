@@ -1,9 +1,10 @@
 import { UserInfo } from '@/api';
 import { deleteApiV1UserDelete } from '@/request/User';
 import Card from '@/components/Card';
+import { message, Modal } from '@/components/ui';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { Box, Stack } from '@mui/material';
-import { Ellipsis, message, Modal } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { V1UserListItemResp } from '@/request/types';
 

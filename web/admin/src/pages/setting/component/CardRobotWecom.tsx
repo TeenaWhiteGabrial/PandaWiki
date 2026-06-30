@@ -1,16 +1,15 @@
 import ShowText from '@/components/ShowText';
+import { message, Modal } from '@/components/ui';
+import { Select } from 'antd';
 import {
   Box,
   FormControlLabel,
   Radio,
   RadioGroup,
   TextField,
-  Autocomplete,
-  Chip,
 } from '@mui/material';
 import { PROFESSION_VERSION_PERMISSION } from '@/constant/version';
 import VersionMask from '@/components/VersionMask';
-import { message, Modal } from '@ctzhian/ui';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -34,7 +33,6 @@ const CardRobotWecom = ({
   const [detail, setDetail] = useState<DomainAppDetailResp | null>(null);
   const [isEnabled, setIsEnabled] = useState(false);
   const { kb_id } = useAppSelector(state => state.config);
-  const [inputValue, setInputValue] = useState('');
 
   const {
     control,
@@ -376,43 +374,21 @@ const CardRobotWecom = ({
                 control={control}
                 name='feedback_type'
                 render={({ field }) => (
-                  <Autocomplete
-                    {...field}
-                    multiple
-                    freeSolo
-                    fullWidth
-                    options={AI_FEEDBACK_OPTIONS}
-                    inputValue={inputValue}
-                    onInputChange={(_, newInputValue) =>
-                      setInputValue(newInputValue)
-                    }
-                    onChange={(_, newValue) => {
+                  <Select
+                    mode='tags'
+                    style={{ width: '100%' }}
+                    value={field.value || []}
+                    options={AI_FEEDBACK_OPTIONS.map(option => ({
+                      value: option,
+                      label: option,
+                    }))}
+                    placeholder='选择或输入评价，可多选，回车确认'
+                    onChange={newValue => {
                       setIsEdit(true);
-                      const newValues = [...new Set(newValue as string[])];
+                      const newValues = [...new Set(newValue)];
                       field.onChange(newValues);
                     }}
-                    renderValue={(value, getTagProps) => {
-                      return value.map((option, index: number) => {
-                        return (
-                          <Chip
-                            variant='outlined'
-                            size='small'
-                            label={
-                              <Box sx={{ fontSize: '12px' }}>{option}</Box>
-                            }
-                            {...getTagProps({ index })}
-                            key={index}
-                          />
-                        );
-                      });
-                    }}
-                    renderInput={params => (
-                      <TextField
-                        {...params}
-                        placeholder='选择或输入评价，可多选，回车确认'
-                        variant='outlined'
-                      />
-                    )}
+                    tokenSeparators={[',']}
                   />
                 )}
               />

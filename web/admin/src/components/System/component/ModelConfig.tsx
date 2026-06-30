@@ -8,7 +8,7 @@ import {
 } from '@/request/Model';
 import { GithubComChaitinPandaWikiDomainModelListItem } from '@/request/types';
 import { addOpacityToColor } from '@/utils';
-import { message, Modal } from '@ctzhian/ui';
+import { message, Modal } from '@/components/ui';
 import {
   Box,
   Button,
@@ -520,7 +520,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                           sx={{
                             fontSize: 14,
                             lineHeight: '20px',
-                            fontFamily: 'Gbold',
+                            fontFamily: 'AlibabaPuHuiTi',
                             ml: -0.5,
                           }}
                         >
@@ -547,7 +547,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                         sx={{
                           fontSize: 14,
                           lineHeight: '20px',
-                          fontFamily: 'Gbold',
+                          fontFamily: 'AlibabaPuHuiTi',
                           ml: -0.5,
                         }}
                       >
@@ -719,7 +719,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                           sx={{
                             fontSize: 14,
                             lineHeight: '20px',
-                            fontFamily: 'Gbold',
+                            fontFamily: 'AlibabaPuHuiTi',
                             ml: -0.5,
                           }}
                         >
@@ -746,7 +746,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                         sx={{
                           fontSize: 14,
                           lineHeight: '20px',
-                          fontFamily: 'Gbold',
+                          fontFamily: 'AlibabaPuHuiTi',
                           ml: -0.5,
                         }}
                       >
@@ -923,7 +923,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                           sx={{
                             fontSize: 14,
                             lineHeight: '20px',
-                            fontFamily: 'Gbold',
+                            fontFamily: 'AlibabaPuHuiTi',
                             ml: -0.5,
                           }}
                         >
@@ -950,7 +950,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                         sx={{
                           fontSize: 14,
                           lineHeight: '20px',
-                          fontFamily: 'Gbold',
+                          fontFamily: 'AlibabaPuHuiTi',
                           ml: -0.5,
                         }}
                       >
@@ -1122,7 +1122,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                           sx={{
                             fontSize: 14,
                             lineHeight: '20px',
-                            fontFamily: 'Gbold',
+                            fontFamily: 'AlibabaPuHuiTi',
                             ml: -0.5,
                           }}
                         >
@@ -1149,7 +1149,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                         sx={{
                           fontSize: 14,
                           lineHeight: '20px',
-                          fontFamily: 'Gbold',
+                          fontFamily: 'AlibabaPuHuiTi',
                           ml: -0.5,
                         }}
                       >
@@ -1320,7 +1320,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                           sx={{
                             fontSize: 14,
                             lineHeight: '20px',
-                            fontFamily: 'Gbold',
+                            fontFamily: 'AlibabaPuHuiTi',
                             ml: -0.5,
                           }}
                         >
@@ -1347,7 +1347,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                         sx={{
                           fontSize: 14,
                           lineHeight: '20px',
-                          fontFamily: 'Gbold',
+                          fontFamily: 'AlibabaPuHuiTi',
                           ml: -0.5,
                         }}
                       >

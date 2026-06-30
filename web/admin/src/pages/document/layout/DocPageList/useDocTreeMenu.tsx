@@ -10,21 +10,6 @@ import type { DocTreeMenuHandlers } from './types';
 
 const IMPORT_SOURCES: { key: ConstsCrawlerSource; label: string }[] = [
   { key: ConstsCrawlerSource.CrawlerSourceFile, label: '通过离线文件导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceUrl, label: '通过 URL 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceRSS, label: '通过 RSS 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceSitemap, label: '通过 Sitemap 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceNotion, label: '通过 Notion 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceEpub, label: '通过 Epub 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceWikijs, label: '通过 Wiki.js 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceYuque, label: '通过 语雀 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceSiyuan, label: '通过 思源笔记 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceMindoc, label: '通过 MinDoc 导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceFeishu, label: '通过飞书文档导入' },
-  { key: ConstsCrawlerSource.CrawlerSourceDingtalk, label: '通过钉钉文档导入' },
-  {
-    key: ConstsCrawlerSource.CrawlerSourceConfluence,
-    label: '通过 Confluence 导入',
-  },
 ];
 
 export function useDocTreeMenu(

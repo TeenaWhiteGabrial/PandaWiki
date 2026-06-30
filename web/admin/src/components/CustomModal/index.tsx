@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { Button, Stack, Typography } from '@mui/material';
-import { CusTabs, message, Modal } from '@ctzhian/ui';
+import { CusTabs, message, Modal } from '@/components/ui';
 import {
   getApiV1NodeRecommendNodes,
   getApiV1KnowledgeBaseDetail,

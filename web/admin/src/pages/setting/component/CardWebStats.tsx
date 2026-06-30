@@ -1,4 +1,4 @@
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { Box, FormControlLabel, Radio, RadioGroup } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';

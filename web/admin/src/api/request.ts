@@ -4,7 +4,7 @@ import axios, {
   AxiosRequestConfig,
   AxiosResponse,
 } from 'axios';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 
 type BasicResponse<T> = {
   data: T;

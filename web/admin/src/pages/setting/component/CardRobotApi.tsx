@@ -14,7 +14,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { useEffect, useState } from 'react';
 import { FormItem, SettingCardItem, SecretTextField } from './Common';
 import { DomainAppDetailResp } from '@/request/types';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 
 const CardRobotApi = ({
   kb,

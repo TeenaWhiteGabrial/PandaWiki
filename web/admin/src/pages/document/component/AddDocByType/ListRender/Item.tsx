@@ -4,7 +4,7 @@ import {
   V1CrawlerParseReq,
 } from '@/request';
 import { useAppSelector } from '@/store';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import {
   alpha,
   Box,

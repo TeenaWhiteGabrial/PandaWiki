@@ -10,7 +10,7 @@ import {
   useTiptap,
   UseTiptapReturn,
 } from '@ctzhian/tiptap';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { Box, Stack, TextField, Tooltip } from '@mui/material';
 import {
   IconAShijian2,

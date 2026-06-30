@@ -1,6 +1,7 @@
 import NoData from '@/assets/images/nodata.png';
 import Card from '@/components/Card';
-import { tableSx } from '@/constant/styles';
+import { AntdTable, message } from '@/components/ui';
+import type { ColumnType } from '@/components/ui';
 import { useURLSearchParams } from '@/hooks';
 import {
   auditContribute,
@@ -15,8 +16,8 @@ import {
 } from '@/request/pro/types';
 import { V1NavListResp } from '@/request/types';
 import { useAppSelector } from '@/store';
-import { Ellipsis, Table, message } from '@ctzhian/ui';
-import { ColumnType } from '@ctzhian/ui/dist/Table';
+import { Ellipsis } from '@/components/ui';
+import { Select } from 'antd';
 import {
   Box,
   Button,
@@ -25,7 +26,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  MenuItem,
   Stack,
   TextField,
 } from '@mui/material';
@@ -318,7 +318,7 @@ const ContributePage = () => {
         </Stack>
       </Stack>
 
-      <Table
+      <AntdTable
         rowKey='id'
         loading={loading}
         columns={columns}
@@ -335,7 +335,6 @@ const ContributePage = () => {
               keyword,
             }),
         }}
-        sx={tableSx}
         renderEmpty={
           loading ? (
             <Box />
@@ -376,20 +375,18 @@ const ContributePage = () => {
               </Box>
             )}
             {detail?.type === 'add' && (
-              <TextField
-                select
-                fullWidth
-                size='small'
-                label='发布到栏目'
-                value={selectedNavId}
-                onChange={event => setSelectedNavId(event.target.value)}
-              >
-                {navList.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name}
-                  </MenuItem>
-                ))}
-              </TextField>
+              <Box>
+                <Box sx={{ fontSize: 14, mb: 1 }}>发布到栏目</Box>
+                <Select
+                  style={{ width: '100%' }}
+                  value={selectedNavId}
+                  onChange={value => setSelectedNavId(value)}
+                  options={navList.map(item => ({
+                    value: item.id || '',
+                    label: item.name || '-',
+                  }))}
+                />
+              </Box>
             )}
           </Stack>
         </DialogContent>

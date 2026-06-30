@@ -2,6 +2,7 @@ import { ITreeItem } from '@/api';
 import Nodata from '@/assets/images/nodata.png';
 import Card from '@/components/Card';
 import DragTree from '@/components/Drag/DragTree';
+import { Modal } from '@/components/ui';
 import { getApiV1NodeListGroupNav } from '@/request/Node';
 import {
   DomainNodeListItemResp,
@@ -10,7 +11,6 @@ import {
 } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { convertToTree } from '@/utils/drag';
-import { Modal } from '@ctzhian/ui';
 import { Box, Checkbox, IconButton, Skeleton, Stack } from '@mui/material';
 import { IconXiajiantou } from '@panda-wiki/icons';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';

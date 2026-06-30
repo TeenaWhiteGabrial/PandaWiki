@@ -8,7 +8,7 @@ import {
 import { useAppSelector } from '@/store';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { collapseAllFolders, convertToTree } from '@/utils/drag';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import DocListModals from './DocListModals';
 import DocPageListContent from './DocPageListContent';

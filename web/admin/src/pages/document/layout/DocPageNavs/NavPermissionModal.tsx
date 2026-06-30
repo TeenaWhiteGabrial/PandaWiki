@@ -16,8 +16,8 @@ import {
   flattenDepartmentTree,
   getAncestorIds,
 } from '@/utils/enterprise';
-import { message, Modal } from '@ctzhian/ui';
-import { MenuItem, TextField } from '@mui/material';
+import { message, Modal } from '@/components/ui';
+import { Select } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
@@ -152,10 +152,15 @@ const NavPermissionModal = ({
             name='scope_type'
             control={control}
             render={({ field }) => (
-              <TextField {...field} fullWidth select size='small'>
-                <MenuItem value='public'>公共栏目</MenuItem>
-                <MenuItem value='department'>部门栏目</MenuItem>
-              </TextField>
+              <Select
+                value={field.value}
+                onChange={field.onChange}
+                style={{ width: '100%' }}
+                options={[
+                  { value: 'public', label: '公共栏目' },
+                  { value: 'department', label: '部门栏目' },
+                ]}
+              />
             )}
           />
         </FormItem>
@@ -164,14 +169,18 @@ const NavPermissionModal = ({
             name='min_permission_level_id'
             control={control}
             render={({ field }) => (
-              <TextField {...field} fullWidth select size='small'>
-                <MenuItem value=''>不限制</MenuItem>
-                {permissionLevels.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name}（{item.rank}）
-                  </MenuItem>
-                ))}
-              </TextField>
+              <Select
+                value={field.value}
+                onChange={field.onChange}
+                style={{ width: '100%' }}
+                options={[
+                  { value: '', label: '不限制' },
+                  ...permissionLevels.map(item => ({
+                    value: item.id,
+                    label: `${item.name}（${item.rank}）`,
+                  })),
+                ]}
+              />
             )}
           />
         </FormItem>
@@ -199,20 +208,16 @@ const NavPermissionModal = ({
                 name='allowed_user_ids'
                 control={control}
                 render={({ field }) => (
-                  <TextField
-                    {...field}
-                    fullWidth
-                    select
-                    size='small'
-                    SelectProps={{ multiple: true }}
+                  <Select
+                    mode='multiple'
                     value={field.value || []}
-                  >
-                    {users.map(item => (
-                      <MenuItem key={item.id} value={item.id}>
-                        {item.account}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+                    onChange={field.onChange}
+                    style={{ width: '100%' }}
+                    options={users.map(item => ({
+                      value: item.id,
+                      label: item.account,
+                    }))}
+                  />
                 )}
               />
             </FormItem>

@@ -1,8 +1,8 @@
 import Card from '@/components/Card';
+import { Modal } from '@/components/ui';
 import { putApiV1UserResetPassword } from '@/request/User';
 import { V1UserListItemResp } from '@/request/types';
 import { copyText, generatePassword } from '@/utils';
-import { Modal } from '@ctzhian/ui';
 import { CheckCircle } from '@mui/icons-material';
 import { Box, IconButton, Stack, TextField } from '@mui/material';
 import { IconShuaxin } from '@panda-wiki/icons';

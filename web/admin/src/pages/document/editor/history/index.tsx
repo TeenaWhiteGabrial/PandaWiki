@@ -10,7 +10,8 @@ import {
 } from '@/request/pro/types';
 import { useAppSelector } from '@/store';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
-import { Ellipsis, message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
+import { Ellipsis } from '@/components/ui';
 import {
   Box,
   Button,

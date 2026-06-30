@@ -6,7 +6,7 @@ import {
   DomainLarkBotSettings,
 } from '@/request/types';
 import { useAppSelector } from '@/store';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import {
   Box,
   FormControlLabel,

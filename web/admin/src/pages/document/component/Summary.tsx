@@ -6,7 +6,7 @@ import {
 } from '@/request/nodeStream';
 import { DomainNodeListItemResp } from '@/request/types';
 import { Button, Stack, TextField } from '@mui/material';
-import { message, Modal } from '@ctzhian/ui';
+import { message, Modal } from '@/components/ui';
 import { useEffect, useRef, useState } from 'react';
 import { IconShuaxin } from '@panda-wiki/icons';
 import SSEClient from '@/utils/fetch';

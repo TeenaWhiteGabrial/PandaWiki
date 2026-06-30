@@ -1,10 +1,9 @@
 import React from 'react';
+import { Select } from 'antd';
 import {
   Box,
   IconButton,
-  MenuItem,
   Popover,
-  Select,
   Stack,
   Typography,
   alpha,
@@ -272,49 +271,26 @@ const ComponentBar = ({
                   appPreviewData.settings?.web_app_landing_theme?.name || 'blue'
                 ]?.value || 'blue'
               }
-              renderValue={value => {
-                return THEME_TO_PALETTE[value]?.label;
-              }}
-              sx={{
-                width: '100%',
-                height: '40px',
-                bgcolor: '#F2F8FF',
-                border: '1px solid #5F58FE',
-                color: '#5F58FE',
-                '&:focus': {
-                  border: '1px solid #5F58FE',
-                },
-                '&:hover': {
-                  border: '1px solid #5F58FE',
-                },
-                '&.Mui-focused': {
-                  border: '1px solid #5F58FE',
-                },
-                '& .MuiOutlinedInput-notchedOutline': {
-                  border: 'none',
-                },
-              }}
-              onChange={e => {
+              style={{ width: '100%' }}
+              options={THEME_LIST.map(item => ({
+                value: item.value,
+                label: <ThemeCard palette={item.palette} label={item.label} />,
+              }))}
+              onChange={value => {
                 if (!appPreviewData) return;
                 const newInfo = {
                   ...appPreviewData,
                   settings: {
                     ...appPreviewData.settings,
                     web_app_landing_theme: {
-                      name: e.target.value,
+                      name: value,
                     },
                   },
                 };
                 setIsEdit(true);
                 dispatch(setAppPreviewData(newInfo));
               }}
-            >
-              {THEME_LIST.map(item => (
-                <MenuItem key={item.value} value={item.value}>
-                  <ThemeCard palette={item.palette} label={item.label} />
-                </MenuItem>
-              ))}
-            </Select>
+            />
           </Stack>
         </>
       )}

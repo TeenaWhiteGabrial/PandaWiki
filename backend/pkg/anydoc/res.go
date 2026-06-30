@@ -23,17 +23,20 @@ type UrlExportRes struct {
 	Err     string      `json:"err"`
 	TraceId interface{} `json:"trace_id"`
 }
+
+type TaskItem struct {
+	TaskId     string `json:"task_id"`
+	PlatformId string `json:"platform_id"`
+	DocId      string `json:"doc_id"`
+	Status     Status `json:"status"`
+	Err        string `json:"err"`
+	Markdown   string `json:"markdown"`
+	Json       string `json:"json"`
+}
+
 type TaskRes struct {
 	Success bool `json:"success"`
-	Data    []struct {
-		TaskId     string `json:"task_id"`
-		PlatformId string `json:"platform_id"`
-		DocId      string `json:"doc_id"`
-		Status     Status `json:"status"`
-		Err        string `json:"err"`
-		Markdown   string `json:"markdown"`
-		Json       string `json:"json"`
-	} `json:"data"`
+	Data    []TaskItem `json:"data"`
 	Msg string `json:"msg"`
 }
 

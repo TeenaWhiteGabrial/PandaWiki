@@ -12,20 +12,16 @@ import { getSelectorsByUserAgent } from 'react-device-detect';
 import { getBasePath, getImagePath } from '@/utils';
 import './globals.css';
 
-const gilory = localFont({
-  variable: '--font-gilory',
+const alibabaPuHuiTi = localFont({
+  variable: '--font-alibaba-puhuiti',
   src: [
     {
-      path: '../assets/fonts/gilroy-bold-700.otf',
+      path: '../assets/fonts/AlibabaPuHuiTi-Bold.ttf',
       weight: '700',
     },
     {
-      path: '../assets/fonts/gilroy-medium-500.otf',
+      path: '../assets/fonts/AlibabaPuHuiTi-Regular.ttf',
       weight: '400',
-    },
-    {
-      path: '../assets/fonts/gilroy-regular-400.otf',
-      weight: '300',
     },
   ],
 });
@@ -96,7 +92,7 @@ const Layout = async ({
         }}
       />
       <body
-        className={`${gilory.variable} ${themeMode === 'dark' ? 'dark' : 'light'}`}
+        className={`${alibabaPuHuiTi.variable} ${themeMode === 'dark' ? 'dark' : 'light'}`}
       >
         <AppRouterCacheProvider>
           <ThemeStoreProvider themeMode={themeMode}>

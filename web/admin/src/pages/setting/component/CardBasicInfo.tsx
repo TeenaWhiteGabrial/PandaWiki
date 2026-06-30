@@ -3,7 +3,7 @@ import { DomainKnowledgeBaseDetail } from '@/request/types';
 import { FormItem, SettingCardItem } from './Common';
 import { validateUrl } from '@/utils';
 import { TextField } from '@mui/material';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { useEffect, useState } from 'react';
 
 const CardBasicInfo = ({

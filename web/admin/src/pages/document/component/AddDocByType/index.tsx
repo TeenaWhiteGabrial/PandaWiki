@@ -4,7 +4,7 @@ import {
   ConstsCrawlerSource,
 } from '@/request';
 import { useAppSelector } from '@/store';
-import { Modal } from '@ctzhian/ui';
+import { Modal } from '@/components/ui';
 import { useCallback, useMemo, useState } from 'react';
 import { TYPE_CONFIG, UPLOAD_FILE_TYPES } from './constants';
 import FileParse from './FileParse';
@@ -31,6 +31,9 @@ export interface ListDataItem {
   title?: string;
   summary?: string;
   file_type?: string;
+  file_key?: string;
+  file_name?: string;
+  preview_key?: string;
   file?: boolean;
   fileData?: File;
   progress?: number;

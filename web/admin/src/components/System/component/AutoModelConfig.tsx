@@ -1,15 +1,8 @@
 import { ModelProvider } from '@/constant/enums';
 import { postApiV1ModelProviderSupported } from '@/request/Model';
 import type { GithubComChaitinPandaWikiDomainModelProvider } from '@/request/types';
-import {
-  Box,
-  Button,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Select } from 'antd';
+import { Box, Button, Stack, TextField, Typography } from '@mui/material';
 import InfoOutlineSharpIcon from '@mui/icons-material/InfoOutlineSharp';
 import {
   forwardRef,
@@ -257,11 +250,10 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
                 供应商
               </Typography>
               <Select
-                fullWidth
-                size='small'
+                style={{ width: '100%' }}
+                size='middle'
                 value={formData.provider}
-                onChange={event => {
-                  const nextProvider = event.target.value as string;
+                onChange={nextProvider => {
                   updateField('provider', nextProvider);
                   updateField(
                     'base_url',
@@ -269,13 +261,11 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
                       ?.defaultBaseUrl || '',
                   );
                 }}
-              >
-                {providerOptions.map(option => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
+                options={providerOptions.map(option => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+              />
             </Box>
             <Box sx={{ flex: 1 }}>
               <Typography fontSize={12} color='text.secondary' mb={0.5}>
@@ -309,26 +299,16 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
                   {item.label}
                 </Box>
                 <Select
-                  fullWidth
-                  size='small'
-                  displayEmpty
+                  style={{ width: '100%' }}
+                  size='middle'
                   value={formData.models[item.responseKey] || ''}
-                  onChange={event =>
-                    updateModelField(
-                      item.responseKey,
-                      event.target.value as string,
-                    )
-                  }
-                  renderValue={selected =>
-                    selected ? (selected as string) : `请选择${item.label}模型`
-                  }
-                >
-                  {modelOptions[item.key].map(model => (
-                    <MenuItem key={model} value={model}>
-                      {model}
-                    </MenuItem>
-                  ))}
-                </Select>
+                  onChange={value => updateModelField(item.responseKey, value)}
+                  placeholder={`请选择${item.label}模型`}
+                  options={modelOptions[item.key].map(model => ({
+                    value: model,
+                    label: model,
+                  }))}
+                />
                 {loadingType === item.key && (
                   <Button size='small' disabled>
                     获取中

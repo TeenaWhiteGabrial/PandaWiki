@@ -37,6 +37,7 @@ func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *l
 	group := echo.Group("/api/v1/file")
 	group.POST("/upload", h.Upload, h.auth.Authorize)
 	group.POST("/upload/url", h.UploadByUrl, h.auth.Authorize)
+	group.POST("/preview/generate", h.GeneratePreview, h.auth.Authorize)
 	group.POST("/upload/anydoc", h.UploadAnydoc)
 	return h
 }
@@ -106,6 +107,30 @@ func (h *FileHandler) UploadByUrl(c echo.Context) error {
 
 	return h.NewResponseWithData(c, domain.ObjectUploadResp{
 		Key: key,
+	})
+}
+
+func (h *FileHandler) GeneratePreview(c echo.Context) error {
+	var req domain.GenerateFilePreviewReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid request parameters", err)
+	}
+	if err := c.Validate(req); err != nil {
+		return h.NewResponseWithError(c, "validate request body failed", err)
+	}
+
+	previewKey, err := h.fileUsecase.GeneratePreviewByKey(
+		c.Request().Context(),
+		req.KBID,
+		req.FileKey,
+		req.FileName,
+	)
+	if err != nil {
+		return h.NewResponseWithError(c, "generate preview failed", err)
+	}
+
+	return h.NewResponseWithData(c, domain.GenerateFilePreviewResp{
+		PreviewKey: previewKey,
 	})
 }
 

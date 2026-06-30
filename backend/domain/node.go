@@ -168,9 +168,14 @@ type NodeGroupDetail struct {
 }
 
 type NodeMeta struct {
-	Summary     string `json:"summary"`
-	Emoji       string `json:"emoji"`
-	ContentType string `json:"content_type"`
+	Summary      string `json:"summary"`
+	Emoji        string `json:"emoji"`
+	ContentType  string `json:"content_type"`
+	FileKey      string `json:"file_key,omitempty"`
+	FileName     string `json:"file_name,omitempty"`
+	FileType     string `json:"file_type,omitempty"`
+	PreviewKey   string `json:"preview_key,omitempty"`
+	FileReadonly bool   `json:"file_readonly,omitempty"`
 }
 
 func (d *NodeMeta) Value() (driver.Value, error) {
@@ -196,6 +201,7 @@ type CreateNodeReq struct {
 	EditorBlocks  JSONB    `json:"editor_blocks"`
 	EditorFormat  string   `json:"editor_format"`
 	EditorVersion int      `json:"editor_version"`
+	Meta          *NodeMeta `json:"meta"`
 	Emoji         string   `json:"emoji"`
 	Summary       *string  `json:"summary"`
 	ContentType   *string  `json:"content_type"`
@@ -297,6 +303,7 @@ type UpdateNodeReq struct {
 	EditorBlocks  *JSONB   `json:"editor_blocks"`
 	EditorFormat  *string  `json:"editor_format"`
 	EditorVersion *int     `json:"editor_version"`
+	Meta          *NodeMeta `json:"meta"`
 	Emoji         *string  `json:"emoji"`
 	Summary       *string  `json:"summary"`
 	Position      *float64 `json:"position"`

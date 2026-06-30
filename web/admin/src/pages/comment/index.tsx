@@ -1,6 +1,7 @@
 import NoData from '@/assets/images/nodata.png';
 import Card from '@/components/Card';
-import { tableSx } from '@/constant/styles';
+import { AntdTable, message } from '@/components/ui';
+import type { ColumnType } from '@/components/ui';
 import { useURLSearchParams } from '@/hooks';
 import {
   deleteCommentList,
@@ -13,8 +14,7 @@ import {
   GetApiV1CommentParams,
 } from '@/request/types';
 import { useAppSelector } from '@/store';
-import { Ellipsis, Table, message } from '@ctzhian/ui';
-import { ColumnType } from '@ctzhian/ui/dist/Table';
+import { Ellipsis } from '@/components/ui';
 import { Box, Button, Checkbox, Chip, Stack, TextField } from '@mui/material';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
@@ -372,7 +372,7 @@ const CommentPage = () => {
           </Button>
         </Stack>
       </Stack>
-      <Table
+      <AntdTable
         columns={columns}
         dataSource={data}
         rowKey='id'
@@ -380,10 +380,6 @@ const CommentPage = () => {
         size='small'
         sx={{
           overflow: 'hidden',
-          ...tableSx,
-          '.MuiTableContainer-root': {
-            height: 'calc(100vh - 148px - 120px)',
-          },
         }}
         pagination={{
           total,
@@ -396,16 +392,6 @@ const CommentPage = () => {
               pageSize: String(nextPageSize),
               keyword,
             });
-          },
-        }}
-        PaginationProps={{
-          sx: {
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            p: 2,
-            '.MuiSelect-root': {
-              width: 100,
-            },
           },
         }}
         renderEmpty={

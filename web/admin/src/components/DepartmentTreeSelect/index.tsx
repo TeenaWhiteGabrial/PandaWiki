@@ -1,12 +1,13 @@
 import type { Department } from '@/request/Enterprise';
 import { normalizeSelectedDepartmentIDs } from '@/utils/enterprise';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import {
-  Autocomplete,
   Box,
   Checkbox,
   FormHelperText,
+  InputAdornment,
   TextField,
   Typography,
   styled,
@@ -160,7 +161,9 @@ const DepartmentTreeSelect = forwardRef<
         if (excludeIdSet.has(nodeId)) return;
 
         let newValue: string[];
-        if (value.includes(nodeId)) {
+        if (!multiple) {
+          newValue = value.includes(nodeId) ? [] : [nodeId];
+        } else if (value.includes(nodeId)) {
           newValue = value.filter(id => id !== nodeId);
         } else {
           newValue = normalizeSelectedDepartmentIDs(
@@ -230,42 +233,39 @@ const DepartmentTreeSelect = forwardRef<
     }, [open]);
 
     return (
-      <Box ref={ref} data-department-tree-select sx={{ position: 'relative' }}>
-        <Autocomplete
-          open={false}
-          multiple={multiple}
-          options={selectedItems}
-          value={multiple ? selectedItems : selectedItems[0] || null}
-          getOptionLabel={option =>
-            typeof option === 'string' ? option : option.name
-          }
-          isOptionEqualToValue={(option, val) =>
-            option.id === (typeof val === 'string' ? val : val.id)
-          }
-          readOnly
+      <Box
+        ref={ref}
+        data-department-tree-select
+        sx={{ position: 'relative', width: '100%' }}
+      >
+        <TextField
+          fullWidth
+          value={selectedNames}
+          placeholder={placeholder}
+          error={error}
+          size={size}
           disabled={disabled}
-          onOpen={() => !disabled && setOpen(true)}
-          renderTags={() => null}
-          renderInput={params => (
-            <TextField
-              {...params}
-              placeholder={selectedNames || placeholder}
-              value={selectedNames}
-              error={error}
-              size={size}
-              onClick={handleOpen}
-              onMouseDown={handleOpen}
-              InputProps={{
-                ...params.InputProps,
-                readOnly: true,
-              }}
-              inputProps={{
-                ...params.inputProps,
-                readOnly: true,
-                style: { cursor: disabled ? 'not-allowed' : 'pointer' },
-              }}
-            />
-          )}
+          onClick={handleOpen}
+          onMouseDown={handleOpen}
+          InputProps={{
+            readOnly: true,
+            endAdornment: (
+              <InputAdornment position='end'>
+                <KeyboardArrowDownIcon
+                  sx={{
+                    fontSize: 20,
+                    color: 'text.secondary',
+                    transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease',
+                  }}
+                />
+              </InputAdornment>
+            ),
+          }}
+          inputProps={{
+            readOnly: true,
+            style: { cursor: disabled ? 'not-allowed' : 'pointer' },
+          }}
           sx={{
             '& .MuiFormLabel-root': {
               display: 'none',
@@ -273,11 +273,9 @@ const DepartmentTreeSelect = forwardRef<
             '& .MuiOutlinedInput-root': {
               cursor: disabled ? 'not-allowed' : 'pointer',
             },
-            '& .MuiAutocomplete-inputRoot': {
-              cursor: disabled ? 'not-allowed' : 'pointer',
-            },
-            '& .MuiAutocomplete-endAdornment': {
-              cursor: disabled ? 'not-allowed' : 'pointer',
+            '& .MuiInputBase-input::placeholder': {
+              color: 'text.secondary',
+              opacity: selectedNames ? 0 : 1,
             },
           }}
         />

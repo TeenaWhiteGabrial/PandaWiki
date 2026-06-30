@@ -4,8 +4,7 @@ import { IconShanchu2, IconDrag } from '@panda-wiki/icons';
 import {
   Box,
   IconButton,
-  MenuItem,
-  Select,
+  Popover,
   Stack,
   TextField,
   ToggleButton,
@@ -16,7 +15,9 @@ import {
   Dispatch,
   forwardRef,
   HTMLAttributes,
+  MouseEvent,
   SetStateAction,
+  useState,
 } from 'react';
 import { Control, Controller } from 'react-hook-form';
 import { options } from '../../config/FooterConfig';
@@ -47,6 +48,10 @@ const Item = forwardRef<HTMLDivElement, SocialInfoProps>(
     },
     ref,
   ) => {
+    const [channelAnchorEl, setChannelAnchorEl] = useState<HTMLElement | null>(
+      null,
+    );
+    const channelPopoverOpen = Boolean(channelAnchorEl);
     const inlineStyles: CSSProperties = {
       opacity: withOpacity ? '0.5' : '1',
       borderRadius: '10px',
@@ -54,6 +59,18 @@ const Item = forwardRef<HTMLDivElement, SocialInfoProps>(
       backgroundColor: '#ffffff',
       ...style,
     };
+    const selectedOption = options.find(i => i.key === item.channel);
+    const SelectedIcon =
+      selectedOption?.config_type || selectedOption?.type || null;
+
+    const handleOpenChannelPopover = (event: MouseEvent<HTMLElement>) => {
+      setChannelAnchorEl(event.currentTarget);
+    };
+
+    const handleCloseChannelPopover = () => {
+      setChannelAnchorEl(null);
+    };
+
     return (
       <>
         {item && (
@@ -122,43 +139,49 @@ const Item = forwardRef<HTMLDivElement, SocialInfoProps>(
                     </IconButton>
                   </Stack>
                   <Stack direction={'row'} gap={1}>
-                    <Select
-                      value={item?.channel || ''}
+                    <Box
+                      onClick={handleOpenChannelPopover}
                       sx={{
                         bgcolor: '#fff',
-                        padding: 0,
                         width: '60px',
                         minWidth: '60px',
-                      }}
-                      MenuProps={{
-                        PaperProps: {
-                          sx: {
-                            maxHeight: 'none',
-                            overflow: 'hidden',
-                          },
+                        height: '36px',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        '&:hover': {
+                          borderColor: 'primary.main',
                         },
                       }}
-                      renderValue={selected => {
-                        const option = options.find(i => i.key === selected);
-                        const AppIcon = option?.config_type || option?.type;
-                        return (
-                          <Stack justifyContent={'center'} sx={{ mt: '2px' }}>
-                            {AppIcon && <AppIcon sx={{ fontSize: '14px' }} />}
-                          </Stack>
-                        );
+                    >
+                      <Stack justifyContent={'center'} sx={{ mt: '2px' }}>
+                        {SelectedIcon && (
+                          <SelectedIcon sx={{ fontSize: '14px' }} />
+                        )}
+                      </Stack>
+                    </Box>
+                    <Popover
+                      open={channelPopoverOpen}
+                      anchorEl={channelAnchorEl}
+                      onClose={handleCloseChannelPopover}
+                      anchorOrigin={{
+                        vertical: 'bottom',
+                        horizontal: 'left',
+                      }}
+                      transformOrigin={{
+                        vertical: 'top',
+                        horizontal: 'left',
                       }}
                     >
-                      <MenuItem
-                        sx={{
-                          bgcolor: '#fff',
-                          padding: 0,
-                        }}
-                        disableRipple
-                        onClick={e => e.preventDefault()}
-                      >
+                      <Box sx={{ bgcolor: '#fff', p: 1 }}>
                         <ToggleButtonGroup
                           value={item?.channel}
                           onChange={(e, newValue) => {
+                            if (!newValue) return;
                             const newData = [...data];
                             newData[index] = {
                               ...item,
@@ -166,6 +189,7 @@ const Item = forwardRef<HTMLDivElement, SocialInfoProps>(
                             };
                             field.onChange(newData);
                             setIsEdit(true);
+                            handleCloseChannelPopover();
                           }}
                           exclusive
                           sx={{
@@ -203,8 +227,8 @@ const Item = forwardRef<HTMLDivElement, SocialInfoProps>(
                             );
                           })}
                         </ToggleButtonGroup>
-                      </MenuItem>
-                    </Select>
+                      </Box>
+                    </Popover>
                     <TextField
                       {...field}
                       slotProps={{

@@ -114,7 +114,7 @@ const lightThemeOptions = [
   {
     cssVariables: true,
     typography: {
-      fontFamily: 'var(--font-gilory), PingFang SC, sans-serif',
+      fontFamily: 'var(--font-alibaba-puhuiti), PingFang SC, sans-serif',
     },
     palette: lightPalette,
     components: createComponentStyleOverrides(false),
@@ -127,7 +127,7 @@ const darkThemeOptions = [
   {
     cssVariables: true,
     typography: {
-      fontFamily: 'var(--font-gilory), PingFang SC, sans-serif',
+      fontFamily: 'var(--font-alibaba-puhuiti), PingFang SC, sans-serif',
     },
     palette: darkPalette,
     components: createComponentStyleOverrides(true),

@@ -1,6 +1,6 @@
 import { GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp } from '@/request/types';
 import { Box, IconButton, Stack } from '@mui/material';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import {
   IconShanchu2,
   IconDrag,

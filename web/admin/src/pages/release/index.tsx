@@ -3,10 +3,9 @@ import { getApiV1KnowledgeBaseReleaseList } from '@/request/KnowledgeBase';
 import { DomainKBReleaseListItemResp } from '@/request/types';
 import NoData from '@/assets/images/nodata.png';
 import Card from '@/components/Card';
-import { tableSx } from '@/constant/styles';
+import { AntdTable } from '@/components/ui';
 import { useAppSelector } from '@/store';
 import { Box, Button, Stack } from '@mui/material';
-import { Table } from '@ctzhian/ui';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import VersionDelete from './components/VersionDelete';
@@ -135,18 +134,13 @@ const Release = () => {
           发布新版本
         </Button>
       </Stack>
-      <Table
+      <AntdTable
         columns={columns}
         dataSource={data}
         rowKey='id'
-        height='calc(100vh - 144px)'
         size='small'
         sx={{
           overflow: 'hidden',
-          ...tableSx,
-          '.MuiTableContainer-root': {
-            height: 'calc(100vh - 144px - 70px)',
-          },
         }}
         pagination={{
           total,
@@ -155,16 +149,6 @@ const Release = () => {
           onChange: (page, pageSize) => {
             setPage(page);
             setPageSize(pageSize);
-          },
-        }}
-        PaginationProps={{
-          sx: {
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            p: 2,
-            '.MuiSelect-root': {
-              width: 100,
-            },
           },
         }}
         renderEmpty={

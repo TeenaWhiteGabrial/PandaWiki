@@ -73,6 +73,12 @@ func (r *NodeRepository) Create(ctx context.Context, req *domain.CreateNodeReq, 
 
 		now := time.Now()
 		meta := domain.NodeMeta{Emoji: req.Emoji}
+		if req.Meta != nil {
+			meta = *req.Meta
+			if meta.Emoji == "" {
+				meta.Emoji = req.Emoji
+			}
+		}
 		if req.Summary != nil {
 			meta.Summary = *req.Summary
 		}
@@ -243,39 +249,27 @@ func (r *NodeRepository) UpdateNodeContent(ctx context.Context, req *domain.Upda
 			updateStatus = true
 		}
 
-		// Handle multiple meta field updates
-		if req.Emoji != nil || req.Summary != nil || req.ContentType != nil {
-			metaExpr := "meta"
-			var args []any
-			metaUpdated := false
-
-			// Compare and update Emoji
-			if req.Emoji != nil && *req.Emoji != currentNode.Meta.Emoji {
-				// First jsonb_set: jsonb_set(meta, '{emoji}', to_jsonb(?::text))
-				metaExpr = "jsonb_set(" + metaExpr + ", '{emoji}', to_jsonb(?::text))"
-				args = append(args, *req.Emoji) // First parameter for emoji
-				metaUpdated = true
-			}
-
-			// Compare and update Summary
-			if req.Summary != nil && *req.Summary != currentNode.Meta.Summary {
-				// Second jsonb_set: jsonb_set(previous_expr, '{summary}', to_jsonb(?::text))
-				metaExpr = "jsonb_set(" + metaExpr + ", '{summary}', to_jsonb(?::text))"
-				args = append(args, *req.Summary) // Second parameter for summary
-				metaUpdated = true
-			}
-
-			// Compare and update ContentType
-			if req.ContentType != nil && *req.ContentType != currentNode.Meta.ContentType {
-				metaExpr = "jsonb_set(" + metaExpr + ", '{content_type}', to_jsonb(?::text))"
-				args = append(args, *req.ContentType)
-				metaUpdated = true
-			}
-
-			if metaUpdated {
-				updateMap["meta"] = gorm.Expr(metaExpr, args...)
-				updateStatus = true
-			}
+		nextMeta := currentNode.Meta
+		metaUpdated := false
+		if req.Meta != nil {
+			nextMeta = *req.Meta
+			metaUpdated = true
+		}
+		if req.Emoji != nil && *req.Emoji != nextMeta.Emoji {
+			nextMeta.Emoji = *req.Emoji
+			metaUpdated = true
+		}
+		if req.Summary != nil && *req.Summary != nextMeta.Summary {
+			nextMeta.Summary = *req.Summary
+			metaUpdated = true
+		}
+		if req.ContentType != nil && *req.ContentType != nextMeta.ContentType {
+			nextMeta.ContentType = *req.ContentType
+			metaUpdated = true
+		}
+		if metaUpdated {
+			updateMap["meta"] = nextMeta
+			updateStatus = true
 		}
 
 		// If any field is updated and node released, set status to draft

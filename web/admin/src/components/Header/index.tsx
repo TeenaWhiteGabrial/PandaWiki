@@ -1,20 +1,14 @@
 import { getApiV1KnowledgeBaseDetail } from '@/request/KnowledgeBase';
 import { useAppSelector, useAppDispatch } from '@/store';
 import { setKbDetail } from '@/store/slices/config';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import { Button, IconButton, Stack, Tooltip } from '@mui/material';
-import { message, Modal } from '@ctzhian/ui';
+import { Button, Stack } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Bread from './Bread';
-import { IconDengchu } from '@panda-wiki/icons';
 
 const Header = () => {
-  const navigate = useNavigate();
   const { kb_id } = useAppSelector(state => state.config);
   const dispatch = useAppDispatch();
   const [wikiUrl, setWikiUrl] = useState<string>('');
-  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (kb_id) {
@@ -78,56 +72,7 @@ const Header = () => {
         >
           访问 Wiki 网站
         </Button>
-        <Tooltip arrow title='退出登录'>
-          <IconButton
-            size='small'
-            sx={{
-              bgcolor: 'background.paper',
-              width: '24px',
-              height: '24px',
-              '&:hover': {
-                color: 'primary.main',
-              },
-            }}
-            onClick={() => {
-              setLogoutConfirmOpen(true);
-            }}
-          >
-            <IconDengchu sx={{ fontSize: 18 }} />
-          </IconButton>
-        </Tooltip>
       </Stack>
-      <Modal
-        open={logoutConfirmOpen}
-        onCancel={() => setLogoutConfirmOpen(false)}
-        onOk={() => {
-          message.success('退出登录成功，请重新登录');
-          setTimeout(() => {
-            localStorage.removeItem('panda_wiki_token');
-            navigate('/login');
-          }, 1500);
-        }}
-        cancelButtonProps={{
-          variant: 'outlined',
-          sx: { '&:hover': { borderColor: 'grey.300' } },
-        }}
-        okButtonProps={{
-          variant: 'contained',
-          sx: {
-            bgcolor: 'primary.main',
-            '&:hover': { bgcolor: 'primary.dark' },
-          },
-        }}
-        title={
-          <Stack direction='column' gap={3}>
-            <Stack direction='row' alignItems='center' gap={1}>
-              <ErrorOutlineIcon sx={{ color: 'error.main', fontSize: 24 }} />
-              <span style={{ fontWeight: 'bold' }}>确定要退出当前账号？</span>
-            </Stack>
-          </Stack>
-        }
-        transitionDuration={300}
-      />
     </Stack>
   );
 };

@@ -8,7 +8,7 @@ import Item from './Item';
 import type { ConfigProps } from '../type';
 import { useAppSelector } from '@/store';
 import useDebounceAppPreviewData from '@/hooks/useDebounceAppPreviewData';
-import { Empty } from '@ctzhian/ui';
+import { Empty } from '@/components/ui';
 import { DEFAULT_DATA } from '../../../constants';
 import { findConfigById, handleLandingConfigs } from '../../../utils';
 

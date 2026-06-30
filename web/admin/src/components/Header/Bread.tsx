@@ -1,114 +1,41 @@
-import { useAppSelector } from '@/store';
-import { Box, Stack, useTheme } from '@mui/material';
-import { IconXiala } from '@panda-wiki/icons';
-import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { Box } from '@mui/material';
+import { useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 
-const HomeBread = { title: '文档', to: '/' };
-const OtherBread = {
-  document: { title: '文档', to: '/' },
-  stat: { title: '统计', to: '/stat' },
-  conversation: { title: '问答', to: '/conversation' },
-  application: { title: '设置', to: '/setting' },
-  release: { title: '发布', to: '/release' },
+const PATH_TITLE_MAP: Record<string, string> = {
+  '/': '文档',
+  '/stat': '统计',
+  '/conversation': '问答',
+  '/comment': '评论',
+  '/contribute': '贡献',
+  '/release': '发布',
+  '/setting': '设置',
 };
 
 const Bread = () => {
-  const theme = useTheme();
   const { pathname } = useLocation();
-  const [breads, setBreads] = useState<{ title: string; to: string }[]>([]);
-  const { pageName } = useAppSelector(state => state.breadcrumb);
-  const { kbDetail } = useAppSelector(state => state.config);
-
-  useEffect(() => {
-    const curBreads: { title: string; to: string }[] = [];
-    if (pathname === '/') {
-      curBreads.push(HomeBread);
-    } else {
-      const pieces = pathname.split('/').filter(it => it !== '');
-      pieces.forEach(it => {
-        const bread = OtherBread[it as keyof typeof OtherBread];
-        if (bread) {
-          curBreads.push(bread);
-        }
-      });
-    }
-    if (pageName) {
-      curBreads.push({ title: pageName, to: 'custom' });
-    }
-    setBreads(curBreads);
-  }, [pathname, pageName]);
+  const title = useMemo(() => {
+    const matched = Object.entries(PATH_TITLE_MAP).find(([path]) => {
+      if (path === '/') {
+        return pathname === '/';
+      }
+      return pathname.startsWith(path);
+    });
+    return matched?.[1] || '知识库管理台';
+  }, [pathname]);
 
   return (
-    <Stack
-      direction={'row'}
-      alignItems={'center'}
-      gap={1}
+    <Box
       sx={{
         flexGrow: 1,
-        color: 'text.tertiary',
         fontSize: '14px',
-        a: { color: 'text.tertiary' },
+        fontWeight: 'bold',
+        color: 'text.primary',
         lineHeight: '22px',
       }}
     >
-      <Box
-        sx={{
-          fontSize: '14px',
-          fontWeight: 'bold',
-          color: 'text.primary',
-          maxWidth: 240,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {kbDetail?.name || '知识库'}
-      </Box>
-      {breads.map((it, idx) => {
-        return (
-          <Stack
-            direction={'row'}
-            alignItems={'center'}
-            gap={1}
-            key={it.title}
-            sx={{
-              color:
-                idx === breads.length - 1
-                  ? `${theme.palette.text.primary} !important`
-                  : 'text.disabled',
-              a: {
-                color:
-                  idx === breads.length - 1
-                    ? `${theme.palette.text.primary} !important`
-                    : 'text.disabled',
-              },
-              ...(idx === breads.length - 1 && { fontWeight: 'bold' }),
-            }}
-          >
-            <IconXiala sx={{ fontSize: 20, transform: 'rotate(-90deg)' }} />
-            {it.to === 'custom' ? (
-              <Box
-                sx={{ cursor: 'pointer', ':hover': { color: 'primary.main' } }}
-              >
-                {it.title}
-              </Box>
-            ) : (
-              <NavLink to={it.to}>
-                <Box
-                  sx={{
-                    cursor: 'pointer',
-                    ':hover': { color: 'primary.main' },
-                  }}
-                >
-                  {it.title}
-                </Box>
-              </NavLink>
-            )}
-          </Stack>
-        );
-      })}
-    </Stack>
+      {title}
+    </Box>
   );
 };
 

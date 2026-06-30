@@ -1,6 +1,7 @@
 import NoData from '@/assets/images/nodata.png';
 import Card from '@/components/Card';
-import { tableSx } from '@/constant/styles';
+import { AntdTable } from '@/components/ui';
+import type { ColumnType } from '@/components/ui';
 import {
   getApiV1EnterpriseDepartments,
   getApiV1EnterprisePermissionLevels,
@@ -11,16 +12,8 @@ import {
 } from '@/request/userCompat';
 import { ConstsUserRole } from '@/request/types';
 import { useAppSelector } from '@/store';
-import { Table } from '@ctzhian/ui';
-import { ColumnType } from '@ctzhian/ui/dist/Table';
-import {
-  Box,
-  Button,
-  MenuItem,
-  Stack,
-  TextField,
-  Tooltip,
-} from '@mui/material';
+import { Select } from 'antd';
+import { Box, Button, Stack, TextField, Tooltip } from '@mui/material';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import MemberAdd from './MemberAdd';
@@ -133,7 +126,7 @@ const Member = () => {
               setEnterpriseOpen(true);
             }}
           >
-            组织权限
+            组织和权限
           </Button>
           {record.account === 'admin' ? (
             <Tooltip
@@ -330,53 +323,54 @@ const Member = () => {
             }
             sx={{ width: 220 }}
           />
-          <TextField
-            size='small'
-            select
+          <Select
+            size='middle'
             value={filters.role}
-            onChange={event =>
+            onChange={value =>
               setFilters(prev => ({
                 ...prev,
-                role: event.target.value as ConstsUserRole | '',
+                role: value as ConstsUserRole | '',
               }))
             }
-            sx={{ width: 160 }}
-          >
-            <MenuItem value=''>全部角色</MenuItem>
-            <MenuItem value={ConstsUserRole.UserRoleAdmin}>超级管理员</MenuItem>
-            <MenuItem value={ConstsUserRole.UserRoleManager}>管理员</MenuItem>
-            <MenuItem value={ConstsUserRole.UserRoleUser}>普通用户</MenuItem>
-          </TextField>
-          <TextField
-            size='small'
-            select
+            style={{ width: 160 }}
+            options={[
+              { value: '', label: '全部角色' },
+              {
+                value: ConstsUserRole.UserRoleAdmin,
+                label: '超级管理员',
+              },
+              { value: ConstsUserRole.UserRoleManager, label: '管理员' },
+              { value: ConstsUserRole.UserRoleUser, label: '普通用户' },
+            ]}
+          />
+          <Select
+            size='middle'
             value={filters.department_id}
-            onChange={event =>
+            onChange={value =>
               setFilters(prev => ({
                 ...prev,
-                department_id: event.target.value,
+                department_id: value,
               }))
             }
-            sx={{ width: 200 }}
-          >
-            <MenuItem value=''>全部部门</MenuItem>
-            {Object.entries(departmentNameMap).map(([id, name]) => (
-              <MenuItem key={id} value={id}>
-                {name}
-              </MenuItem>
-            ))}
-          </TextField>
+            style={{ width: 200 }}
+            options={[
+              { value: '', label: '全部部门' },
+              ...Object.entries(departmentNameMap).map(([id, name]) => ({
+                value: id,
+                label: name,
+              })),
+            ]}
+          />
         </Stack>
         <MemberAdd refresh={getData} />
       </Stack>
-      <Table
+      <AntdTable
         columns={columns}
         dataSource={userList}
         rowKey='id'
         size='small'
-        updateScrollTop={false}
         height='338px'
-        sx={{ overflow: 'hidden', ...tableSx }}
+        sx={{ overflow: 'hidden' }}
         pagination={false}
         renderEmpty={
           loading ? (

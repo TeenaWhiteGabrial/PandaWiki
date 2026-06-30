@@ -3,7 +3,8 @@ import Card from '@/components/Card';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setKbDetail, setKbList } from '@/store/slices/config';
 import { Box, Button, Stack, TextField } from '@mui/material';
-import { Ellipsis, message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
+import { Ellipsis } from '@/components/ui';
 import { useEffect, useState } from 'react';
 
 const ConfigKB = () => {

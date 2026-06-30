@@ -1,8 +1,8 @@
 import { copyText } from '@/utils';
 import { Box, Stack } from '@mui/material';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import { IconFuzhi } from '@panda-wiki/icons';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 
 interface ShowTextProps {
   text: string[];

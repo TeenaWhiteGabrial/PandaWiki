@@ -10,7 +10,7 @@
  * ---------------------------------------------------------------
  */
 
-import { message } from "@ctzhian/ui";
+import { message } from '@/components/ui';
 import type {
   AxiosInstance,
   AxiosRequestConfig,

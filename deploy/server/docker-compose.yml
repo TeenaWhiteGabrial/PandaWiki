@@ -98,6 +98,17 @@ services:
       minio:
         condition: service_healthy
 
+  preview:
+    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/gotenberg:8
+    container_name: ${PROJECT_NAME}-preview
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --api-timeout=300s
+      - --libreoffice-disable-routes=false
+    ports:
+      - '${PREVIEW_PORT:-3000}:3000'
+
   raglite:
     image: ${RAGLITE_IMAGE}
     container_name: ${PROJECT_NAME}-raglite
@@ -154,6 +165,7 @@ services:
       CADDY_API: ''
       FILE_BASE_URL: http://${SERVER_IP}:${API_PORT}/static-file
       ANYDOC_CRAWLER_BASE_URL: http://${PROJECT_NAME}-crawler:8080
+      PREVIEW_BASE_URL: http://${PROJECT_NAME}-preview:3000
     ports:
       - '${API_PORT}:8000'
     depends_on:
@@ -168,6 +180,8 @@ services:
       raglite:
         condition: service_started
       crawler:
+        condition: service_started
+      preview:
         condition: service_started
 
   consumer:
@@ -188,6 +202,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL}
       FILE_BASE_URL: http://${SERVER_IP}:${API_PORT}/static-file
       ANYDOC_CRAWLER_BASE_URL: http://${PROJECT_NAME}-crawler:8080
+      PREVIEW_BASE_URL: http://${PROJECT_NAME}-preview:3000
     depends_on:
       api:
         condition: service_started

@@ -28,8 +28,9 @@ import {
   getAncestorIds,
 } from '@/utils/enterprise';
 import { filterEmptyFolders } from '@/utils/tree';
-import { Modal, message } from '@ctzhian/ui';
-import { Box, Button, MenuItem, Stack, TextField, styled } from '@mui/material';
+import { Modal, message } from '@/components/ui';
+import { Select } from 'antd';
+import { Box, Button, Stack, TextField, styled } from '@mui/material';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -390,10 +391,16 @@ const DocPropertiesModal = ({
             name='scope_type'
             control={control}
             render={({ field }) => (
-              <TextField {...field} fullWidth select size='small' disabled>
-                <MenuItem value='public'>公共目录</MenuItem>
-                <MenuItem value='department'>部门目录</MenuItem>
-              </TextField>
+              <Select
+                value={field.value}
+                onChange={field.onChange}
+                style={{ width: '100%' }}
+                disabled
+                options={[
+                  { value: 'public', label: '公共目录' },
+                  { value: 'department', label: '部门目录' },
+                ]}
+              />
             )}
           />
         </FormItem>
@@ -423,14 +430,18 @@ const DocPropertiesModal = ({
             name='min_permission_level_id'
             control={control}
             render={({ field }) => (
-              <TextField {...field} fullWidth select size='small'>
-                <MenuItem value=''>不限制</MenuItem>
-                {availablePermissionLevels.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name}（{item.rank}）
-                  </MenuItem>
-                ))}
-              </TextField>
+              <Select
+                value={field.value}
+                onChange={field.onChange}
+                style={{ width: '100%' }}
+                options={[
+                  { value: '', label: '不限制' },
+                  ...availablePermissionLevels.map(item => ({
+                    value: item.id,
+                    label: `${item.name}（${item.rank}）`,
+                  })),
+                ]}
+              />
             )}
           />
         </FormItem>
@@ -465,20 +476,16 @@ const DocPropertiesModal = ({
                 name='allowed_user_ids'
                 control={control}
                 render={({ field }) => (
-                  <TextField
-                    {...field}
-                    fullWidth
-                    select
-                    size='small'
-                    SelectProps={{ multiple: true }}
+                  <Select
+                    mode='multiple'
                     value={field.value || []}
-                  >
-                    {users.map(item => (
-                      <MenuItem key={item.id} value={item.id}>
-                        {item.account}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+                    onChange={field.onChange}
+                    style={{ width: '100%' }}
+                    options={users.map(item => ({
+                      value: item.id,
+                      label: item.account,
+                    }))}
+                  />
                 )}
               />
             </FormItem>

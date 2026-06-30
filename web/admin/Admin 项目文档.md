@@ -2,22 +2,22 @@
 
 ## 技术栈
 
-| 维度       | 技术                                          | 版本/细节                  |
-| ---------- | --------------------------------------------- | -------------------------- |
-| 框架       | React + TypeScript                            | ES2020, react-jsx          |
-| 构建       | Vite                                          | ^6.0.1                     |
-| 路由       | react-router-dom                              | ^7.0.2 (懒加载)            |
-| UI         | MUI + `@ctzhian/ui` + `@ctzhian/modelkit`     | 自研组件库                 |
-| 状态管理   | Redux Toolkit + react-redux                   | ^2.5.0                     |
-| HTTP       | axios                                         | ^1.7.9                     |
-| 编辑器     | `@ctzhian/tiptap` + ProseMirror               | 协同编辑用 yjs             |
-| 图表       | ECharts                                       | ^5.6.0                     |
-| Markdown   | react-markdown + remark-gfm + rehype-katex 等 | 含 GFM、数学公式、安全过滤 |
-| 协同编辑   | yjs + y-websocket                             | CRDT 实时协同              |
-| 拖拽排序   | @dnd-kit/core + @dnd-kit/sortable             | 文档树拖拽                 |
-| 代码检查   | ESLint (flat config) + typescript-eslint      |                            |
-| 代码格式化 | Prettier                                      | 单引号, 2空格, 尾逗号      |
-| 包管理     | pnpm                                          | ^10.12.1 (workspace)       |
+| 维度       | 技术                                          | 版本/细节                        |
+| ---------- | --------------------------------------------- | -------------------------------- |
+| 框架       | React + TypeScript                            | ES2020, react-jsx                |
+| 构建       | Vite                                          | ^6.0.1                           |
+| 路由       | react-router-dom                              | ^7.0.2 (懒加载)                  |
+| UI         | MUI + antd + `@ctzhian/modelkit`              | 含本地兼容层 `src/components/ui` |
+| 状态管理   | Redux Toolkit + react-redux                   | ^2.5.0                           |
+| HTTP       | axios                                         | ^1.7.9                           |
+| 编辑器     | `@ctzhian/tiptap` + ProseMirror               | 协同编辑用 yjs                   |
+| 图表       | ECharts                                       | ^5.6.0                           |
+| Markdown   | react-markdown + remark-gfm + rehype-katex 等 | 含 GFM、数学公式、安全过滤       |
+| 协同编辑   | yjs + y-websocket                             | CRDT 实时协同                    |
+| 拖拽排序   | @dnd-kit/core + @dnd-kit/sortable             | 文档树拖拽                       |
+| 代码检查   | ESLint (flat config) + typescript-eslint      |                                  |
+| 代码格式化 | Prettier                                      | 单引号, 2空格, 尾逗号            |
+| 包管理     | pnpm                                          | ^10.12.1 (workspace)             |
 
 ## 目录结构
 
@@ -182,10 +182,10 @@ web/
 └── packages/
     ├── icons/      # 图标包
     ├── themes/     # 共享主题 (@panda-wiki/themes)
-    └── ui/         # 共享 UI 库 (@ctzhian/ui)
+    └── ui/         # 共享 UI 包（当前 admin 已主要使用本地兼容层/antd）
 ```
 
-- `@ctzhian/ui`：自研 UI 组件库，依赖 MUI，提供 `message`、`ThemeProvider` 等
+- `src/components/ui`：admin 侧本地兼容层，当前承接 `message`、`Modal`、`Table`、`ThemeProvider` 等通用 UI 能力
 - `@panda-wiki/themes`：共享调色板 (`lightPalette`, `darkPalette`)
 - `@ctzhian/tiptap`：自研富文本编辑器
 

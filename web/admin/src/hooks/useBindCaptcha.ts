@@ -1,4 +1,4 @@
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { useEffect, useRef, useState } from 'react';
 
 export function useBindCaptcha(

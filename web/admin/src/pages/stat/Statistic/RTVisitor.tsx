@@ -10,7 +10,7 @@ import BarTrend from '@/components/BarTrend';
 import Card from '@/components/Card';
 import { useAppSelector } from '@/store';
 import { Box, Stack } from '@mui/material';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 

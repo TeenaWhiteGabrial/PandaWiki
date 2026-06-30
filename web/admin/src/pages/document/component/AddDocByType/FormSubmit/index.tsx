@@ -1,5 +1,5 @@
 import { ConstsCrawlerSource, postApiV1CrawlerParse } from '@/request';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { Box, Button, Stack } from '@mui/material';
 import { useCallback, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';

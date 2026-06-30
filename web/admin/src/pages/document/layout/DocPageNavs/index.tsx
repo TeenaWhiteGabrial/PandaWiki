@@ -8,7 +8,7 @@ import type { V1NavListResp } from '@/request/types';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setIsRefreshDocList, setNavId } from '@/store/slices/config';
 import { addOpacityToColor } from '@/utils';
-import { Ellipsis, message, Modal } from '@ctzhian/ui';
+import { Ellipsis, message, Modal } from '@/components/ui';
 import {
   SortableContext,
   useSortable,

@@ -1,7 +1,7 @@
 import { updateKnowledgeBase, UpdateKnowledgeBaseData } from '@/api';
 import FileText from '@/components/UploadFile/FileText';
 import { DomainKnowledgeBaseDetail } from '@/request/types';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import { Box, Checkbox, Stack, TextField } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';

@@ -1,6 +1,6 @@
 import { patchApiV1NavUpdate, postApiV1NavAdd } from '@/request/Nav';
 import { V1NavListResp } from '@/request/types';
-import { message, Modal } from '@ctzhian/ui';
+import { message, Modal } from '@/components/ui';
 import { Box, TextField } from '@mui/material';
 import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';

@@ -770,6 +770,7 @@ export interface DomainCreateNodeReq {
   content_type?: string;
   emoji?: string;
   kb_id: string;
+  meta?: DomainNodeMeta;
   name: string;
   nav_id: string;
   parent_id?: string;
@@ -1075,6 +1076,11 @@ export interface DomainNodeListItemResp {
 export interface DomainNodeMeta {
   content_type?: string;
   emoji?: string;
+  file_key?: string;
+  file_name?: string;
+  file_readonly?: boolean;
+  file_type?: string;
+  preview_key?: string;
   summary?: string;
 }
 
@@ -1389,6 +1395,7 @@ export interface DomainUpdateNodeReq {
   emoji?: string;
   id: string;
   kb_id: string;
+  meta?: DomainNodeMeta;
   name?: string;
   nav_id?: string;
   position?: number;

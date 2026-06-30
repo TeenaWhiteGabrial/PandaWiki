@@ -24,7 +24,7 @@ const SettingTabs: { label: string; id: string }[] = [
   { label: '模型配置', id: 'model-config' },
   { label: 'MCP 接入', id: 'mcp-access' },
   { label: '用户管理', id: 'user-management' },
-  { label: '组织权限', id: 'enterprise-access' },
+  { label: '组织和权限', id: 'enterprise-access' },
 ];
 
 const Setting = () => {

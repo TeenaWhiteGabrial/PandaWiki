@@ -6,7 +6,7 @@ import {
   IconWenjianjia,
   IconWenjian,
 } from '@panda-wiki/icons';
-import { Ellipsis } from '@ctzhian/ui';
+import { Ellipsis } from '@/components/ui';
 import { CSSProperties, forwardRef, HTMLAttributes } from 'react';
 
 export type ItemProps = HTMLAttributes<HTMLDivElement> & {

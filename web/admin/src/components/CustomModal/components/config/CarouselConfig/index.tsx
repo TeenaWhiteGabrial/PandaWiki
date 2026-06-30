@@ -9,7 +9,7 @@ import type { ConfigProps } from '../type';
 import { useAppSelector } from '@/store';
 import useDebounceAppPreviewData from '@/hooks/useDebounceAppPreviewData';
 import { DEFAULT_DATA } from '../../../constants';
-import { Empty } from '@ctzhian/ui';
+import { Empty } from '@/components/ui';
 import ColorPickerField from '../../components/ColorPickerField';
 import { findConfigById, handleLandingConfigs } from '../../../utils';
 

@@ -1,8 +1,6 @@
 import { createTheme, CssVarsThemeOptions } from '@mui/material';
 import type { Shadows } from '@mui/material';
 import { zhCN } from '@mui/material/locale';
-import { zhCN as CuiZhCN } from '@ctzhian/ui/dist/local';
-import onData from '@/assets/images/nodata.png';
 import { darkPalette, lightPalette } from '@panda-wiki/themes';
 
 const defaultTheme = createTheme();
@@ -13,7 +11,7 @@ const componentStyleOverrides = (
   MuiCssBaseline: {
     styleOverrides: {
       body: {
-        fontFamily: "G, 'PingFang SC', sans-serif",
+        fontFamily: "AlibabaPuHuiTi, 'PingFang SC', sans-serif",
       },
     },
   },
@@ -250,7 +248,7 @@ const themeOptions = [
     //   },
     // },
     typography: {
-      fontFamily: 'G, PingFang SC, sans-serif',
+      fontFamily: 'AlibabaPuHuiTi, PingFang SC, sans-serif',
     },
 
     shadows: [
@@ -261,19 +259,6 @@ const themeOptions = [
     components: componentStyleOverrides(false),
   },
   zhCN,
-  CuiZhCN,
-  {
-    components: {
-      CuiEmpty: {
-        defaultProps: {
-          image: onData,
-          imageStyle: {
-            width: '150px',
-          },
-        },
-      },
-    },
-  },
 ];
 
 const theme = createTheme(
@@ -281,7 +266,7 @@ const theme = createTheme(
     cssVariables: true,
     palette: lightPalette,
     typography: {
-      fontFamily: "G, 'PingFang SC', sans-serif",
+      fontFamily: "AlibabaPuHuiTi, 'PingFang SC', sans-serif",
     },
     shadows: [
       ...defaultTheme.shadows.slice(0, 8),
@@ -291,19 +276,6 @@ const theme = createTheme(
     components: componentStyleOverrides(true),
   },
   zhCN,
-  CuiZhCN,
-  {
-    components: {
-      CuiEmpty: {
-        defaultProps: {
-          image: onData,
-          imageStyle: {
-            width: '150px',
-          },
-        },
-      },
-    },
-  },
 );
 
 export { theme, themeOptions };

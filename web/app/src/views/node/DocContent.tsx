@@ -14,9 +14,10 @@ import {
 } from '@/request/ShareComment';
 import { ConstsCopySetting, V1ShareNodeDetailResp } from '@/request/types';
 import { copyText, findAdjacentDocuments } from '@/utils';
-import { Editor, UseTiptapReturn } from '@ctzhian/tiptap';
+import { UseTiptapReturn } from '@ctzhian/tiptap';
 import { message } from '@ctzhian/ui';
 import { Box, alpha } from '@mui/material';
+import { EditorContent } from '@tiptap/react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -27,6 +28,7 @@ import FolderList from './folderList';
 import AdjacentDocNav from './components/AdjacentDocNav';
 import DocMetaInfo from './components/DocMetaInfo';
 import CommentSection from './components/CommentSection';
+import FilePreview from './components/FilePreview';
 
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
@@ -35,12 +37,14 @@ const DocContent = ({
   info,
   docWidth,
   editorRef,
+  editorReady,
   commentList: propsCommentList,
   characterCount,
 }: {
   docWidth?: string;
   info?: V1ShareNodeDetailResp;
   editorRef: UseTiptapReturn;
+  editorReady: boolean;
   commentList?: any[];
   characterCount?: number;
 }) => {
@@ -51,6 +55,7 @@ const DocContent = ({
   const docId = params.id as string;
   const [commentList, setCommentList] = useState<any[]>(propsCommentList ?? []);
   const [appDetail, setAppDetail] = useState<any>(kbDetail?.settings);
+  const [canRenderEditor, setCanRenderEditor] = useState(false);
   const {
     control,
     handleSubmit,
@@ -68,6 +73,9 @@ const DocContent = ({
     if (!tree || !docId || info?.type !== 2) return undefined;
     return findAdjacentDocuments(tree, docId);
   }, [tree, docId, info?.type]);
+  const isReadonlyFilePreview = useMemo(() => {
+    return !!info?.meta?.file_key && !!info?.meta?.file_readonly;
+  }, [info?.meta?.file_key, info?.meta?.file_readonly]);
 
   const getComment = async () => {
     if (!info?.kb_id) return;
@@ -152,6 +160,22 @@ const DocContent = ({
       window.location.origin + `${basePath}/cap@0.0.6/cap_wasm.min.js`;
   }, [basePath]);
 
+  useEffect(() => {
+    if (info?.type !== 2 || !editorRef.editor || !editorReady) {
+      setCanRenderEditor(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCanRenderEditor(true);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      setCanRenderEditor(false);
+    };
+  }, [editorReady, editorRef.editor, info?.type]);
+
   if (!editorRef || !info) return null;
 
   const onCopyDocMd = () => {
@@ -210,28 +234,33 @@ const DocContent = ({
         </Box>
       )}
 
-      <Box
-        className='editor-container'
-        sx={{
-          mt: 6,
-          '.tiptap.ProseMirror': {
-            '.tableWrapper': {
-              width:
-                docWidth === 'full'
-                  ? '100%'
-                  : DocWidth[docWidth as keyof typeof DocWidth].value,
-              overflowX: 'auto',
-              ...(docWidth !== 'full' && { maxWidth: '100%' }),
-              ...(mobile && { width: '100%' }),
+      {isReadonlyFilePreview ? (
+        <FilePreview info={info} />
+      ) : (
+        <Box
+          className='editor-container'
+          sx={{
+            mt: 6,
+            '.tiptap.ProseMirror': {
+              '.tableWrapper': {
+                width:
+                  docWidth === 'full'
+                    ? '100%'
+                    : DocWidth[docWidth as keyof typeof DocWidth].value,
+                overflowX: 'auto',
+                ...(docWidth !== 'full' && { maxWidth: '100%' }),
+                ...(mobile && { width: '100%' }),
+              },
             },
-          },
-        }}
-      >
-        {info.type === 2 && editorRef.editor && (
-          <Editor editor={editorRef.editor} />
-        )}
-        {info.type === 1 && <FolderList list={info.list} />}
-      </Box>
+          }}
+        >
+          {info.type === 2 &&
+            editorRef.editor &&
+            editorReady &&
+            canRenderEditor && <EditorContent editor={editorRef.editor} />}
+          {info.type === 1 && <FolderList list={info.list} />}
+        </Box>
+      )}
 
       {adjacentDocs && (adjacentDocs.prev || adjacentDocs.next) && (
         <AdjacentDocNav

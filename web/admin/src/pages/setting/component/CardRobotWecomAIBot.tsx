@@ -6,7 +6,7 @@ import {
   putApiV1App,
 } from '@/request';
 import { useAppSelector } from '@/store';
-import { message } from '@ctzhian/ui';
+import { message } from '@/components/ui';
 import {
   Box,
   FormControlLabel,

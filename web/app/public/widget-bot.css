@@ -12,7 +12,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  font-family: var(--font-gilory, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif);
+  font-family: var(--font-alibaba-puhuiti, 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif);
   border: none;
   outline: none;
   opacity: 0;
@@ -181,7 +181,7 @@
   opacity: 1;
   z-index: 10001;
   transition: none;
-  font-family: var(--font-gilory, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-family: var(--font-alibaba-puhuiti, 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   padding: 0;
   margin: 0;
   pointer-events: none;

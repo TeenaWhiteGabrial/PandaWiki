@@ -1,6 +1,6 @@
 import SSEClient from '@/utils/fetch';
 import { Editor, useTiptap, UseTiptapReturn } from '@ctzhian/tiptap';
-import { Modal } from '@ctzhian/ui';
+import { Modal } from '@/components/ui';
 import { Box, Divider, Stack } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 

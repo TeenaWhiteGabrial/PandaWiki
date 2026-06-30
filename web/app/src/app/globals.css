@@ -9,7 +9,8 @@
 
 body {
   font-family:
-    var(--font-gilory), 'Roboto', 'Helvetica', 'Arial', sans-serif !important;
+    var(--font-alibaba-puhuiti), 'PingFang SC', 'Roboto', 'Helvetica', 'Arial',
+    sans-serif !important;
 }
 
 a {

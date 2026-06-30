@@ -1,5 +1,6 @@
 import Card from '@/components/Card';
 import DragTree from '@/components/Drag/DragTree';
+import { message, Modal } from '@/components/ui';
 import { postApiV1KnowledgeBaseRelease } from '@/request/KnowledgeBase';
 import { getApiV1NodeListGroupNav } from '@/request/Node';
 import {
@@ -8,7 +9,6 @@ import {
 } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { convertToTree } from '@/utils/drag';
-import { message, Modal } from '@ctzhian/ui';
 import {
   Box,
   Checkbox,
