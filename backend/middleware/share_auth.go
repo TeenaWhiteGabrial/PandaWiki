@@ -180,34 +180,25 @@ func (h *ShareAuthMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc 
 			}
 		}
 
-		// 未开启认证
+		// 分享站点允许匿名访问，由后续栏目/文档权限规则决定可见范围。
+		// 已登录用户仍会透传身份，用于访问有权限要求的内容。
 		if !kb.AccessSettings.EnterpriseAuth.Enabled && !kb.AccessSettings.SimpleAuth.Enabled {
 			return next(c)
 		}
 
 		sess, err := session.Get(domain.SessionName, c)
 		if err != nil {
-			h.logger.Error("session get failed", log.Error(err))
-			return c.JSON(http.StatusUnauthorized, domain.PWResponse{
-				Success: false,
-				Message: "Unauthorized",
-			})
+			h.logger.Warn("session get failed for anonymous share access", log.Error(err))
+			return next(c)
 		}
 
 		KbIDSess, ok := sess.Values["kb_id"].(string)
 		if !ok || kbID == "" || KbIDSess != kb.ID {
-			h.logger.Error("kb_id valid failed", log.Error(err))
-			return c.JSON(http.StatusUnauthorized, domain.PWResponse{
-				Success: false,
-				Message: "Unauthorized",
-			})
+			return next(c)
 		}
 
 		if kb.AccessSettings.EnterpriseAuth.Enabled {
-			return c.JSON(http.StatusUnauthorized, domain.PWResponse{
-				Success: false,
-				Message: "Unauthorized",
-			})
+			return next(c)
 		}
 
 		return next(c)

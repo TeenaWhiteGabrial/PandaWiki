@@ -6,7 +6,7 @@ import { clearCookie } from '@/utils/cookie';
 import { getImagePath } from '@/utils/getImagePath';
 import { Modal } from '@ctzhian/ui';
 import ErrorIcon from '@mui/icons-material/Error';
-import { alpha, Box, IconButton, Stack, Tooltip } from '@mui/material';
+import { alpha, Box, Button, IconButton, Stack, Tooltip } from '@mui/material';
 import { IconDengchu } from '@panda-wiki/icons';
 import {
   Header as CustomHeader,
@@ -101,6 +101,31 @@ const LogoutButton = () => {
         </IconButton>
       </Tooltip>
     </>
+  );
+};
+
+const LoginButton = ({
+  basePath,
+  redirectPath,
+}: {
+  basePath: string;
+  redirectPath: string;
+}) => {
+  const redirect = encodeURIComponent(redirectPath);
+  const loginUrl = `${basePath || ''}/auth/login${redirect ? `?redirect=${redirect}` : ''}`;
+
+  return (
+    <Button
+      href={loginUrl}
+      variant='outlined'
+      size='small'
+      sx={{
+        minWidth: 72,
+        borderRadius: '999px',
+      }}
+    >
+      登录
+    </Button>
   );
 };
 
@@ -211,6 +236,9 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
             {authInfo.account}
           </Box>
         )}
+        {!authInfo && (
+          <LoginButton basePath={basePath} redirectPath={currentRedirectPath} />
+        )}
         <ThemeSwitch />
         {!!authInfo && <LogoutButton />}
       </Stack>
@@ -298,6 +326,11 @@ export const WelcomeHeader = ({
       onSearch={handleSearch}
       onQaClick={() => setQaModalOpen?.(true)}
     >
+      {!authInfo && (
+        <Box sx={{ ml: 2 }}>
+          <LoginButton basePath={basePath} redirectPath={currentRedirectPath} />
+        </Box>
+      )}
       {!!authInfo && (
         <Box sx={{ ml: 2 }}>
           <LogoutButton />
