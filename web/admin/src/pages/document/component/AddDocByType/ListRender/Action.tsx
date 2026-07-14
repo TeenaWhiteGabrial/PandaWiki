@@ -434,6 +434,10 @@ const BatchActionBar = (props: BatchActionBarProps) => {
                 },
               );
 
+              if (!resp.key || !resp.filename) {
+                throw new Error('文件上传返回缺少关键信息');
+              }
+
               // 上传成功，保存 key 和文件类型
               setData(prev =>
                 prev.map(prevItem =>
