@@ -24,11 +24,14 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import MarkDown from '@/components/markdown';
+import DocSkeleton from '@/components/docSkeleton';
 import FolderList from './folderList';
 import AdjacentDocNav from './components/AdjacentDocNav';
 import DocMetaInfo from './components/DocMetaInfo';
 import CommentSection from './components/CommentSection';
 import FilePreview from './components/FilePreview';
+import AttachmentList from './components/AttachmentList';
 
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
@@ -40,6 +43,7 @@ const DocContent = ({
   editorReady,
   commentList: propsCommentList,
   characterCount,
+  loading = false,
 }: {
   docWidth?: string;
   info?: V1ShareNodeDetailResp;
@@ -47,6 +51,7 @@ const DocContent = ({
   editorReady: boolean;
   commentList?: any[];
   characterCount?: number;
+  loading?: boolean;
 }) => {
   const { mobile = false, authInfo, kbDetail, catalogWidth, tree } = useStore();
   const basePath = useBasePath();
@@ -56,6 +61,7 @@ const DocContent = ({
   const [commentList, setCommentList] = useState<any[]>(propsCommentList ?? []);
   const [appDetail, setAppDetail] = useState<any>(kbDetail?.settings);
   const [canRenderEditor, setCanRenderEditor] = useState(false);
+  const [contentReady, setContentReady] = useState(false);
   const {
     control,
     handleSubmit,
@@ -73,6 +79,8 @@ const DocContent = ({
     if (!tree || !docId || info?.type !== 2) return undefined;
     return findAdjacentDocuments(tree, docId);
   }, [tree, docId, info?.type]);
+  const isMarkdown = info?.meta?.content_type === 'md';
+  const shouldPageMarkdown = (info?.content?.length || 0) > 120000;
   const isReadonlyFilePreview = useMemo(() => {
     return !!info?.meta?.file_key && !!info?.meta?.file_readonly;
   }, [info?.meta?.file_key, info?.meta?.file_readonly]);
@@ -161,7 +169,7 @@ const DocContent = ({
   }, [basePath]);
 
   useEffect(() => {
-    if (info?.type !== 2 || !editorRef.editor || !editorReady) {
+    if (isMarkdown || info?.type !== 2 || !editorRef.editor || !editorReady) {
       setCanRenderEditor(false);
       return;
     }
@@ -174,12 +182,55 @@ const DocContent = ({
       window.clearTimeout(timer);
       setCanRenderEditor(false);
     };
-  }, [editorReady, editorRef.editor, info?.type]);
+  }, [editorReady, editorRef.editor, info?.type, isMarkdown]);
 
-  if (!editorRef || !info) return null;
+  useEffect(() => {
+    if (!info) {
+      setContentReady(false);
+      return;
+    }
+
+    setContentReady(false);
+
+    const markReady = () => {
+      window.requestAnimationFrame(() => {
+        setContentReady(true);
+      });
+    };
+
+    if (info?.type === 1) {
+      markReady();
+      return;
+    }
+
+    if (isReadonlyFilePreview || isMarkdown) {
+      const timer = window.setTimeout(markReady, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (
+      info?.type === 2 &&
+      editorReady &&
+      canRenderEditor &&
+      editorRef.editor
+    ) {
+      markReady();
+    }
+  }, [
+    canRenderEditor,
+    editorReady,
+    editorRef.editor,
+    info?.id,
+    info?.type,
+    isMarkdown,
+    isReadonlyFilePreview,
+  ]);
 
   const onCopyDocMd = () => {
-    let context = editorRef.getMarkdown() || '';
+    if (!info) return;
+    let context = isMarkdown
+      ? info?.content || ''
+      : editorRef.getMarkdown() || '';
     if (
       kbDetail?.settings?.copy_setting === ConstsCopySetting.CopySettingAppend
     ) {
@@ -206,87 +257,106 @@ const DocContent = ({
         }) as Record<string, unknown>),
       })}
     >
-      <DocMetaInfo
-        info={info}
-        characterCount={characterCount}
-        kbDetailCopySetting={kbDetail?.settings?.copy_setting}
-        onCopyDocMd={onCopyDocMd}
-      />
-
-      {info?.meta?.summary && (
-        <Box
-          sx={{
-            mb: 6,
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: '10px',
-            bgcolor: 'background.paper3',
-            p: '20px',
-            fontSize: 14,
-            lineHeight: '28px',
-            backdropFilter: 'blur(5px)',
-          }}
-        >
-          <Box sx={{ fontWeight: 'bold', mb: 2, lineHeight: '22px' }}>
-            内容摘要
-          </Box>
-          <Box>{info?.meta?.summary}</Box>
-        </Box>
-      )}
-
-      {isReadonlyFilePreview ? (
-        <FilePreview info={info} />
+      {!info || loading ? (
+        <DocSkeleton showSummary={false} />
       ) : (
-        <Box
-          className='editor-container'
-          sx={{
-            mt: 6,
-            '.tiptap.ProseMirror': {
-              '.tableWrapper': {
-                width:
-                  docWidth === 'full'
-                    ? '100%'
-                    : DocWidth[docWidth as keyof typeof DocWidth].value,
-                overflowX: 'auto',
-                ...(docWidth !== 'full' && { maxWidth: '100%' }),
-                ...(mobile && { width: '100%' }),
+        <>
+          <DocMetaInfo
+            info={info}
+            characterCount={characterCount}
+            kbDetailCopySetting={kbDetail?.settings?.copy_setting}
+            onCopyDocMd={onCopyDocMd}
+          />
+
+          {info?.meta?.summary && (
+            <Box
+              sx={{
+                mb: 6,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: '10px',
+                bgcolor: 'background.paper3',
+                p: '20px',
+                fontSize: 14,
+                lineHeight: '28px',
+                backdropFilter: 'blur(5px)',
+              }}
+            >
+              <Box sx={{ fontWeight: 'bold', mb: 2, lineHeight: '22px' }}>
+                内容摘要
+              </Box>
+              <Box>{info?.meta?.summary}</Box>
+            </Box>
+          )}
+
+          <AttachmentList attachments={info?.meta?.attachments} />
+
+          <Box
+            className='editor-container'
+            sx={{
+              mt: 6,
+              '.tiptap.ProseMirror': {
+                '.tableWrapper': {
+                  width:
+                    docWidth === 'full'
+                      ? '100%'
+                      : DocWidth[docWidth as keyof typeof DocWidth].value,
+                  overflowX: 'auto',
+                  ...(docWidth !== 'full' && { maxWidth: '100%' }),
+                  ...(mobile && { width: '100%' }),
+                },
               },
-            },
-          }}
-        >
-          {info.type === 2 &&
-            editorRef.editor &&
-            editorReady &&
-            canRenderEditor && <EditorContent editor={editorRef.editor} />}
-          {info.type === 1 && <FolderList list={info.list} />}
-        </Box>
-      )}
+            }}
+          >
+            {!contentReady ? (
+              <DocSkeleton showSummary={false} />
+            ) : isReadonlyFilePreview ? (
+              <FilePreview info={info} />
+            ) : isMarkdown ? (
+              <MarkDown
+                content={info.content || ''}
+                paged={shouldPageMarkdown}
+              />
+            ) : (
+              <>
+                {info.type === 2 &&
+                  editorRef.editor &&
+                  editorReady &&
+                  canRenderEditor && (
+                    <EditorContent editor={editorRef.editor} />
+                  )}
+                {info.type === 1 && <FolderList list={info.list} />}
+              </>
+            )}
+          </Box>
 
-      {adjacentDocs && (adjacentDocs.prev || adjacentDocs.next) && (
-        <AdjacentDocNav
-          prev={adjacentDocs.prev}
-          next={adjacentDocs.next}
-          basePath={basePath}
-          hasCommentSection={appDetail?.web_app_comment_settings?.is_enable}
-        />
-      )}
+          {adjacentDocs && (adjacentDocs.prev || adjacentDocs.next) && (
+            <AdjacentDocNav
+              prev={adjacentDocs.prev}
+              next={adjacentDocs.next}
+              basePath={basePath}
+              hasCommentSection={appDetail?.web_app_comment_settings?.is_enable}
+            />
+          )}
 
-      {appDetail?.web_app_comment_settings?.is_enable && (
-        <CommentSection
-          commentList={commentList}
-          contentFocused={contentFocused}
-          control={control}
-          errors={errors}
-          onSubmit={onSubmit}
-          commentLoading={commentLoading}
-          commentInputRef={commentInputRef}
-          commentImages={commentImages}
-          onContentFocus={() => setContentFocused(true)}
-          onContentBlur={() => setContentFocused(false)}
-          onImagesChange={setCommentImages}
-          basePath={basePath}
-          showNameInput={!authInfo?.account}
-        />
+          {appDetail?.web_app_comment_settings?.is_enable && (
+            <CommentSection
+              commentList={commentList}
+              contentFocused={contentFocused}
+              control={control}
+              errors={errors}
+              onSubmit={onSubmit}
+              commentLoading={commentLoading}
+              commentInputRef={commentInputRef}
+              commentImages={commentImages}
+              onContentFocus={() => setContentFocused(true)}
+              onContentBlur={() => setContentFocused(false)}
+              onImagesChange={setCommentImages}
+              basePath={basePath}
+              showNameInput={!authInfo?.account}
+            />
+          )}
+        </>
       )}
     </Box>
   );

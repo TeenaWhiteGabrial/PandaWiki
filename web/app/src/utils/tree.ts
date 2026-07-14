@@ -15,13 +15,24 @@ export function findParentPath(
   nodes: ITreeItem[],
   targetId: string,
   path: string[] = [],
+  visited = new Set<string>(),
 ): string[] | null {
   for (const node of nodes) {
+    if (visited.has(node.id)) {
+      continue;
+    }
     if (node.id === targetId) {
       return path;
     }
     if (node.children && node.children.length > 0) {
-      const found = findParentPath(node.children, targetId, [...path, node.id]);
+      const nextVisited = new Set(visited);
+      nextVisited.add(node.id);
+      const found = findParentPath(
+        node.children,
+        targetId,
+        [...path, node.id],
+        nextVisited,
+      );
       if (found) return found;
     }
   }
@@ -118,8 +129,26 @@ export function convertToTree(data: NodeListItem[]) {
     nodeMap.set(item.id, node);
   });
 
+  const createsCycle = (nodeId: string, parentId: string) => {
+    let currentParentId: string | null = parentId;
+    const visited = new Set<string>([nodeId]);
+    while (currentParentId) {
+      if (visited.has(currentParentId)) {
+        return true;
+      }
+      visited.add(currentParentId);
+      const currentParent = nodeMap.get(currentParentId);
+      currentParentId = currentParent?.parentId || null;
+    }
+    return false;
+  };
+
   nodeMap.forEach(node => {
-    if (node.parentId && nodeMap.has(node.parentId)) {
+    if (
+      node.parentId &&
+      nodeMap.has(node.parentId) &&
+      !createsCycle(node.id, node.parentId)
+    ) {
       const parent = nodeMap.get(node.parentId)!;
       parent.children!.push(node);
     } else {
@@ -127,21 +156,35 @@ export function convertToTree(data: NodeListItem[]) {
     }
   });
 
-  const calculateLevel = (nodes: ITreeItem[], level: number = 0) => {
+  const calculateLevel = (
+    nodes: ITreeItem[],
+    level: number = 0,
+    path = new Set<string>(),
+  ) => {
     nodes.forEach(node => {
+      if (path.has(node.id)) {
+        return;
+      }
       node.level = level;
       if (node.children?.length) {
-        calculateLevel(node.children, level + 1);
+        const nextPath = new Set(path);
+        nextPath.add(node.id);
+        calculateLevel(node.children, level + 1, nextPath);
       }
     });
   };
   calculateLevel(rootNodes);
 
-  const sortChildren = (nodes: ITreeItem[]) => {
+  const sortChildren = (nodes: ITreeItem[], path = new Set<string>()) => {
     nodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     nodes.forEach(node => {
+      if (path.has(node.id)) {
+        return;
+      }
       if (node.children?.length) {
-        sortChildren(node.children);
+        const nextPath = new Set(path);
+        nextPath.add(node.id);
+        sortChildren(node.children, nextPath);
       }
     });
   };
@@ -149,11 +192,19 @@ export function convertToTree(data: NodeListItem[]) {
   return rootNodes;
 }
 
-export const filterEmptyFolders = (data: ITreeItem[]): ITreeItem[] => {
+export const filterEmptyFolders = (
+  data: ITreeItem[],
+  path = new Set<string>(),
+): ITreeItem[] => {
   return data
     .map(item => {
+      if (path.has(item.id)) {
+        return { ...item, children: [] };
+      }
       if (item.children && item.children.length > 0) {
-        const filteredChildren = filterEmptyFolders(item.children);
+        const nextPath = new Set(path);
+        nextPath.add(item.id);
+        const filteredChildren = filterEmptyFolders(item.children, nextPath);
         return { ...item, children: filteredChildren };
       }
       return item;
@@ -174,16 +225,24 @@ export const addExpandState = (
   const parentPath = findParentPath(nodes, activeId) || [];
   const parentSet = new Set(parentPath);
 
-  const addExpand = (nodes: ITreeItem[]): ITreeItem[] => {
+  const addExpand = (
+    nodes: ITreeItem[],
+    path = new Set<string>(),
+  ): ITreeItem[] => {
     return nodes.map(node => {
+      if (path.has(node.id)) {
+        return { ...node, children: [] };
+      }
       const isExpanded =
         node.expanded ?? (parentSet.has(node.id) ? true : defaultExpand);
       if (node.children && node.children.length > 0) {
+        const nextPath = new Set(path);
+        nextPath.add(node.id);
         return {
           ...node,
           defaultExpand: isExpanded,
           expanded: isExpanded,
-          children: addExpand(node.children),
+          children: addExpand(node.children, nextPath),
         };
       }
       return node;

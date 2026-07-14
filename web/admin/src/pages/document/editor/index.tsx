@@ -19,7 +19,6 @@ import { Box, Drawer, Stack, useMediaQuery } from '@mui/material';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Catalog from './Catalog';
-import { CollabStatus } from '../component/EditorCollaboration';
 
 export interface WrapContext {
   catalogOpen: boolean;
@@ -43,10 +42,6 @@ export interface WrapContext {
     GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
   >;
   saveCurrentDocRef: React.MutableRefObject<(() => Promise<void>) | null>;
-  collabStatus: CollabStatus;
-  setCollabStatus: (status: CollabStatus) => void;
-  collabDisabledReason: string;
-  setCollabDisabledReason: (reason: string) => void;
 }
 
 const DocEditor = () => {
@@ -64,8 +59,6 @@ const DocEditor = () => {
 
   const [docWidth, setDocWidth] = useState<string>('full');
   const saveCurrentDocRef = useRef<(() => Promise<void>) | null>(null);
-  const [collabStatus, setCollabStatus] = useState<CollabStatus>('idle');
-  const [collabDisabledReason, setCollabDisabledReason] = useState('');
 
   const catalogData = useMemo(() => {
     const curGroup = groups.find(g => g.nav_id === nav_id);
@@ -224,10 +217,6 @@ const DocEditor = () => {
             nav_id,
             refreshCatalog,
             saveCurrentDocRef,
-            collabStatus,
-            setCollabStatus,
-            collabDisabledReason,
-            setCollabDisabledReason,
           }}
         />
       </Box>

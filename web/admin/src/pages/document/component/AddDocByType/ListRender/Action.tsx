@@ -19,7 +19,7 @@ import {
   useTheme,
 } from '@mui/material';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { ListDataItem } from '..';
+import { FileImportMode, ListDataItem } from '..';
 import { useGlobalQueue } from '../hooks/useGlobalQueue';
 import { pollCrawlerResults } from '../util';
 
@@ -33,6 +33,7 @@ interface BatchActionBarProps {
   isSupportSelect: boolean;
   parent_id: string | null;
   queue: ReturnType<typeof useGlobalQueue>;
+  fileImportMode: FileImportMode;
 }
 
 const BatchActionBar = (props: BatchActionBarProps) => {
@@ -48,10 +49,67 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     isSupportSelect,
     parent_id,
     queue,
+    fileImportMode,
   } = props;
+  const isFileImportType = type === ConstsCrawlerSource.CrawlerSourceFile;
 
   // 使用 ref 记录已经处理过的文件 UUID，避免重复上传
   const uploadedUuidsRef = useRef<Set<string>>(new Set());
+
+  const getFileExt = useCallback((name?: string) => {
+    return (name?.split('.').pop() || '').trim().toLowerCase();
+  }, []);
+
+  const getFileBaseName = useCallback((name?: string) => {
+    if (!name) {
+      return '';
+    }
+    const index = name.lastIndexOf('.');
+    return index > 0 ? name.slice(0, index) : name;
+  }, []);
+
+  const isMarkdownFile = useCallback(
+    (item: ListDataItem) => {
+      const ext = getFileExt(item.file_name || item.title || item.file_type);
+      return ext === 'md' || ext === 'markdown';
+    },
+    [getFileExt],
+  );
+
+  const shouldGeneratePdfPreview = useCallback(
+    (item: ListDataItem) => {
+      const ext = getFileExt(item.file_name || item.title || item.file_type);
+      return ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext);
+    },
+    [getFileExt],
+  );
+
+  const buildAttachmentMeta = useCallback(
+    async (item: ListDataItem) => {
+      const normalizedFileType = getFileExt(
+        item.file_name || item.title || item.file_type,
+      );
+      const previewKey =
+        normalizedFileType === 'pdf'
+          ? item.file_key || item.id
+          : shouldGeneratePdfPreview(item)
+            ? (
+                await postApiV1FilePreviewGenerate({
+                  file_key: item.file_key || item.id || '',
+                  file_name: item.file_name || item.title || 'file',
+                  kb_id,
+                })
+              )?.preview_key
+            : undefined;
+      return {
+        file_key: item.file_key || item.id,
+        file_name: item.file_name || item.title,
+        file_type: normalizedFileType,
+        preview_key: previewKey,
+      };
+    },
+    [getFileExt, kb_id, shouldGeneratePdfPreview],
+  );
 
   const {
     parseErrorCount,
@@ -117,7 +175,12 @@ const BatchActionBar = (props: BatchActionBarProps) => {
                         platform_id: resp.id!,
                         id: resp.docs?.value?.id || '',
                         title,
-                        summary: resp.docs?.value?.summary || '',
+                        import_kind: isFileImportType
+                          ? 'document-with-attachment'
+                          : prevItem.import_kind,
+                        summary: isFileImportType
+                          ? '将生成文件转换后的 Markdown 文档，并附带原始附件'
+                          : resp.docs?.value?.summary || '',
                         status: 'parsed',
                       }
                     : prevItem,
@@ -229,90 +292,62 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               }),
             );
           } else {
-            const exportResp = await postApiV1CrawlerExport({
-              id: item.platform_id!,
-              doc_id: item.id!,
+            const attachment = await buildAttachmentMeta(item);
+            let nextContent = '';
+            if (fileImportMode === 'content-with-attachment') {
+              if (isMarkdownFile(item)) {
+                nextContent = item.content || '';
+              } else {
+                const exportResp = await postApiV1CrawlerExport({
+                  id: item.platform_id!,
+                  doc_id: item.id!,
+                  kb_id,
+                  space_id: item.space_id,
+                  file_type: item.file_type,
+                });
+
+                setData(prev =>
+                  prev.map(prevItem =>
+                    prevItem.uuid === item.uuid
+                      ? { ...prevItem, task_id: exportResp.task_id }
+                      : prevItem,
+                  ),
+                );
+
+                const pollResult = await pollCrawlerResults(
+                  exportResp.task_id!,
+                );
+                if (
+                  pollResult.status === ConstsCrawlerStatus.CrawlerStatusFailed
+                ) {
+                  throw new Error('文件转换失败');
+                }
+                nextContent = pollResult.content || '';
+              }
+              if (!nextContent.trim()) {
+                throw new Error('未获取到转换后的 Markdown 内容');
+              }
+            }
+            const nodeResp = await postApiV1Node({
+              name: item.title!,
+              content: nextContent,
+              content_type: 'md',
+              meta: {
+                attachments: [attachment],
+              },
+              parent_id: actualParentId,
+              type: 2,
               kb_id,
-              space_id: item.space_id,
-              file_type: item.file_type,
+              nav_id: nav_id || '',
             });
 
             setData(prev =>
               prev.map(prevItem =>
                 prevItem.uuid === item.uuid
-                  ? { ...prevItem, task_id: exportResp.task_id }
+                  ? { ...prevItem, status: 'imported', id: nodeResp.id }
                   : prevItem,
               ),
             );
-
-            const pollResult = await pollCrawlerResults(exportResp.task_id!);
-
-            if (
-              pollResult.status === ConstsCrawlerStatus.CrawlerStatusCompleted
-            ) {
-              setData(prev =>
-                prev.map(prevItem =>
-                  prevItem.uuid === item.uuid
-                    ? { ...prevItem, summary: pollResult.content || '' }
-                    : prevItem,
-                ),
-              );
-
-              // 3. 创建文档节点
-              const normalizedFileType = (item.file_type || '').toLowerCase();
-              const previewKey =
-                normalizedFileType === 'pdf'
-                  ? item.file_key || item.id
-                  : ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(
-                        normalizedFileType,
-                      )
-                    ? (
-                        await postApiV1FilePreviewGenerate({
-                          file_key: item.file_key || item.id || '',
-                          file_name: item.file_name || item.title || 'file',
-                          kb_id,
-                        })
-                      )?.preview_key
-                    : undefined;
-              const nodeResp = await postApiV1Node({
-                name: item.title!,
-                content: pollResult.content || '',
-                content_type: item.file_type === 'md' ? 'md' : undefined,
-                meta: {
-                  file_key: item.file_key || item.id,
-                  file_name: item.file_name || item.title,
-                  file_type: item.file_type,
-                  preview_key: previewKey,
-                  file_readonly: true,
-                },
-                parent_id: actualParentId,
-                type: 2, // 文件类型
-                kb_id,
-                nav_id: nav_id || '',
-              });
-
-              setData(prev =>
-                prev.map(prevItem =>
-                  prevItem.uuid === item.uuid
-                    ? { ...prevItem, status: 'imported', id: nodeResp.id }
-                    : prevItem,
-                ),
-              );
-            } else if (
-              pollResult.status === ConstsCrawlerStatus.CrawlerStatusFailed
-            ) {
-              setData(prev =>
-                prev.map(prevItem =>
-                  prevItem.uuid === item.uuid
-                    ? {
-                        ...prevItem,
-                        status: 'import-error',
-                        summary: '爬取失败',
-                      }
-                    : prevItem,
-                ),
-              );
-            }
           }
         } catch (error) {
           setData(prev =>
@@ -346,12 +381,14 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     }
 
     if (itemsToParse.length === 0) {
-      message.warning('请选择需要解析的文档');
+      message.warning(
+        isFileImportType ? '请选择需要重试的文件' : '请选择需要解析的文档',
+      );
       return;
     }
 
     handleParse(itemsToParse);
-  }, [data, handleParse, isSupportSelect, checked]);
+  }, [checked, data, handleParse, isFileImportType, isSupportSelect]);
 
   /**
    * 文件上传函数 - 上传文件到服务器
@@ -360,6 +397,10 @@ const BatchActionBar = (props: BatchActionBarProps) => {
   const handleUploadFile = useCallback(
     async (items: ListDataItem[]) => {
       const uploadedUuids: string[] = []; // 记录成功上传的文件 UUID
+      const uploadedFileMap = new Map<
+        string,
+        { key: string; filename: string; fileType: string }
+      >();
 
       // 批量上传文件
       await Promise.all(
@@ -411,6 +452,11 @@ const BatchActionBar = (props: BatchActionBarProps) => {
 
               // 记录上传成功的 UUID
               uploadedUuids.push(item.uuid);
+              uploadedFileMap.set(item.uuid, {
+                key: resp.key,
+                filename: resp.filename,
+                fileType: getFileExt(resp.filename),
+              });
             } catch (error) {
               // 上传失败
               setData(prev =>
@@ -433,26 +479,92 @@ const BatchActionBar = (props: BatchActionBarProps) => {
         ),
       );
 
-      // 文件上传完成后，筛选出成功上传的文件进行解析
+      // 文件上传完成后，直接在前端区分 markdown 与附件
       if (uploadedUuids.length > 0) {
-        setData(prev => {
-          const uploadedItems = prev.filter(
-            item =>
-              uploadedUuids.includes(item.uuid) &&
-              !!item.id &&
-              item.status === 'common',
-          );
+        const itemsToParse: ListDataItem[] = [];
+        await Promise.all(
+          uploadedUuids.map(async uuid => {
+            const uploadedItem = items.find(item => item.uuid === uuid);
+            const uploadedInfo = uploadedFileMap.get(uuid);
+            if (!uploadedItem?.fileData) {
+              return;
+            }
+            const fileName =
+              uploadedInfo?.filename || uploadedItem.fileData.name;
+            const title = getFileBaseName(fileName);
+            const fileType = uploadedInfo?.fileType || getFileExt(fileName);
+            const isMarkdown = fileType === 'md' || fileType === 'markdown';
+            const content = isMarkdown
+              ? await uploadedItem.fileData.text()
+              : undefined;
+            const baseItem: ListDataItem = {
+              ...uploadedItem,
+              id: uploadedInfo?.key,
+              file_key: uploadedInfo?.key,
+              title,
+              file_name: fileName,
+              file_type: fileType,
+              content,
+            };
 
-          if (uploadedItems.length > 0) {
-            // 立即调用解析函数
-            handleParse(uploadedItems);
-          }
+            if (
+              isFileImportType &&
+              fileImportMode === 'content-with-attachment' &&
+              !isMarkdown
+            ) {
+              itemsToParse.push(baseItem);
+            }
 
-          return prev;
-        });
+            setData(prev =>
+              prev.map(prevItem =>
+                prevItem.uuid === uuid
+                  ? {
+                      ...prevItem,
+                      title: prevItem.title || title,
+                      file_name: prevItem.file_name || fileName,
+                      file_type: prevItem.file_type || fileType,
+                      import_kind: isMarkdown
+                        ? fileImportMode === 'content-with-attachment'
+                          ? 'document-with-attachment'
+                          : 'blank-document-with-attachment'
+                        : fileImportMode === 'content-with-attachment'
+                          ? 'document-with-attachment'
+                          : 'blank-document-with-attachment',
+                      summary: isMarkdown
+                        ? fileImportMode === 'content-with-attachment'
+                          ? '将生成 Markdown 文档，并附带原始附件'
+                          : '将生成空白文档，并附带原始附件'
+                        : fileImportMode === 'content-with-attachment'
+                          ? '等待文件转换为 Markdown 文档'
+                          : '将生成空白文档，并附带原始附件',
+                      content,
+                      status:
+                        isFileImportType &&
+                        fileImportMode === 'content-with-attachment' &&
+                        !isMarkdown
+                          ? 'common'
+                          : 'parsed',
+                      progress: undefined,
+                    }
+                  : prevItem,
+              ),
+            );
+          }),
+        );
+        if (itemsToParse.length > 0) {
+          await handleParse(itemsToParse);
+        }
       }
     },
-    [setData, handleParse, queue],
+    [
+      fileImportMode,
+      getFileBaseName,
+      getFileExt,
+      handleParse,
+      isFileImportType,
+      queue,
+      setData,
+    ],
   );
 
   const handleToggleSelectAll = useCallback(() => {
@@ -585,7 +697,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               borderRadius: 1,
             }}
           >
-            解析失败：{parseErrorCount}
+            {isFileImportType ? '处理失败' : '解析失败'}：{parseErrorCount}
           </Box>
         )}
         {importErrorCount > 0 && (
@@ -632,7 +744,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
           sx={{ minWidth: 0, p: 0, color: 'primary.main' }}
           onClick={handleBatchParse}
         >
-          批量解析
+          {isFileImportType ? '批量重试' : '批量解析'}
         </Button>
         <Button
           size='small'

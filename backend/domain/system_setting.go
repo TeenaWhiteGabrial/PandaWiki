@@ -61,11 +61,3 @@ type AutoModeModelSelection struct {
 type UploadDeniedExtensionsSetting struct {
 	DeniedExtensions []string `json:"denied_extensions"` // 禁止上传的文件扩展名列表，不带点，如 ["jsp", "php", "exe"]
 }
-
-type CollabSetting struct {
-	Mode           string `json:"mode" validate:"required,oneof=disabled prose_mirror"` // 协同模式: disabled 或 prose_mirror
-	MaxDocBytes    int    `json:"max_doc_bytes" validate:"omitempty,min=1024"`          // 协同编辑最大文档字节数
-	BlockMinBytes  int    `json:"block_min_bytes" validate:"omitempty,min=1024"`         // 大文档分块阈值：内容字节数
-	BlockMinCount  int    `json:"block_min_count" validate:"omitempty,min=1"`            // 大文档分块阈值：富文本块数
-	BlockWindow    int    `json:"block_window" validate:"omitempty,min=1,max=48"`        // 块级协同活跃窗口大小
-}

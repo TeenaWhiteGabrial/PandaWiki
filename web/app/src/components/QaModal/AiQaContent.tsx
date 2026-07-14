@@ -9,11 +9,9 @@ import { useBasePath, useSmartScroll } from '@/hooks';
 import { useStore } from '@/provider';
 import { postShareV1ChatFeedback } from '@/request/ShareChat';
 import { getShareV1ConversationDetail } from '@/request/ShareConversation';
-import { postShareV1CommonFileUpload } from '@/request/ShareFile';
 import { copyText } from '@/utils';
 import SSEClient, { SSEHttpError } from '@/utils/fetch';
 import { Image as ImagePreview, message } from '@ctzhian/ui';
-import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   Box,
@@ -30,7 +28,6 @@ import {
   IconDianzanWeixuanzhong,
   IconDianzanXuanzhong1,
   IconFasong,
-  IconTupian,
   IconXinduihua,
   IconXingxing,
 } from '@panda-wiki/icons';
@@ -58,9 +55,6 @@ import {
   StyledHotSearchColumn,
   StyledHotSearchColumnItem,
   StyledHotSearchContainer,
-  StyledImagePreviewItem,
-  StyledImagePreviewStack,
-  StyledImageRemoveButton,
   StyledInputContainer,
   StyledInputWrapper,
   StyledMainContainer,
@@ -163,14 +157,6 @@ const AiQaContent: React.FC<{
   const [open, setOpen] = useState(false);
   const [conversationItem, setConversationItem] =
     useState<ConversationItem | null>(null);
-  const [uploadedImages, setUploadedImages] = useState<
-    Array<{
-      id: string;
-      url: string;
-      file: File;
-    }>
-  >([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [fuzzySuggestions, setFuzzySuggestions] = useState<string[]>([]);
   const [showFuzzySuggestions, setShowFuzzySuggestions] = useState(false);
 
@@ -192,19 +178,12 @@ const AiQaContent: React.FC<{
     setConversation([]);
     setFullAnswer('');
     setInput('');
-    // 清理图片URL
-    uploadedImages.forEach(img => {
-      if (img.url.startsWith('blob:')) {
-        URL.revokeObjectURL(img.url);
-      }
-    });
-    setUploadedImages([]);
     setLoading(false);
     setNonce('');
   };
 
   const handleSearch = (reset: boolean = false) => {
-    if (input.length > 0 || uploadedImages.length > 0) {
+    if (input.length > 0) {
       onSearch(input, reset);
     }
   };
@@ -212,99 +191,6 @@ const AiQaContent: React.FC<{
   const onSuggestionClick = (text: string) => {
     setInput('');
     onSearch(text);
-  };
-
-  // 处理图片选择（支持多张）
-  const handleImageSelect = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-
-    const maxImages = 3;
-    const remainingSlots = maxImages - uploadedImages.length;
-    if (remainingSlots <= 0) {
-      message.warning(`最多只能上传 ${maxImages} 张图片`);
-      return;
-    }
-
-    const filesToAdd = Array.from(files).slice(0, remainingSlots);
-
-    try {
-      const newImages: Array<{
-        id: string;
-        url: string;
-        file: File;
-      }> = [];
-
-      for (const file of filesToAdd) {
-        // 验证文件类型
-        if (!file.type.startsWith('image/')) {
-          message.error('只支持上传图片文件');
-          continue;
-        }
-
-        // 验证文件大小 (10MB)
-        if (file.size > 10 * 1024 * 1024) {
-          message.error('图片大小不能超过 10MB');
-          continue;
-        }
-
-        // 创建本地预览 URL
-        const localUrl = URL.createObjectURL(file);
-
-        newImages.push({
-          id: Date.now().toString() + Math.random(),
-          url: localUrl,
-          file,
-        });
-      }
-
-      const updatedImages = [...uploadedImages, ...newImages];
-      setUploadedImages(updatedImages);
-    } catch (error: any) {
-      message.error(error.message || '图片选择失败');
-    }
-  };
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    handleImageSelect(event.target.files);
-    // 重置 input value 以允许上传相同文件
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleRemoveImage = (id: string) => {
-    const imageToRemove = uploadedImages.find(img => img.id === id);
-    if (imageToRemove && imageToRemove.url.startsWith('blob:')) {
-      // 释放本地 URL
-      URL.revokeObjectURL(imageToRemove.url);
-    }
-
-    const updatedImages = uploadedImages.filter(img => img.id !== id);
-    setUploadedImages(updatedImages);
-  };
-
-  // 处理粘贴上传
-  const handlePaste = async (e: React.ClipboardEvent<HTMLDivElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          imageFiles.push(file);
-        }
-      }
-    }
-
-    if (imageFiles.length > 0) {
-      e.preventDefault();
-      const dataTransfer = new DataTransfer();
-      imageFiles.forEach(file => dataTransfer.items.add(file));
-      await handleImageSelect(dataTransfer.files);
-    }
   };
 
   // 处理输入变化，显示模糊搜索建议
@@ -384,48 +270,9 @@ const AiQaContent: React.FC<{
     }
   };
 
-  // 上传所有图片到服务器
-  const uploadAllImages = async (): Promise<string[]> => {
-    if (uploadedImages.length === 0) return [];
-
-    const uploadedUrls: string[] = [];
-
-    try {
-      for (const image of uploadedImages) {
-        let token = '';
-        try {
-          const Cap = (await import(`@cap.js/widget`)).default;
-          const cap = new Cap({
-            apiEndpoint: `${basePath}/share/v1/captcha/`,
-          });
-          const solution = await cap.solve();
-          token = solution.token;
-        } catch (error) {
-          message.error('验证失败');
-          return Promise.reject(error);
-        }
-        // 上传新图片
-        const result = await postShareV1CommonFileUpload({
-          file: image.file,
-          captcha_token: token,
-        });
-        const serverUrl = '/static-file/' + result.key;
-        uploadedUrls.push(serverUrl);
-      }
-
-      return uploadedUrls;
-    } catch (error: any) {
-      setLoading(false);
-      message.error(error.message || '图片上传失败');
-      throw error;
-    }
-  };
-
   const chatAnswer = async (q: string) => {
     setLoading(true);
     setThinking(1);
-
-    const imagePaths = await uploadAllImages();
 
     let token = '';
 
@@ -445,7 +292,7 @@ const AiQaContent: React.FC<{
 
     const reqData = {
       message: q,
-      image_paths: imagePaths,
+      image_paths: [],
       nonce: '',
       conversation_id: '',
       app_type: 1,
@@ -556,7 +403,7 @@ const AiQaContent: React.FC<{
   }, []);
 
   const onSearch = (q: string, reset: boolean = false) => {
-    if (loading || (!q.trim() && uploadedImages.length === 0)) return;
+    if (loading || !q.trim()) return;
     setShouldAutoScroll(true); // 开始新搜索时，重置为自动滚动
     const newConversation = reset
       ? []
@@ -565,7 +412,7 @@ const AiQaContent: React.FC<{
         : [...conversation];
     lastResultExpendRef.current = false;
     newConversation.push({
-      image_paths: uploadedImages.map(img => img.url),
+      image_paths: [],
       q,
       a: '',
       score: 0,
@@ -584,7 +431,6 @@ const AiQaContent: React.FC<{
     setTimeout(() => {
       chatAnswer(q);
       setInput('');
-      setUploadedImages([]);
     }, 0);
   };
 
@@ -1105,30 +951,6 @@ const AiQaContent: React.FC<{
 
       <StyledInputContainer>
         <StyledInputWrapper>
-          {/* 多张图片预览 */}
-          {uploadedImages.length > 0 && (
-            <StyledImagePreviewStack direction='row' flexWrap='wrap' gap={1}>
-              {uploadedImages.map(image => (
-                <StyledImagePreviewItem key={image.id}>
-                  <Image
-                    src={image.url}
-                    alt='uploaded'
-                    width={40}
-                    height={40}
-                    style={{
-                      objectFit: 'cover',
-                    }}
-                  />
-                  <StyledImageRemoveButton
-                    size='small'
-                    onClick={() => handleRemoveImage(image.id)}
-                  >
-                    <CloseIcon sx={{ fontSize: 10 }} />
-                  </StyledImageRemoveButton>
-                </StyledImagePreviewItem>
-              ))}
-            </StyledImagePreviewStack>
-          )}
           <StyledTextField
             fullWidth
             multiline
@@ -1140,14 +962,13 @@ const AiQaContent: React.FC<{
             onChange={handleInputChange}
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
-            onPaste={handlePaste}
             onKeyDown={e => {
               const isComposing =
                 e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229;
               if (
                 e.key === 'Enter' &&
                 !e.shiftKey &&
-                (input.length > 0 || uploadedImages.length > 0) &&
+                input.length > 0 &&
                 !isComposing
               ) {
                 e.preventDefault();
@@ -1160,27 +981,8 @@ const AiQaContent: React.FC<{
           <StyledActionButtonStack
             direction='row'
             alignItems='center'
-            justifyContent='space-between'
+            justifyContent='flex-end'
           >
-            <input
-              ref={fileInputRef}
-              type='file'
-              accept='.jpg,.jpeg,.png,.webp'
-              multiple
-              style={{ display: 'none' }}
-              onChange={handleImageUpload}
-            />
-            <IconButton
-              size='small'
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading}
-              sx={{
-                flexShrink: 0,
-              }}
-            >
-              <IconTupian sx={{ fontSize: 20, color: 'text.secondary' }} />
-            </IconButton>
-
             <Box
               sx={{
                 fontSize: 12,
@@ -1199,9 +1001,9 @@ const AiQaContent: React.FC<{
               ) : (
                 <IconButton
                   size='small'
-                  disabled={input.length === 0 && uploadedImages.length === 0}
+                  disabled={input.length === 0}
                   onClick={() => {
-                    if (input.length > 0 || uploadedImages.length > 0) {
+                    if (input.length > 0) {
                       handleSearchAbort();
                       setThinking(1);
                       handleSearch();
@@ -1212,9 +1014,7 @@ const AiQaContent: React.FC<{
                     sx={{
                       fontSize: 16,
                       color:
-                        input.length > 0 || uploadedImages.length > 0
-                          ? 'primary.main'
-                          : 'text.disabled',
+                        input.length > 0 ? 'primary.main' : 'text.disabled',
                     }}
                   />
                 </IconButton>

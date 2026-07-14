@@ -36,6 +36,12 @@ export interface ListDataItem {
   preview_key?: string;
   file?: boolean;
   fileData?: File;
+  content?: string;
+  import_kind?:
+    | 'markdown'
+    | 'attachment'
+    | 'document-with-attachment'
+    | 'blank-document-with-attachment';
   progress?: number;
 
   open?: boolean;
@@ -55,6 +61,10 @@ export interface ListDataItem {
     | 'import-error';
 }
 
+export type FileImportMode =
+  | 'content-with-attachment'
+  | 'blank-with-attachment';
+
 const AddDocByType = ({
   type,
   open,
@@ -66,6 +76,9 @@ const AddDocByType = ({
   const [data, setData] = useState<ListDataItem[]>([]);
   const [checked, setChecked] = useState<string[]>([]);
   const [formSubmitLoading, setFormSubmitLoading] = useState(false);
+  const [fileImportMode, setFileImportMode] = useState<FileImportMode>(
+    'content-with-attachment',
+  );
 
   const queue = useGlobalQueue(5);
 
@@ -112,11 +125,18 @@ const AddDocByType = ({
             loading={formSubmitLoading}
             type={type}
             queue={queue}
+            fileImportMode={fileImportMode}
           />
         </>
       ) : isUploadFileType ? (
         <>
-          <FileParse type={type} parent_id={parentId} setData={setData} />
+          <FileParse
+            type={type}
+            parent_id={parentId}
+            setData={setData}
+            fileImportMode={fileImportMode}
+            setFileImportMode={setFileImportMode}
+          />
         </>
       ) : (
         <>

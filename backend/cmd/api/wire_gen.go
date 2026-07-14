@@ -157,7 +157,6 @@ func createApp() (*App, error) {
 	navUsecase := usecase.NewNavUsecase(navRepository, nodeRepository, ragRepository, enterpriseUsecase, logger)
 	navHandler := v1.NewNavHandler(baseHandler, echo, navUsecase, authMiddleware, logger)
 	enterpriseHandler := v1.NewEnterpriseHandler(echo, baseHandler, enterpriseUsecase, userUsecase, authMiddleware)
-	collabHandler := v1.NewCollabHandler(echo, baseHandler, logger, authMiddleware, nodeUsecase)
 	apiHandlers := &v1.APIHandlers{
 		UserHandler:          userHandler,
 		KnowledgeBaseHandler: knowledgeBaseHandler,
@@ -176,7 +175,6 @@ func createApp() (*App, error) {
 		AuthV1Handler:        authV1Handler,
 		NavHandler:           navHandler,
 		EnterpriseHandler:    enterpriseHandler,
-		CollabHandler:        collabHandler,
 	}
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)

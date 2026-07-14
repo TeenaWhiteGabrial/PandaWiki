@@ -10,10 +10,9 @@
 | UI         | MUI + antd + `@ctzhian/modelkit`              | 含本地兼容层 `src/components/ui` |
 | 状态管理   | Redux Toolkit + react-redux                   | ^2.5.0                           |
 | HTTP       | axios                                         | ^1.7.9                           |
-| 编辑器     | `@ctzhian/tiptap` + ProseMirror               | 协同编辑用 yjs                   |
+| 编辑器     | `@ctzhian/tiptap` + ProseMirror               | 富文本编辑                       |
 | 图表       | ECharts                                       | ^5.6.0                           |
 | Markdown   | react-markdown + remark-gfm + rehype-katex 等 | 含 GFM、数学公式、安全过滤       |
-| 协同编辑   | yjs + y-websocket                             | CRDT 实时协同                    |
 | 拖拽排序   | @dnd-kit/core + @dnd-kit/sortable             | 文档树拖拽                       |
 | 代码检查   | ESLint (flat config) + typescript-eslint      |                                  |
 | 代码格式化 | Prettier                                      | 单引号, 2空格, 尾逗号            |
@@ -37,7 +36,7 @@ src/
 │   ├── document/           # 文档管理 (最复杂模块)
 │   │   ├── layout/         # 文档列表布局
 │   │   ├── editor/         # 文档编辑器 (Header, TOC, AI生成, 摘要)
-│   │   └── component/      # 文档相关组件 (添加/删除/移动/属性/协同)
+│   │   └── component/      # 文档相关组件 (添加/删除/移动/属性)
 │   ├── setting/            # 系统设置 (28个子组件: 机器人/SEO/样式/Web等)
 │   ├── release/            # 版本发布
 │   ├── stat/               # 数据统计 (访客/热文/来源/地图)
@@ -146,13 +145,8 @@ Vite 手动分块为 6 组，优化加载性能：
 | `vendor-echarts`  | ECharts                                          |
 | `vendor-editor`   | highlight.js, lowlight, katex, prosemirror-state |
 | `vendor-markdown` | react-markdown + 生态                            |
-| `vendor-yjs`      | yjs, y-websocket                                 |
 
 ## 关键特性
-
-### 协同编辑
-
-使用 `yjs` + `y-websocket` 实现 CRDT 实时协同编辑，`EditorCollaboration.tsx` 组件处理协同逻辑。
 
 ### SSE 流式请求
 

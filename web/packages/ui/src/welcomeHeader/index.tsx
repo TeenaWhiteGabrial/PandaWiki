@@ -163,7 +163,7 @@ const Header = React.memo(
             direction='row'
             alignItems='center'
             gap={1.5}
-            sx={{ flex: 1, minWidth: 0 }}
+            sx={{ flex: 1, minWidth: 0, pr: mobile ? 0 : 2 }}
           >
             <Link
               href={homePath}
@@ -229,9 +229,14 @@ const Header = React.memo(
                 focused={false}
                 onClick={() => onQaClick?.()}
                 sx={theme => ({
-                  flex: 1,
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  top: '50%',
+                  marginTop: '-20px',
                   maxWidth: '500px',
                   minWidth: '220px',
+                  width: 'min(500px, calc(100% - 520px))',
                   borderRadius: '10px',
                   overflow: 'hidden',
                   cursor: 'pointer',
@@ -254,16 +259,6 @@ const Header = React.memo(
                 slotProps={{
                   input: {
                     readOnly: true,
-                    startAdornment: (
-                      <IconSousuo
-                        sx={{
-                          cursor: 'pointer',
-                          color: 'text.tertiary',
-                          fontSize: 20,
-                          mr: 1,
-                        }}
-                      />
-                    ),
                     endAdornment: (
                       <Stack
                         direction='row'
@@ -289,7 +284,7 @@ const Header = React.memo(
               />
             ))}
 
-          {!mobile && btns && btns.length > 0 && (
+          {!mobile && (
             <Stack
               direction='row'
               gap={2}
@@ -297,117 +292,129 @@ const Header = React.memo(
               justifyContent='flex-end'
               sx={{
                 flex: 1,
+                minWidth: 0,
+                pl: 2,
               }}
             >
-              {btns.slice(0, Math.min(2, btns.length)).map((item, index) => (
-                <Link key={index} href={item.url} target={item.target}>
-                  <Button
-                    variant={item.variant}
-                    sx={theme => ({
-                      px: 3.5,
-                      whiteSpace: 'nowrap',
-                      textTransform: 'none',
-                      boxSizing: 'border-box',
-                      height: 40,
-                      ...(item.variant === 'outlined' && {
-                        borderWidth: 2,
-                        bgcolor: theme.palette.background.default,
-                        borderColor: alpha(theme.palette.primary.main, 0.8),
-                        '&:hover': {
-                          borderColor: theme.palette.primary.main,
-                        },
-                      }),
-                    })}
-                    startIcon={
-                      item.showIcon && item.icon ? (
-                        <img
-                          src={item.icon}
-                          alt='logo'
-                          width={24}
-                          height={24}
-                        />
-                      ) : null
-                    }
-                  >
-                    <Box sx={{ lineHeight: '24px', fontSize: 18 }}>
-                      {item.text}
-                    </Box>
-                  </Button>
-                </Link>
-              ))}
-              {btns.length > 2 && (
+              {btns && btns.length > 0 && (
                 <>
-                  <IconButton
-                    onClick={handleMenuClick}
-                    sx={theme => ({
-                      width: 40,
-                      height: 40,
-                      '&:hover': {
-                        color: theme.palette.primary.main,
-                        bgcolor: alpha(theme.palette.primary.main, 0.04),
-                      },
-                    })}
-                  >
-                    <MoreVertIcon />
-                  </IconButton>
-                  <Menu
-                    anchorEl={anchorEl}
-                    open={menuOpen}
-                    onClose={handleMenuClose}
-                    anchorOrigin={{
-                      vertical: 'bottom',
-                      horizontal: 'right',
-                    }}
-                    transformOrigin={{
-                      vertical: 'top',
-                      horizontal: 'right',
-                    }}
-                    slotProps={{
-                      paper: {
-                        sx: {
-                          mt: 1,
-                          minWidth: 180,
-                          boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.1)',
-                        },
-                      },
-                    }}
-                  >
-                    {btns.slice(2).map((item, index) => (
-                      <MenuItem
-                        key={index + 2}
-                        onClick={handleMenuClose}
-                        sx={{
-                          py: 1.5,
-                          px: 2,
+                  {btns
+                    .slice(0, Math.min(2, btns.length))
+                    .map((item, index) => (
+                      <Link key={index} href={item.url} target={item.target}>
+                        <Button
+                          variant={item.variant}
+                          sx={theme => ({
+                            px: 3.5,
+                            whiteSpace: 'nowrap',
+                            textTransform: 'none',
+                            boxSizing: 'border-box',
+                            height: 40,
+                            ...(item.variant === 'outlined' && {
+                              borderWidth: 2,
+                              bgcolor: theme.palette.background.default,
+                              borderColor: alpha(
+                                theme.palette.primary.main,
+                                0.8,
+                              ),
+                              '&:hover': {
+                                borderColor: theme.palette.primary.main,
+                              },
+                            }),
+                          })}
+                          startIcon={
+                            item.showIcon && item.icon ? (
+                              <img
+                                src={item.icon}
+                                alt='logo'
+                                width={24}
+                                height={24}
+                              />
+                            ) : null
+                          }
+                        >
+                          <Box sx={{ lineHeight: '24px', fontSize: 18 }}>
+                            {item.text}
+                          </Box>
+                        </Button>
+                      </Link>
+                    ))}
+                  {btns.length > 2 && (
+                    <>
+                      <IconButton
+                        onClick={handleMenuClick}
+                        sx={theme => ({
+                          width: 40,
+                          height: 40,
+                          '&:hover': {
+                            color: theme.palette.primary.main,
+                            bgcolor: alpha(theme.palette.primary.main, 0.04),
+                          },
+                        })}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                      <Menu
+                        anchorEl={anchorEl}
+                        open={menuOpen}
+                        onClose={handleMenuClose}
+                        anchorOrigin={{
+                          vertical: 'bottom',
+                          horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                          vertical: 'top',
+                          horizontal: 'right',
+                        }}
+                        slotProps={{
+                          paper: {
+                            sx: {
+                              mt: 1,
+                              minWidth: 180,
+                              boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.1)',
+                            },
+                          },
                         }}
                       >
-                        <Link
-                          href={item.url}
-                          target={item.target}
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            textDecoration: 'none',
-                            color: 'text.primary',
-                            width: '100%',
-                          }}
-                        >
-                          {item.showIcon && item.icon && (
-                            <img
-                              src={item.icon}
-                              alt='logo'
-                              width={20}
-                              height={20}
-                            />
-                          )}
-                          <Box sx={{ fontSize: 16 }}>{item.text}</Box>
-                        </Link>
-                      </MenuItem>
-                    ))}
-                  </Menu>
+                        {btns.slice(2).map((item, index) => (
+                          <MenuItem
+                            key={index + 2}
+                            onClick={handleMenuClose}
+                            sx={{
+                              py: 1.5,
+                              px: 2,
+                            }}
+                          >
+                            <Link
+                              href={item.url}
+                              target={item.target}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                                textDecoration: 'none',
+                                color: 'text.primary',
+                                width: '100%',
+                              }}
+                            >
+                              {item.showIcon && item.icon && (
+                                <img
+                                  src={item.icon}
+                                  alt='logo'
+                                  width={20}
+                                  height={20}
+                                />
+                              )}
+                              <Box sx={{ fontSize: 16 }}>{item.text}</Box>
+                            </Link>
+                          </MenuItem>
+                        ))}
+                      </Menu>
+                    </>
+                  )}
                 </>
               )}
+              {children}
             </Stack>
           )}
           {mobile && (
@@ -419,7 +426,6 @@ const Header = React.memo(
             />
           )}
         </Stack>
-        {children}
       </Stack>
     );
   },

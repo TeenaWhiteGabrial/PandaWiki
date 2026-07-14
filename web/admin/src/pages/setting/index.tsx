@@ -13,14 +13,12 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { setModelList, setModelStatus } from '@/store/slices/config';
 import { Box, Tab, Tabs } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
-import CardCollab from './component/CardCollab';
 import CardFeedback from './component/CardFeedback';
 import CardWeb from './component/CardWeb';
 
 const SettingTabs: { label: string; id: string }[] = [
   { label: '门户网站', id: 'portal-website' },
   { label: '反馈设置', id: 'feedback' },
-  { label: '协同编辑', id: 'collaboration' },
   { label: '模型配置', id: 'model-config' },
   { label: 'MCP 接入', id: 'mcp-access' },
   { label: '用户管理', id: 'user-management' },
@@ -147,7 +145,6 @@ const Setting = () => {
         {activeTab === 'portal-website' && kb && (
           <CardWeb kb={kb} refresh={getKb} />
         )}
-        {activeTab === 'collaboration' && <CardCollab />}
         {activeTab === 'user-management' && <Member />}
         {activeTab === 'mcp-access' && <MCPAccess />}
         {activeTab === 'enterprise-access' && <EnterpriseAccess />}

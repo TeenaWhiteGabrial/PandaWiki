@@ -1,6 +1,8 @@
+import Upload from '@/components/UploadFile/Drag';
 import Emoji from '@/components/Emoji';
 import { DomainCreateNodeReq, V1NodeDetailResp } from '@/request';
 import { postApiV1Node, putApiV1NodeDetail } from '@/request/Node';
+import { postApiV1FilePreviewGenerate } from '@/request/FilePreview';
 import { useAppSelector } from '@/store';
 import { message, Modal } from '@/components/ui';
 import {
@@ -8,10 +10,13 @@ import {
   FormControlLabel,
   Radio,
   RadioGroup,
+  Stack,
   TextField,
 } from '@mui/material';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import { uploadFile } from '@/api';
+import { DomainNodeAttachmentMeta } from '@/request/types';
 
 type FormValues = { name: string; emoji: string; content_type: string };
 
@@ -46,6 +51,8 @@ const DocAddByCustomText = ({
 }: DocAddByCustomTextProps) => {
   const { kb_id: id, nav_id } = useAppSelector(state => state.config);
   const text = type === 1 ? '文件夹' : '文档';
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     control,
@@ -63,10 +70,45 @@ const DocAddByCustomText = ({
 
   const handleClose = () => {
     reset();
+    setAttachments([]);
     onClose();
   };
 
-  const submit = (value: FormValues) => {
+  const getFileExt = useCallback((name?: string) => {
+    return (name?.split('.').pop() || '').trim().toLowerCase();
+  }, []);
+
+  const buildAttachments = useCallback(async () => {
+    const nextAttachments: DomainNodeAttachmentMeta[] = [];
+    for (const file of attachments) {
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploaded = await uploadFile(formData);
+      const fileType = getFileExt(uploaded.filename || file.name);
+      const previewKey =
+        fileType === 'pdf'
+          ? uploaded.key
+          : ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(fileType)
+            ? (
+                await postApiV1FilePreviewGenerate({
+                  kb_id: id,
+                  file_key: uploaded.key,
+                  file_name: uploaded.filename || file.name,
+                })
+              )?.preview_key
+            : undefined;
+      nextAttachments.push({
+        file_key: uploaded.key,
+        file_name: uploaded.filename || file.name,
+        file_type: fileType,
+        preview_key: previewKey,
+      });
+    }
+    return nextAttachments;
+  }, [attachments, getFileExt, id]);
+
+  const submit = async (value: FormValues) => {
+    setSubmitting(true);
     if (data) {
       putApiV1NodeDetail({
         id: data.id || '',
@@ -74,38 +116,50 @@ const DocAddByCustomText = ({
         nav_id: data.nav_id || nav_id || '',
         name: value.name,
         emoji: value.emoji,
-      }).then(() => {
-        message.success('修改成功');
-        reset();
-        handleClose();
-        refresh?.();
-        setDetail?.({
-          name: value.name,
-          meta: { ...data.meta, emoji: value.emoji },
-          status: 1,
+      })
+        .then(() => {
+          message.success('修改成功');
+          reset();
+          handleClose();
+          refresh?.();
+          setDetail?.({
+            name: value.name,
+            meta: { ...data.meta, emoji: value.emoji },
+            status: 1,
+          });
+        })
+        .finally(() => {
+          setSubmitting(false);
         });
-      });
     } else {
-      if (!id) return;
-      const params: DomainCreateNodeReq = {
-        name: value.name,
-        content: '',
-        kb_id: id,
-        nav_id: nav_id || '',
-        type,
-        emoji: value.emoji,
-        content_type: value.content_type,
-      };
-      if (parentId) {
-        params.parent_id = parentId;
+      if (!id) {
+        setSubmitting(false);
+        return;
       }
-      postApiV1Node(params).then(({ id }) => {
+      try {
+        const nextAttachments = type === 2 ? await buildAttachments() : [];
+        const params: DomainCreateNodeReq = {
+          name: value.name,
+          content: '',
+          kb_id: id,
+          nav_id: nav_id || '',
+          type,
+          emoji: value.emoji,
+          content_type: value.content_type,
+          meta:
+            type === 2 && nextAttachments.length > 0
+              ? { attachments: nextAttachments }
+              : undefined,
+        };
+        if (parentId) {
+          params.parent_id = parentId;
+        }
+        const { id: nodeId } = await postApiV1Node(params);
         message.success('创建成功');
         reset();
         handleClose();
-        // 回传创建结果给上层，由上层本地追加并滚动
         onCreated?.({
-          id,
+          id: nodeId,
           name: value.name,
           type,
           content_type: value.content_type,
@@ -113,9 +167,11 @@ const DocAddByCustomText = ({
         });
         refresh?.();
         if (type === 2 && autoJump) {
-          window.open(`/doc/editor/${id}`, '_blank');
+          window.open(`/doc/editor/${nodeId}`, '_blank');
         }
-      });
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 
@@ -139,6 +195,7 @@ const DocAddByCustomText = ({
       open={open}
       width={600}
       okText={data ? '保存' : '创建'}
+      okButtonProps={{ loading: submitting }}
       onCancel={handleClose}
       onOk={handleSubmit(submit)}
     >
@@ -186,6 +243,20 @@ const DocAddByCustomText = ({
               </RadioGroup>
             )}
           />
+          <Box sx={{ fontSize: 14, lineHeight: '36px', mt: 1 }}>附件</Box>
+          <Stack gap={1}>
+            <Upload
+              accept='.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.md,.markdown'
+              multiple
+              type='drag'
+              onChange={acceptedFiles => setAttachments(acceptedFiles)}
+            />
+            {attachments.length > 0 && (
+              <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
+                已选择 {attachments.length} 个附件
+              </Box>
+            )}
+          </Stack>
         </>
       )}
     </Modal>

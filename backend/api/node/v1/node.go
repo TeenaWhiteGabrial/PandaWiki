@@ -36,32 +36,6 @@ type NodeDetailResp struct {
 	EditorAccount    string                 `json:"editor_account"`
 	PublisherAccount string                 `json:"publisher_account" gorm:"-"`
 	PV               int64                  `json:"pv" gorm:"-"`
-	Collab           *NodeCollabResp        `json:"collab,omitempty"`
-}
-
-type GetNodeCollabReq struct {
-	KbId string `query:"kb_id" json:"kb_id" validate:"required"`
-	ID   string `query:"id" json:"id" validate:"required"`
-}
-
-type NodeCollabResp struct {
-	Enabled          bool   `json:"enabled"`
-	Mode             string `json:"mode" enums:"disabled,legacy,prose_mirror,markdown"`
-	DisabledReason   string `json:"disabled_reason,omitempty"`
-	Strategy         string `json:"strategy,omitempty" enums:"document,text"`
-	DocName          string `json:"doc_name"`
-	RoomID           string `json:"room_id"`
-	DocRoomID        string `json:"doc_room_id,omitempty"`
-	BlockRoomPrefix  string `json:"block_room_prefix,omitempty"`
-	Endpoint         string `json:"endpoint"`
-	AuthToken        string `json:"auth_token"`
-	Snapshot         string `json:"snapshot"`
-	ContentType      string `json:"content_type"`
-	AutoSaveInterval int    `json:"auto_save_interval"`
-	LongDocument     bool   `json:"long_document,omitempty"`
-	ContentBytes     int    `json:"content_bytes,omitempty"`
-	BlockCount       int    `json:"block_count,omitempty"`
-	BlockWindow      int    `json:"block_window,omitempty"`
 }
 
 type NodePermissionReq struct {

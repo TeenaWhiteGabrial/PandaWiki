@@ -28,7 +28,6 @@ import dayjs from 'dayjs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { WrapContext } from '..';
-import EditorCollaboration from '../../component/EditorCollaboration';
 import DocAddByCustomText from '../../component/DocAddByCustomText';
 import DocDelete from '../../component/DocDelete';
 
@@ -55,12 +54,6 @@ const Header = ({
   const navigate = useNavigate();
   const firstLoad = useRef(true);
   const saveTipTimerRef = useRef<number | null>(null);
-  const [wikiUrl, setWikiUrl] = useState<string>('');
-  const wikiUrlRef = useRef(wikiUrl);
-
-  useEffect(() => {
-    wikiUrlRef.current = wikiUrl;
-  }, [wikiUrl]);
 
   const { kb_id, nav_id, kbDetail } = useAppSelector(state => state.config);
 
@@ -70,8 +63,6 @@ const Header = ({
     setCatalogOpen,
     refreshCatalog,
     catalogData,
-    collabStatus,
-    collabDisabledReason,
   } = useOutletContext<WrapContext>();
 
   const [renameOpen, setRenameOpen] = useState(false);
@@ -85,25 +76,6 @@ const Header = ({
   const isOfficeFile = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(
     (detail.meta?.file_type || '').toLowerCase(),
   );
-
-  useEffect(() => {
-    if (kbDetail?.access_settings?.base_url) {
-      setWikiUrl(kbDetail.access_settings.base_url);
-      return;
-    }
-    const host = kbDetail?.access_settings?.hosts?.[0] || '';
-    if (host === '') return;
-    const { ssl_ports = [], ports = [] } = kbDetail?.access_settings || {};
-
-    if (ssl_ports) {
-      if (ssl_ports.includes(443)) setWikiUrl(`https://${host}`);
-      else if (ssl_ports.length > 0)
-        setWikiUrl(`https://${host}:${ssl_ports[0]}`);
-    } else if (ports) {
-      if (ports.includes(80)) setWikiUrl(`http://${host}`);
-      else if (ports.length > 0) setWikiUrl(`http://${host}:${ports[0]}`);
-    }
-  }, [kbDetail]);
 
   const handlePublish = useCallback(() => {
     if (readOnlyUser) return;
@@ -325,12 +297,6 @@ const Header = ({
           </Stack>
         </Stack>
         <Stack direction={'row'} gap={1}>
-          {!readOnlyUser && !isReadonlyFilePreview && (
-            <EditorCollaboration
-              status={collabStatus}
-              disabledReason={collabDisabledReason}
-            />
-          )}
           {!readOnlyUser && (
             <Cascader
               list={[
@@ -354,21 +320,6 @@ const Header = ({
                         window.open(`/doc/editor/${res.id}`, '_blank');
                       });
                     }
-                  },
-                },
-                {
-                  key: 'front_doc',
-                  textSx: { flex: 1 },
-                  label: <StyledMenuSelect>前台查看</StyledMenuSelect>,
-                  onClick: () => {
-                    if (detail.status !== 2 && !detail.publisher_id) {
-                      message.warning('当前文档未发布，无法查看前台文档');
-                      return;
-                    }
-                    window.open(
-                      `${wikiUrlRef.current}/node/${detail.id}`,
-                      '_blank',
-                    );
                   },
                 },
                 ...(isReadonlyFilePreview && isOfficeFile

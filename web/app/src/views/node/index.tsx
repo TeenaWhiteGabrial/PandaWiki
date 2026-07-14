@@ -1,10 +1,11 @@
 'use client';
 
 import DocFab from '@/components/docFab';
-import DocSkeleton from '@/components/docSkeleton';
 import ErrorComponent from '@/components/error';
 import ScrollToTopFab from '@/components/scrollToTopFab';
 import { useBasePath } from '@/hooks/useBasePath';
+import { getShareV1NodeDetail } from '@/request/ShareNode';
+import type { V1ShareNodeDetailResp } from '@/request/types';
 import { getDocContentSx } from '@/utils/getDocContentSx';
 import useCopy from '@/hooks/useCopy';
 import { useStore } from '@/provider';
@@ -16,11 +17,47 @@ import { useEffect, useMemo, useState } from 'react';
 import DocAnchor from './DocAnchor';
 import DocContent from './DocContent';
 
+const nodeDetailCache = new Map<string, V1ShareNodeDetailResp>();
+const nodeDetailPromiseCache = new Map<
+  string,
+  Promise<V1ShareNodeDetailResp>
+>();
+
+const loadNodeDetail = async (nodeId: string) => {
+  const cached = nodeDetailCache.get(nodeId);
+  if (cached) {
+    return cached;
+  }
+
+  const pending = nodeDetailPromiseCache.get(nodeId);
+  if (pending) {
+    return pending;
+  }
+
+  const promise = getShareV1NodeDetail({ id: nodeId, format: 'json' })
+    .then(res => {
+      const detail = (res as V1ShareNodeDetailResp) ?? undefined;
+      if (!detail) {
+        throw new Error(`node detail is empty: ${nodeId}`);
+      }
+      nodeDetailCache.set(nodeId, detail);
+      return detail;
+    })
+    .finally(() => {
+      nodeDetailPromiseCache.delete(nodeId);
+    });
+
+  nodeDetailPromiseCache.set(nodeId, promise);
+  return promise;
+};
+
 const Doc = ({
+  nodeId,
   node,
   error,
 }: {
-  node?: any;
+  nodeId?: string;
+  node?: V1ShareNodeDetailResp;
   error?: Partial<Error> & { digest?: string } & { code?: number | string };
 }) => {
   const { kbDetail, mobile, catalogWidth } = useStore();
@@ -28,26 +65,86 @@ const Doc = ({
   const [editorReady, setEditorReady] = useState(false);
   const [headings, setHeadings] = useState<TocList>([]);
   const [characterCount, setCharacterCount] = useState(0);
+  const [nodeState, setNodeState] = useState<V1ShareNodeDetailResp | undefined>(
+    node,
+  );
+  const [pageError, setPageError] = useState<typeof error>(error);
   const pathname = usePathname();
+  const currentNode = nodeState;
   const isMarkdown = useMemo(() => {
-    return node?.meta?.content_type === 'md';
-  }, [node?.meta?.content_type]);
+    return currentNode?.meta?.content_type === 'md';
+  }, [currentNode?.meta?.content_type]);
   const baseUrl = useBasePath();
   const isReadonlyFilePreview = useMemo(() => {
-    return !!node?.meta?.file_key && !!node?.meta?.file_readonly;
-  }, [node?.meta?.file_key, node?.meta?.file_readonly]);
+    return !!currentNode?.meta?.file_key && !!currentNode?.meta?.file_readonly;
+  }, [currentNode?.meta?.file_key, currentNode?.meta?.file_readonly]);
+  const shouldUseTiptap = useMemo(() => {
+    return !isReadonlyFilePreview && !isMarkdown;
+  }, [isMarkdown, isReadonlyFilePreview]);
+
   useEffect(() => {
-    if (isReadonlyFilePreview) {
+    setNodeState(node);
+    if (node?.id) {
+      nodeDetailCache.set(node.id, node);
+    }
+  }, [node]);
+
+  useEffect(() => {
+    if (!nodeId) return;
+    if (node?.id === nodeId) return;
+
+    const cached = nodeDetailCache.get(nodeId);
+    setNodeState(cached);
+    setLoading(true);
+    setEditorReady(false);
+    setHeadings([]);
+    setCharacterCount(0);
+  }, [node?.id, nodeId]);
+
+  useEffect(() => {
+    setPageError(error);
+  }, [error]);
+
+  useEffect(() => {
+    if (node || !nodeId) {
+      return;
+    }
+
+    let disposed = false;
+    setLoading(true);
+    setPageError(undefined);
+
+    loadNodeDetail(nodeId)
+      .then(res => {
+        if (!disposed) {
+          setNodeState(res);
+          setLoading(false);
+        }
+      })
+      .catch(err => {
+        if (!disposed) {
+          setPageError(err as Error);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [node, nodeId]);
+
+  useEffect(() => {
+    if (isReadonlyFilePreview || isMarkdown) {
       setLoading(false);
       setEditorReady(false);
       setHeadings([]);
-      setCharacterCount(0);
+      setCharacterCount(currentNode?.content?.length ?? 0);
     }
-  }, [isReadonlyFilePreview]);
+  }, [currentNode?.content, isMarkdown, isReadonlyFilePreview]);
   const tiptapRef = useTiptap({
-    content: node?.content || '',
+    content: shouldUseTiptap ? currentNode?.content || '' : '',
     editable: false,
-    contentType: isMarkdown ? 'markdown' : 'html',
+    contentType: 'html',
     immediatelyRender: false,
     baseUrl: baseUrl,
     onTocUpdate: (toc: TocList) => {
@@ -64,7 +161,7 @@ const Doc = ({
     },
   });
   const editorRef = (
-    isReadonlyFilePreview
+    !shouldUseTiptap
       ? ({ editor: null } as unknown as UseTiptapReturn)
       : tiptapRef
   ) as UseTiptapReturn;
@@ -86,18 +183,15 @@ const Doc = ({
   });
 
   useEffect(() => {
-    if (isReadonlyFilePreview || !node || !editorRef.editor) return;
+    if (!shouldUseTiptap || !currentNode || !editorRef.editor) return;
 
     setEditorReady(false);
     setHeadings([]);
     requestAnimationFrame(() => {
-      editorRef.setContent(
-        node?.content || '',
-        isMarkdown ? 'markdown' : 'html',
-      );
+      editorRef.setContent(currentNode?.content || '', 'html');
       setEditorReady(true);
     });
-  }, [editorRef.editor, isMarkdown, isReadonlyFilePreview, node]);
+  }, [currentNode, editorRef.editor, shouldUseTiptap]);
 
   useEffect(() => {
     document.querySelector('#scroll-container')?.scrollTo({ top: 0 });
@@ -105,7 +199,7 @@ const Doc = ({
 
   return (
     <>
-      {error ? (
+      {pageError ? (
         <Box
           sx={{
             height: '100%',
@@ -117,32 +211,19 @@ const Doc = ({
             }),
           }}
         >
-          <ErrorComponent error={error} />
+          <ErrorComponent error={pageError} />
         </Box>
       ) : (
         <>
-          {loading && !isReadonlyFilePreview ? (
-            <Box
-              sx={getDocContentSx({
-                docWidth,
-                mobile: mobile ?? false,
-                catalogWidth: catalogWidth ?? 260,
-              })}
-            >
-              <DocSkeleton showSummary={node?.type === 2} />
-            </Box>
-          ) : (
-            <DocContent
-              info={node}
-              docWidth={docWidth}
-              editorRef={editorRef}
-              editorReady={editorReady}
-              characterCount={characterCount}
-            />
-          )}
-          {!mobile && !isReadonlyFilePreview && (
-            <DocAnchor headings={headings} />
-          )}
+          <DocContent
+            info={currentNode}
+            docWidth={docWidth}
+            editorRef={editorRef}
+            editorReady={editorReady}
+            characterCount={characterCount}
+            loading={loading && !isReadonlyFilePreview}
+          />
+          {!mobile && shouldUseTiptap && <DocAnchor headings={headings} />}
           <DocFab />
           {!mobile && <ScrollToTopFab />}
         </>

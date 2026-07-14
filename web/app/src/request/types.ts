@@ -1074,6 +1074,7 @@ export interface DomainNodeListItemResp {
 }
 
 export interface DomainNodeMeta {
+  attachments?: DomainNodeAttachmentMeta[];
   content_type?: string;
   emoji?: string;
   file_key?: string;
@@ -1082,6 +1083,13 @@ export interface DomainNodeMeta {
   file_type?: string;
   preview_key?: string;
   summary?: string;
+}
+
+export interface DomainNodeAttachmentMeta {
+  file_key?: string;
+  file_name?: string;
+  file_type?: string;
+  preview_key?: string;
 }
 
 export interface DomainNodePermissions {

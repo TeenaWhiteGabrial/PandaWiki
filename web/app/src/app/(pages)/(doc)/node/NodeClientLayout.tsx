@@ -12,17 +12,7 @@ import CatalogH5 from '@/views/node/CatalogH5';
 import NavBar from '@/views/node/NavBar';
 import { Box, Stack } from '@mui/material';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-
-const useMounted = () => {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  return mounted;
-};
+import { useMemo } from 'react';
 
 const PCLayout = ({ children }: { children: React.ReactNode }) => {
   const { tree, kbDetail, catalogWidth = 260 } = useStore();
@@ -121,19 +111,7 @@ export default function NodeClientLayout({
 }) {
   const { mobile, kbDetail } = useStore();
   const footerSetting = kbDetail?.settings?.footer_settings;
-  const mounted = useMounted();
   useSyncNavByDocId();
-
-  if (!mounted) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          bgcolor: 'background.paper',
-        }}
-      />
-    );
-  }
 
   return (
     <>

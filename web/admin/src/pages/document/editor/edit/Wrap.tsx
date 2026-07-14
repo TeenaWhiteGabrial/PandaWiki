@@ -30,41 +30,16 @@ import {
 } from 'react-router-dom';
 import { WrapContext } from '..';
 import AIGenerate from './AIGenerate';
-import BlockNavigator from './BlockNavigator';
+import AttachmentList from './AttachmentList';
 import FullTextEditor from './FullTextEditor';
 import Header from './Header';
 import Summary from './Summary';
 import Toc from './Toc';
 import Toolbar from './Toolbar';
-import {
-  buildEditorBlocks,
-  getBlockIdByDocumentPosition,
-  getDocumentPositionByBlockId,
-} from './editorBlocks';
-import { useBlockCollabScheduler } from './useBlockCollabScheduler';
-import { useMarkdownBlockCollab } from './useMarkdownBlockCollab';
-import { useMarkdownCollab } from './useMarkdownCollab';
-import { useProseMirrorCollabExtensions } from './useProseMirrorCollabExtensions';
+import { buildEditorBlocks } from './editorBlocks';
 
 interface WrapProps {
-  detail: V1NodeDetailResp & {
-    collab?: {
-      enabled?: boolean;
-      mode?: string;
-      disabled_reason?: string;
-      room_id?: string;
-      endpoint?: string;
-      auth_token?: string;
-      snapshot?: string;
-      strategy?: string;
-      doc_room_id?: string;
-      block_room_prefix?: string;
-      long_document?: boolean;
-      content_bytes?: number;
-      block_count?: number;
-      block_window?: number;
-    };
-  };
+  detail: V1NodeDetailResp;
   readOnlyUser?: boolean;
 }
 
@@ -108,8 +83,6 @@ const RichTextWrap = ({
     onSave,
     catalogData,
     saveCurrentDocRef,
-    setCollabStatus,
-    setCollabDisabledReason,
   } = useOutletContext<WrapContext>();
 
   const storageTocOpen = localStorage.getItem('toc-open');
@@ -117,52 +90,30 @@ const RichTextWrap = ({
     null,
   );
   const markdownEditorRef = useRef<MarkdownEditorRef>(null);
-  const markdownApplyingLocalRef = useRef(false);
-  const collabApplyingRemoteRef = useRef(false);
   const nodeDetailRef = useRef(nodeDetail);
   const editorRefRef = useRef<UseTiptapReturn | null>(null);
   const checkIfEditedRef = useRef<() => void>(() => {});
-  const activeBlockUpdateTimerRef = useRef<number | null>(null);
   const mountedAtRef = useRef(performance.now());
   const editorUpdateCountRef = useRef(0);
   const lastEditorUpdateLogRef = useRef(0);
   const updateDetailRef = useRef<(value: V1NodeDetailResp) => void>(() => {});
-  const [activeBlockId, setActiveBlockId] = useState<string | undefined>();
 
   const isMarkdown = useMemo(
     () => defaultDetail.meta?.content_type === 'md',
     [defaultDetail.meta?.content_type],
   );
-  const collabDisabledReason =
-    defaultDetail.collab?.disabled_reason ||
-    (defaultDetail.collab?.long_document
-      ? `文档大小 ${defaultDetail.collab.content_bytes || 0}B，块数 ${defaultDetail.collab.block_count || 0}`
-      : '');
-  const proseMirrorCollab = useProseMirrorCollabExtensions({
-    collab: defaultDetail.collab,
-    enabled: !readOnlyUser && !isMarkdown,
-    initialContent: defaultDetail.editor_content,
-  });
-  const blockCollabPlan = useBlockCollabScheduler({
-    activeBlockId,
-    collab: {
-      ...defaultDetail.collab,
-      enabled: false,
-      mode: 'disabled',
-    },
-    editorBlocks: defaultDetail.editor_blocks,
-    editorContent: defaultDetail.editor_content,
-  });
-  const excludedExtensions = proseMirrorCollab.enabled
-    ? ['invisibleCharacters', 'youtube', 'mention', 'undoRedo']
-    : ['invisibleCharacters', 'youtube', 'mention', 'emoji'];
+  const excludedExtensions = [
+    'invisibleCharacters',
+    'youtube',
+    'mention',
+    'emoji',
+  ];
   const markdownContent = nodeDetail?.content || defaultDetail.content || '';
   const richTextInitialContent =
     !isMarkdown && defaultDetail.editor_content
       ? defaultDetail.editor_content
       : defaultDetail.content || '';
-  const tiptapInitialContent =
-    !isMarkdown && proseMirrorCollab.enabled ? '' : richTextInitialContent;
+  const tiptapInitialContent = richTextInitialContent;
 
   const [title, setTitle] = useState(nodeDetail?.name || defaultDetail.name);
   const [summary, setSummary] = useState(
@@ -187,9 +138,6 @@ const RichTextWrap = ({
       id: defaultDetail.id,
       contentType: defaultDetail.meta?.content_type,
       contentLength: defaultDetail.content?.length || 0,
-      collabEnabled: !!defaultDetail.collab?.enabled,
-      collabMode: defaultDetail.collab?.mode,
-      collabDisabledReason,
       readOnlyUser,
     });
 
@@ -200,12 +148,9 @@ const RichTextWrap = ({
       });
     };
   }, [
-    defaultDetail.collab?.enabled,
-    defaultDetail.collab?.mode,
     defaultDetail.content?.length,
     defaultDetail.id,
     defaultDetail.meta?.content_type,
-    collabDisabledReason,
     readOnlyUser,
   ]);
 
@@ -226,132 +171,6 @@ const RichTextWrap = ({
   useEffect(() => {
     updateDetailRef.current = updateDetail;
   }, [updateDetail]);
-
-  const handleMarkdownCollabRemoteChange = useCallback((value: string) => {
-    if (markdownApplyingLocalRef.current) {
-      return;
-    }
-    updateDetailRef.current({ content: value });
-  }, []);
-
-  const markdownCollab = useMarkdownCollab({
-    collab: defaultDetail.collab,
-    enabled: false,
-    initialContent: defaultDetail.content || '',
-    onRemoteChange: handleMarkdownCollabRemoteChange,
-  });
-  const markdownBlockCollab = useMarkdownBlockCollab({
-    collab: defaultDetail.collab,
-    enabled: false,
-    initialContent: defaultDetail.content || '',
-    currentContent: markdownContent,
-    onRemoteChange: handleMarkdownCollabRemoteChange,
-  });
-
-  useEffect(() => {
-    if (
-      !proseMirrorCollab.enabled &&
-      !markdownCollab.enabled &&
-      !markdownBlockCollab.enabled
-    ) {
-      setCollabStatus('disabled');
-      setCollabDisabledReason(
-        isMarkdown
-          ? 'Markdown 实时协同已暂停'
-          : defaultDetail.collab?.disabled_reason || '',
-      );
-      return;
-    }
-    setCollabStatus(
-      proseMirrorCollab.enabled
-        ? proseMirrorCollab.status
-        : markdownBlockCollab.enabled
-          ? markdownBlockCollab.status
-          : markdownCollab.status,
-    );
-    setCollabDisabledReason('');
-  }, [
-    defaultDetail.collab?.disabled_reason,
-    defaultDetail.collab?.enabled,
-    isMarkdown,
-    markdownBlockCollab.enabled,
-    markdownBlockCollab.status,
-    markdownCollab.enabled,
-    markdownCollab.status,
-    proseMirrorCollab.enabled,
-    proseMirrorCollab.status,
-    setCollabDisabledReason,
-    setCollabStatus,
-  ]);
-
-  useEffect(() => {
-    if (!blockCollabPlan.enabled) return;
-    editorPerfLog('block-collab:plan', {
-      id: defaultDetail.id,
-      blockCount: blockCollabPlan.blockCount,
-      windowSize: blockCollabPlan.windowSize,
-      activeBlockIds: blockCollabPlan.activeBlockIds,
-      activeRoomIds: blockCollabPlan.activeRoomIds,
-      status: blockCollabPlan.status,
-      connectedRoomCount: blockCollabPlan.connectedRoomCount,
-    });
-  }, [
-    blockCollabPlan.activeBlockIds,
-    blockCollabPlan.activeRoomIds,
-    blockCollabPlan.blockCount,
-    blockCollabPlan.connectedRoomCount,
-    blockCollabPlan.enabled,
-    blockCollabPlan.status,
-    blockCollabPlan.windowSize,
-    defaultDetail.id,
-  ]);
-
-  useEffect(() => {
-    if (
-      !blockCollabPlan.enabled ||
-      blockCollabPlan.mergedContentOrigin !== 'remote' ||
-      !blockCollabPlan.mergedContent ||
-      isMarkdown ||
-      readOnlyUser
-    ) {
-      return;
-    }
-    const currentJSON = editorRefRef.current?.getJSON();
-    if (
-      currentJSON &&
-      JSON.stringify(currentJSON) ===
-        JSON.stringify(blockCollabPlan.mergedContent)
-    ) {
-      return;
-    }
-    collabApplyingRemoteRef.current = true;
-    try {
-      (
-        editorRefRef.current?.setContent as
-          | ((content: Record<string, unknown>) => void)
-          | undefined
-      )?.(blockCollabPlan.mergedContent);
-      updateDetailRef.current({
-        editor_content: blockCollabPlan.mergedContent,
-      });
-      editorPerfLog('block-collab:remote-patched-editor', {
-        id: defaultDetail.id,
-        blockCount: blockCollabPlan.blockCount,
-      });
-    } finally {
-      window.setTimeout(() => {
-        collabApplyingRemoteRef.current = false;
-      }, 0);
-    }
-  }, [
-    blockCollabPlan.blockCount,
-    blockCollabPlan.enabled,
-    blockCollabPlan.mergedContent,
-    blockCollabPlan.mergedContentOrigin,
-    defaultDetail.id,
-    isMarkdown,
-    readOnlyUser,
-  ]);
 
   const htmlToMarkdown = useCallback((html: string) => {
     const container = document.createElement('div');
@@ -554,7 +373,6 @@ const RichTextWrap = ({
     immediatelyRender: !isMarkdown,
     content: isMarkdown ? '' : tiptapInitialContent,
     baseUrl: window.__BASENAME__ || '',
-    extensions: proseMirrorCollab.extensions,
     exclude: excludedExtensions,
     onCreate: ({ editor: tiptapEditor }: { editor: any }) => {
       const startedAt = performance.now();
@@ -567,7 +385,6 @@ const RichTextWrap = ({
         characterCount,
         contentLength: defaultDetail.content?.length || 0,
       });
-      proseMirrorCollab.initializeFromEditor(tiptapEditor);
     },
     onError: handleError,
     onUpload: handleUpload,
@@ -575,30 +392,6 @@ const RichTextWrap = ({
       const startedAt = performance.now();
       editorUpdateCountRef.current += 1;
       setCharacterCount(getEditorCharacterCount(editor));
-      if (
-        defaultDetail.collab?.mode === 'block' &&
-        defaultDetail.collab?.enabled &&
-        !collabApplyingRemoteRef.current &&
-        !activeBlockUpdateTimerRef.current
-      ) {
-        const selectionFrom = editor.state.selection.from;
-        activeBlockUpdateTimerRef.current = window.setTimeout(() => {
-          activeBlockUpdateTimerRef.current = null;
-          const currentEditorContent =
-            editor.getJSON() || defaultDetail.editor_content;
-          const nextActiveBlockId = getBlockIdByDocumentPosition(
-            currentEditorContent,
-            selectionFrom,
-          );
-          if (nextActiveBlockId) {
-            setActiveBlockId(nextActiveBlockId);
-            blockCollabPlan.publishBlockContent(
-              nextActiveBlockId,
-              currentEditorContent,
-            );
-          }
-        }, 200);
-      }
       checkIfEditedRef.current();
       const durationMs = performance.now() - startedAt;
       const now = performance.now();
@@ -611,7 +404,6 @@ const RichTextWrap = ({
             durationMs: Math.round(durationMs),
             count: editorUpdateCountRef.current,
             isMarkdown,
-            proseMirrorCollab: proseMirrorCollab.enabled,
           },
         );
       }
@@ -623,6 +415,17 @@ const RichTextWrap = ({
   useEffect(() => {
     editorRefRef.current = editorRef;
   }, [editorRef]);
+
+  useEffect(() => {
+    if (!isMarkdown || !editorRef.editor) {
+      return;
+    }
+    const nextContent = markdownContent || '';
+    const currentContent = editorRef.getMarkdown?.() || '';
+    if (currentContent !== nextContent) {
+      editorRef.setContent(nextContent);
+    }
+  }, [defaultDetail.id, editorRef, isMarkdown, markdownContent]);
 
   const handleConvertContentType = useCallback(
     async (targetType: 'html' | 'md') => {
@@ -728,8 +531,7 @@ const RichTextWrap = ({
       | undefined;
     if (!isMarkdown) {
       content = getEditorContent();
-      const editorContent =
-        blockCollabPlan.mergedContent || editorRef.getJSON() || undefined;
+      const editorContent = editorRef.getJSON() || undefined;
       updateDetail({ content });
       editorState = {
         editor_blocks: buildEditorBlocks(editorContent),
@@ -747,7 +549,6 @@ const RichTextWrap = ({
     setIsEditing(false);
     return content;
   }, [
-    blockCollabPlan.mergedContent,
     editorRef,
     getEditorContent,
     isMarkdown,
@@ -797,33 +598,6 @@ const RichTextWrap = ({
       setAiGenerateOpen(true);
     }
   }, [editorRef.editor]);
-
-  const handleSelectBlock = useCallback(
-    (blockId: string) => {
-      setActiveBlockId(blockId);
-      if (!editorRef.editor || isMarkdown) return;
-
-      const editorContent =
-        blockCollabPlan.mergedContent ||
-        editorRef.getJSON() ||
-        defaultDetail.editor_content;
-      const position = getDocumentPositionByBlockId(editorContent, blockId);
-      if (!position) return;
-
-      editorRef.editor
-        .chain()
-        .focus(position)
-        .setTextSelection(position)
-        .scrollIntoView()
-        .run();
-    },
-    [
-      blockCollabPlan.mergedContent,
-      defaultDetail.editor_content,
-      editorRef,
-      isMarkdown,
-    ],
-  );
 
   const changeCatalogItem = useCallback(() => {
     if (editorRef && editorRef.editor) {
@@ -1064,6 +838,11 @@ const RichTextWrap = ({
           </Box>
         )}
       </Box>
+      <AttachmentList
+        detail={nodeDetail || defaultDetail}
+        readOnlyUser={readOnlyUser}
+        updateDetail={updateDetail}
+      />
     </>
   );
 
@@ -1110,36 +889,6 @@ const RichTextWrap = ({
   );
 
   useEffect(() => {
-    if (readOnlyUser) {
-      setCollabStatus('idle');
-      setCollabDisabledReason('');
-      return;
-    }
-    if (
-      !proseMirrorCollab.enabled &&
-      !markdownCollab.enabled &&
-      !markdownBlockCollab.enabled &&
-      defaultDetail.collab?.mode !== 'block'
-    ) {
-      setCollabStatus(
-        defaultDetail.collab?.mode === 'disabled' ? 'disabled' : 'disconnected',
-      );
-      setCollabDisabledReason(collabDisabledReason);
-      return;
-    }
-    setCollabDisabledReason('');
-  }, [
-    collabDisabledReason,
-    defaultDetail.collab?.mode,
-    markdownBlockCollab.enabled,
-    markdownCollab.enabled,
-    proseMirrorCollab.enabled,
-    readOnlyUser,
-    setCollabDisabledReason,
-    setCollabStatus,
-  ]);
-
-  useEffect(() => {
     setSummary(nodeDetail?.meta?.summary || '');
   }, [nodeDetail]);
 
@@ -1171,10 +920,15 @@ const RichTextWrap = ({
       const newEmoji = state.node.meta?.emoji || nodeDetail?.meta?.emoji || '';
       updateDetail({
         name: state.node.name || nodeDetail?.name || '',
-        meta: { summary: newSummary, emoji: newEmoji },
+        meta: {
+          ...nodeDetail?.meta,
+          ...state.node.meta,
+          summary: newSummary,
+          emoji: newEmoji,
+        },
         content: newContent,
       });
-      if (!proseMirrorCollab.enabled || isMarkdown) {
+      if (isMarkdown) {
         editorRef.setContent(newContent);
       }
       initialStateRef.current = {
@@ -1194,7 +948,6 @@ const RichTextWrap = ({
     nodeDetail?.meta?.emoji,
     nodeDetail?.meta?.summary,
     nodeDetail?.name,
-    proseMirrorCollab.enabled,
     state,
     updateDetail,
   ]);
@@ -1221,9 +974,6 @@ const RichTextWrap = ({
   useEffect(() => {
     const editor = editorRef.editor;
     return () => {
-      if (activeBlockUpdateTimerRef.current) {
-        window.clearTimeout(activeBlockUpdateTimerRef.current);
-      }
       editor?.destroy();
     };
   }, [editorRef.editor]);
@@ -1321,19 +1071,9 @@ const RichTextWrap = ({
                 placeholder='请输入文档内容'
                 onAceChange={value => {
                   if (readOnlyUser) return;
-                  markdownApplyingLocalRef.current = true;
-                  try {
-                    if (markdownCollab.enabled) {
-                      markdownCollab.applyLocalChange(value);
-                    }
-                    updateDetail({
-                      content: value,
-                    });
-                  } finally {
-                    window.setTimeout(() => {
-                      markdownApplyingLocalRef.current = false;
-                    }, 0);
-                  }
+                  updateDetail({
+                    content: value,
+                  });
                 }}
                 height='calc(100vh - 127px)'
               />
@@ -1360,13 +1100,6 @@ const RichTextWrap = ({
             : undefined
         }
       />
-      {blockCollabPlan.enabled && (
-        <BlockNavigator
-          activeBlockId={activeBlockId}
-          blocks={blockCollabPlan.blocks}
-          onSelect={handleSelectBlock}
-        />
-      )}
       <AIGenerate
         open={aiGenerateOpen}
         selectText={selectionText}

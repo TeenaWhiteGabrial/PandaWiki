@@ -176,6 +176,14 @@ type NodeMeta struct {
 	FileType     string `json:"file_type,omitempty"`
 	PreviewKey   string `json:"preview_key,omitempty"`
 	FileReadonly bool   `json:"file_readonly,omitempty"`
+	Attachments  []NodeAttachmentMeta `json:"attachments,omitempty"`
+}
+
+type NodeAttachmentMeta struct {
+	FileKey    string `json:"file_key,omitempty"`
+	FileName   string `json:"file_name,omitempty"`
+	FileType   string `json:"file_type,omitempty"`
+	PreviewKey string `json:"preview_key,omitempty"`
 }
 
 func (d *NodeMeta) Value() (driver.Value, error) {

@@ -1,8 +1,15 @@
 import { useStore } from '@/provider';
 import { addOpacityToColor, copyText } from '@/utils';
-import { Box, Dialog, IconButton, useTheme } from '@mui/material';
+import {
+  Box,
+  Button,
+  Dialog,
+  IconButton,
+  Stack,
+  useTheme,
+} from '@mui/material';
 import 'katex/dist/katex.min.css';
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { anOldHope } from 'react-syntax-highlighter/dist/esm/styles/hljs';
@@ -18,20 +25,65 @@ import { IconXiajiantou } from '@panda-wiki/icons';
 interface MarkDownProps {
   loading?: boolean;
   content: string;
+  paged?: boolean;
+  pageSize?: number;
 }
 
-const MarkDown = ({ loading = false, content }: MarkDownProps) => {
+const DEFAULT_PAGE_SIZE = 120000;
+
+const MarkDown = ({
+  loading = false,
+  content,
+  paged = false,
+  pageSize = DEFAULT_PAGE_SIZE,
+}: MarkDownProps) => {
   const theme = useTheme();
   const { themeMode = 'light' } = useStore();
   const [showThink, setShowThink] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImgSrc, setPreviewImgSrc] = useState('');
+  const [pageIndex, setPageIndex] = useState(0);
 
-  let answer = content;
+  const pages = useMemo(() => {
+    if (!paged || content.length <= pageSize) {
+      return [content];
+    }
+
+    const chunks: string[] = [];
+    let start = 0;
+    while (start < content.length) {
+      let end = Math.min(start + pageSize, content.length);
+      if (end < content.length) {
+        const splitByParagraph = content.lastIndexOf('\n\n', end);
+        const splitByLine = content.lastIndexOf('\n', end);
+        const safeEnd =
+          splitByParagraph > start + pageSize * 0.6
+            ? splitByParagraph
+            : splitByLine > start + pageSize * 0.6
+              ? splitByLine
+              : end;
+        end = safeEnd;
+      }
+      chunks.push(content.slice(start, end));
+      start = end;
+    }
+    return chunks;
+  }, [content, pageSize, paged]);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [content, paged, pageSize]);
+
+  const currentContent = pages[pageIndex] || content;
+
+  let answer = currentContent;
   if (!answer.includes('\n\n</think>')) {
     const idx = answer.indexOf('\n</think>');
     if (idx !== -1) {
-      answer = content.slice(0, idx) + '\n\n</think>' + content.slice(idx + 9);
+      answer =
+        currentContent.slice(0, idx) +
+        '\n\n</think>' +
+        currentContent.slice(idx + 9);
     }
   }
 
@@ -104,6 +156,45 @@ const MarkDown = ({ loading = false, content }: MarkDownProps) => {
         }),
       }}
     >
+      {pages.length > 1 && (
+        <Stack
+          direction='row'
+          alignItems='center'
+          justifyContent='space-between'
+          sx={{
+            mb: 3,
+            p: 1.5,
+            borderRadius: '10px',
+            bgcolor: 'background.paper3',
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Box sx={{ fontSize: 13, color: 'text.secondary' }}>
+            当前第 {pageIndex + 1} / {pages.length} 页
+          </Box>
+          <Stack direction='row' gap={1}>
+            <Button
+              size='small'
+              variant='outlined'
+              disabled={pageIndex === 0}
+              onClick={() => setPageIndex(prev => Math.max(prev - 1, 0))}
+            >
+              上一页
+            </Button>
+            <Button
+              size='small'
+              variant='outlined'
+              disabled={pageIndex >= pages.length - 1}
+              onClick={() =>
+                setPageIndex(prev => Math.min(prev + 1, pages.length - 1))
+              }
+            >
+              下一页
+            </Button>
+          </Stack>
+        </Stack>
+      )}
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[

@@ -7,6 +7,7 @@ import { useAppSelector } from '@/store';
 import { Ellipsis } from '@/components/ui';
 import {
   alpha,
+  Chip,
   Box,
   Button,
   Checkbox,
@@ -170,7 +171,7 @@ const ListRenderItem = ({
             </Box>
           </Stack>
         ) : (
-          <StatusBadge status={data.status} />
+          <StatusBadge status={data.status} isFileImport={!!data.file} />
         )}
       </Stack>
     );
@@ -281,7 +282,48 @@ const ListRenderItem = ({
           id={data.uuid}
           primary={
             data.title ? (
-              <Ellipsis sx={{ fontSize: 14 }}>{data.title}</Ellipsis>
+              <Stack
+                direction='row'
+                alignItems='center'
+                gap={1}
+                sx={{ minWidth: 0 }}
+              >
+                <Ellipsis sx={{ fontSize: 14, minWidth: 0 }}>
+                  {data.title}
+                </Ellipsis>
+                {data.import_kind && (
+                  <Chip
+                    size='small'
+                    label={
+                      data.import_kind === 'markdown'
+                        ? 'Markdown 文档'
+                        : data.import_kind === 'document-with-attachment'
+                          ? '文档 + 附件'
+                          : data.import_kind ===
+                              'blank-document-with-attachment'
+                            ? '空白文档 + 附件'
+                            : '附件'
+                    }
+                    sx={{
+                      height: 20,
+                      fontSize: 11,
+                      bgcolor:
+                        data.import_kind === 'markdown' ||
+                        data.import_kind === 'document-with-attachment'
+                          ? alpha(theme.palette.success.main, 0.12)
+                          : alpha(theme.palette.info.main, 0.12),
+                      color:
+                        data.import_kind === 'markdown' ||
+                        data.import_kind === 'document-with-attachment'
+                          ? 'success.main'
+                          : 'info.main',
+                      '.MuiChip-label': {
+                        px: 1,
+                      },
+                    }}
+                  />
+                )}
+              </Stack>
             ) : (
               <Skeleton variant='text' width={200} height={21} />
             )

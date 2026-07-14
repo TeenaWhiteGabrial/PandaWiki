@@ -77,7 +77,6 @@ export default defineConfig(({ command, mode }) => {
               'rehype-raw',
               'rehype-sanitize',
             ],
-            'vendor-yjs': ['yjs', 'y-websocket'],
           },
         },
       },

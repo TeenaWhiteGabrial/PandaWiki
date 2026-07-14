@@ -2,13 +2,10 @@ package usecase
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/html"
 	"github.com/gomarkdown/markdown/parser"
@@ -46,7 +43,6 @@ type NodeUsecase struct {
 	s3Client          *s3.MinioClient
 	rAGService        rag.RAGService
 	modelUsecase      *ModelUsecase
-	systemSettingRepo *pg.SystemSettingRepo
 }
 
 func NewNodeUsecase(
@@ -64,7 +60,7 @@ func NewNodeUsecase(
 	authRepo *pg.AuthRepo,
 	modelUsecase *ModelUsecase,
 	enterprise *EnterpriseUsecase,
-	systemSettingRepo *pg.SystemSettingRepo,
+	_ *pg.SystemSettingRepo,
 	config *config.Config,
 ) *NodeUsecase {
 	return &NodeUsecase{
@@ -83,130 +79,10 @@ func NewNodeUsecase(
 		logger:            logger.WithModule("usecase.node"),
 		s3Client:          s3Client,
 		modelUsecase:      modelUsecase,
-		systemSettingRepo: systemSettingRepo,
 	}
 }
 
 const ragSyncChunkSize = 100
-
-func editorBlockCount(blocks domain.JSONB) int {
-	if blocks == nil {
-		return 0
-	}
-	if count, ok := blocks["block_count"].(float64); ok {
-		return int(count)
-	}
-	if count, ok := blocks["block_count"].(int); ok {
-		return count
-	}
-	if list, ok := blocks["blocks"].([]any); ok {
-		return len(list)
-	}
-	return 0
-}
-
-func jsonSize(value any) int {
-	if value == nil {
-		return 0
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return 0
-	}
-	return len(data)
-}
-
-func normalizeCollabMode(mode string) string {
-	mode = strings.TrimSpace(mode)
-	if mode == "prose_mirror" {
-		return mode
-	}
-	return "disabled"
-}
-
-func normalizeCollabSetting(setting domain.CollabSetting) domain.CollabSetting {
-	setting.Mode = normalizeCollabMode(setting.Mode)
-	if setting.MaxDocBytes <= 0 {
-		setting.MaxDocBytes = 2 * 1024 * 1024
-	}
-	if setting.BlockMinBytes <= 0 {
-		setting.BlockMinBytes = 200 * 1024
-	}
-	if setting.BlockMinCount <= 0 {
-		setting.BlockMinCount = 120
-	}
-	if setting.BlockWindow <= 0 {
-		setting.BlockWindow = 12
-	}
-	if setting.BlockWindow > 48 {
-		setting.BlockWindow = 48
-	}
-	return setting
-}
-
-func (u *NodeUsecase) defaultCollabSetting() domain.CollabSetting {
-	return normalizeCollabSetting(domain.CollabSetting{
-		Mode:          u.config.Collab.Mode,
-		MaxDocBytes:   u.config.Collab.MaxDocBytes,
-		BlockMinBytes: u.config.Collab.BlockMinBytes,
-		BlockMinCount: u.config.Collab.BlockMinCount,
-		BlockWindow:   u.config.Collab.BlockWindow,
-	})
-}
-
-func (u *NodeUsecase) GetCollabSetting(ctx context.Context) (domain.CollabSetting, error) {
-	setting := u.defaultCollabSetting()
-	systemSetting, err := u.systemSettingRepo.GetSystemSetting(ctx, consts.SystemSettingCollab)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return setting, nil
-	}
-	if err != nil {
-		return setting, fmt.Errorf("get collab setting failed: %w", err)
-	}
-
-	var stored domain.CollabSetting
-	if err := json.Unmarshal(systemSetting.Value, &stored); err != nil {
-		return setting, fmt.Errorf("parse collab setting failed: %w", err)
-	}
-	if stored.Mode != "" {
-		setting.Mode = stored.Mode
-	}
-	if stored.MaxDocBytes > 0 {
-		setting.MaxDocBytes = stored.MaxDocBytes
-	}
-	if stored.BlockMinBytes > 0 {
-		setting.BlockMinBytes = stored.BlockMinBytes
-	}
-	if stored.BlockMinCount > 0 {
-		setting.BlockMinCount = stored.BlockMinCount
-	}
-	if stored.BlockWindow > 0 {
-		setting.BlockWindow = stored.BlockWindow
-	}
-	return normalizeCollabSetting(setting), nil
-}
-
-func (u *NodeUsecase) UpdateCollabSetting(ctx context.Context, req *domain.CollabSetting) (domain.CollabSetting, error) {
-	mode := normalizeCollabMode(req.Mode)
-	if mode != req.Mode {
-		return domain.CollabSetting{}, fmt.Errorf("invalid collab mode: %s", req.Mode)
-	}
-	setting := normalizeCollabSetting(domain.CollabSetting{
-		Mode:          mode,
-		MaxDocBytes:   req.MaxDocBytes,
-		BlockMinBytes: req.BlockMinBytes,
-		BlockMinCount: req.BlockMinCount,
-		BlockWindow:   req.BlockWindow,
-	})
-	value, err := json.Marshal(setting)
-	if err != nil {
-		return domain.CollabSetting{}, fmt.Errorf("marshal collab setting failed: %w", err)
-	}
-	if err := u.systemSettingRepo.UpsertSystemSetting(ctx, consts.SystemSettingCollab, string(value), "Collaboration setting"); err != nil {
-		return domain.CollabSetting{}, fmt.Errorf("save collab setting failed: %w", err)
-	}
-	return setting, nil
-}
 
 func (u *NodeUsecase) Create(ctx context.Context, req *domain.CreateNodeReq, userId string) (string, error) {
 	nodeID, err := u.nodeRepo.Create(ctx, req, userId)
@@ -287,12 +163,6 @@ func (u *NodeUsecase) GetNodeByKBID(ctx context.Context, id, kbId, format string
 	}
 	node.PV = nodeStat.PV
 
-	collab, err := u.GetNodeCollab(ctx, id, kbId)
-	if err != nil {
-		return nil, fmt.Errorf("get node collab failed: %w", err)
-	}
-	node.Collab = collab
-
 	if node.Meta.ContentType == domain.ContentTypeMD {
 		return node, nil
 	}
@@ -302,149 +172,6 @@ func (u *NodeUsecase) GetNodeByKBID(ctx context.Context, id, kbId, format string
 		}
 	}
 	return node, nil
-}
-
-func (u *NodeUsecase) GetNodeCollab(ctx context.Context, id, kbID string) (*v1.NodeCollabResp, error) {
-	const proseMirrorRoomVersion = "pm-v1"
-
-	node, err := u.nodeRepo.GetByID(ctx, id, kbID)
-	if err != nil {
-		return nil, err
-	}
-
-	authInfo := domain.GetAuthInfoFromCtx(ctx)
-	if authInfo == nil || authInfo.UserId == "" {
-		return nil, fmt.Errorf("authInfo not found in context")
-	}
-
-	if _, err := u.userRepo.GetUser(ctx, authInfo.UserId); err != nil {
-		return nil, fmt.Errorf("get user failed: %w", err)
-	}
-
-	contentType := node.Meta.ContentType
-	if contentType == "" {
-		contentType = domain.ContentTypeHTML
-	}
-
-	baseRoomID := fmt.Sprintf("%s:%s", kbID, id)
-	roomID := baseRoomID
-	docRoomID := fmt.Sprintf("doc:%s", baseRoomID)
-	contentBytes := len([]byte(node.Content))
-	if contentBytes == 0 {
-		contentBytes = jsonSize(node.EditorContent)
-	}
-	blockCount := editorBlockCount(node.EditorBlocks)
-	setting, err := u.GetCollabSetting(ctx)
-	if err != nil {
-		u.logger.Error("failed to get collab setting", "error", err)
-		setting = u.defaultCollabSetting()
-	}
-	blockWindow := setting.BlockWindow
-	longDocument := contentBytes >= setting.BlockMinBytes || blockCount >= setting.BlockMinCount
-	if contentBytes > setting.MaxDocBytes {
-		return &v1.NodeCollabResp{
-			Enabled:        false,
-			Mode:           "disabled",
-			DisabledReason: fmt.Sprintf("文档大小 %dB 超过协同编辑上限 %dB", contentBytes, setting.MaxDocBytes),
-			DocName:        node.Name,
-			RoomID:         roomID,
-			DocRoomID:      docRoomID,
-			ContentType:    contentType,
-			LongDocument:   longDocument,
-			ContentBytes:   contentBytes,
-			BlockCount:     blockCount,
-			BlockWindow:    blockWindow,
-		}, nil
-	}
-	if node.Type != domain.NodeTypeDocument {
-		return &v1.NodeCollabResp{
-			Enabled:        false,
-			Mode:           "disabled",
-			DisabledReason: "非文档节点不支持实时协同",
-			DocName:        node.Name,
-			RoomID:         roomID,
-			DocRoomID:      docRoomID,
-			ContentType:    contentType,
-			ContentBytes:   contentBytes,
-			BlockCount:     blockCount,
-			BlockWindow:    blockWindow,
-		}, nil
-	}
-
-	// 当前字符串级 Y.Text 协同会在长文档下产生全文回灌和内容膨胀。
-	// 因此后端只允许显式开启 ProseMirror/Yjs 结构化协同。
-	mode := setting.Mode
-	if mode != "prose_mirror" {
-		return &v1.NodeCollabResp{
-			Enabled:        false,
-			Mode:           "disabled",
-			DisabledReason: "实时协同正在迁移到结构化编辑模型，当前已暂停全文字符串协同",
-			DocName:        node.Name,
-			RoomID:         roomID,
-			DocRoomID:      docRoomID,
-			ContentType:    contentType,
-			LongDocument:   longDocument,
-			ContentBytes:   contentBytes,
-			BlockCount:     blockCount,
-			BlockWindow:    blockWindow,
-		}, nil
-	}
-
-	endpoint := strings.TrimSpace(u.config.Collab.Endpoint)
-	if endpoint == "" {
-		endpoint = "ws://127.0.0.1:1234/collab/ws"
-	}
-
-	token, err := u.buildCollabToken(authInfo.UserId, kbID, id)
-	if err != nil {
-		return nil, fmt.Errorf("build collab token failed: %w", err)
-	}
-
-	if contentType == domain.ContentTypeMD {
-		return &v1.NodeCollabResp{
-			Enabled:        false,
-			Mode:           "disabled",
-			DisabledReason: "Markdown 实时协同已暂停",
-			DocName:        node.Name,
-			RoomID:         roomID,
-			DocRoomID:      docRoomID,
-			ContentType:    contentType,
-			LongDocument:   longDocument,
-			ContentBytes:   contentBytes,
-			BlockCount:     blockCount,
-			BlockWindow:    blockWindow,
-		}, nil
-	}
-
-	roomID = fmt.Sprintf("%s:%s", proseMirrorRoomVersion, baseRoomID)
-	docRoomID = fmt.Sprintf("doc:%s", roomID)
-
-	return &v1.NodeCollabResp{
-		Enabled:          true,
-		Mode:             "prose_mirror",
-		Strategy:         "document",
-		DocName:          node.Name,
-		RoomID:           roomID,
-		DocRoomID:        docRoomID,
-		Endpoint:         endpoint,
-		AuthToken:        token,
-		ContentType:      contentType,
-		AutoSaveInterval: 2000,
-		ContentBytes:     contentBytes,
-		BlockCount:       blockCount,
-		BlockWindow:      blockWindow,
-	}, nil
-}
-
-func (u *NodeUsecase) buildCollabToken(userID, kbID, nodeID string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":      userID,
-		"kb_id":   kbID,
-		"node_id": nodeID,
-		"scope":   "collab",
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
-	})
-	return token.SignedString([]byte(u.config.Auth.JWT.Secret))
 }
 
 func (u *NodeUsecase) NodeAction(ctx context.Context, req *domain.NodeActionReq) error {
@@ -1111,6 +838,9 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 			u.logger.Error("get node by id failed",
 				log.String("node_id", nodeRelease.NodeID),
 				log.Error(getNodeErr))
+			continue
+		}
+		if node.Meta.FileReadonly {
 			continue
 		}
 		var ragStatus consts.NodeRagInfoStatus

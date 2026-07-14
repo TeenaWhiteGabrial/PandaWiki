@@ -106,10 +106,15 @@ func (r *NodeRepository) Create(ctx context.Context, req *domain.CreateNodeReq, 
 			CreatedAt:     now,
 			UpdatedAt:     now,
 			EditTime:      now,
-			RagInfo: domain.RagInfo{
-				Status:  consts.NodeRagStatusPending,
-				Message: "",
-			},
+			RagInfo: func() domain.RagInfo {
+				if meta.FileReadonly {
+					return domain.RagInfo{}
+				}
+				return domain.RagInfo{
+					Status:  consts.NodeRagStatusPending,
+					Message: "",
+				}
+			}(),
 			Permissions: domain.NodePermissions{
 				Inherit: lo.ToPtr(true),
 			},
@@ -1455,6 +1460,7 @@ func (r *NodeRepository) GetNodeListByStatus(ctx context.Context, kbId, status, 
 		query = query.Where("nodes.status IN ?", []domain.NodeStatus{domain.NodeStatusUnreleased, domain.NodeStatusDraft})
 	case "unstudied":
 		query = query.Where("nodes.type = ?", domain.NodeTypeDocument).
+			Where("COALESCE(nodes.meta->>'file_readonly', 'false') != 'true'").
 			Where("nodes.rag_info->>'status' NOT IN ? OR nodes.rag_info->>'status' IS NULL",
 				[]string{string(consts.NodeRagStatusSucceeded), string(consts.NodeRagStatusRunning), string(consts.NodeRagStatusReindexing)})
 	}
@@ -1487,6 +1493,7 @@ func (r *NodeRepository) GetNodeStats(ctx context.Context, kbId string) (*v1.Nod
 		Model(&domain.Node{}).
 		Where("kb_id = ?", kbId).
 		Where("nodes.type = ?", domain.NodeTypeDocument).
+		Where("COALESCE(nodes.meta->>'file_readonly', 'false') != 'true'").
 		Where("rag_info->>'status' NOT IN ? OR rag_info->>'status' IS NULL", studiedStatuses)
 
 	if err := unstudiedQuery.Count(&stats.UnstudiedCount).Error; err != nil {

@@ -3,9 +3,10 @@ import { ListDataItem } from '..';
 
 interface StatusBadgeProps {
   status: ListDataItem['status'];
+  isFileImport?: boolean;
 }
 
-const StatusBadge = ({ status }: StatusBadgeProps) => {
+const StatusBadge = ({ status, isFileImport = false }: StatusBadgeProps) => {
   const theme = useTheme();
 
   type StatusConfigItem = {
@@ -17,7 +18,7 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
 
   const statusConfig: Record<string, StatusConfigItem> = {
     common: {
-      text: '解析中',
+      text: isFileImport ? '上传中' : '解析中',
       color: theme.palette.text.secondary,
       loading: true,
     },
@@ -27,7 +28,7 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
       loading: false,
     },
     parsing: {
-      text: '解析中',
+      text: isFileImport ? '处理中' : '解析中',
       color: theme.palette.warning.main,
       loading: true,
     },
@@ -37,7 +38,7 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
       loading: true,
     },
     'parse-error': {
-      text: '解析失败',
+      text: isFileImport ? '处理失败' : '解析失败',
       color: 'white',
       bgColor: 'error.main',
       loading: false,
@@ -52,6 +53,12 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
       text: '导入成功',
       color: 'white',
       bgColor: 'success.main',
+      loading: false,
+    },
+    parsed: {
+      text: isFileImport ? '待导入' : '已解析',
+      color: theme.palette.success.main,
+      bgColor: alpha(theme.palette.success.main, 0.12),
       loading: false,
     },
   };
