@@ -1,7 +1,5 @@
 import {
   ConstsCrawlerSource,
-  ConstsCrawlerStatus,
-  postApiV1CrawlerExport,
   postApiV1CrawlerParse,
   postApiV1FileUpload,
   postApiV1Node,
@@ -15,13 +13,15 @@ import {
   Button,
   Checkbox,
   CircularProgress,
+  FormControlLabel,
+  Radio,
+  RadioGroup,
   Stack,
   useTheme,
 } from '@mui/material';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { FileImportMode, ListDataItem } from '..';
 import { useGlobalQueue } from '../hooks/useGlobalQueue';
-import { pollCrawlerResults } from '../util';
 
 interface BatchActionBarProps {
   loading: boolean;
@@ -34,6 +34,7 @@ interface BatchActionBarProps {
   parent_id: string | null;
   queue: ReturnType<typeof useGlobalQueue>;
   fileImportMode: FileImportMode;
+  setFileImportMode: React.Dispatch<React.SetStateAction<FileImportMode>>;
 }
 
 const BatchActionBar = (props: BatchActionBarProps) => {
@@ -50,6 +51,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     parent_id,
     queue,
     fileImportMode,
+    setFileImportMode,
   } = props;
   const isFileImportType = type === ConstsCrawlerSource.CrawlerSourceFile;
 
@@ -130,6 +132,19 @@ const BatchActionBar = (props: BatchActionBarProps) => {
       ).length,
     };
   }, [data]);
+
+  const hasMarkdownFiles = useMemo(() => {
+    return data.some(item => item.file && isMarkdownFile(item));
+  }, [data, isMarkdownFile]);
+
+  const hasNonMarkdownFiles = useMemo(() => {
+    return data.some(
+      item =>
+        item.file &&
+        !!(item.file_name || item.title || item.file_type) &&
+        !isMarkdownFile(item),
+    );
+  }, [data, isMarkdownFile]);
 
   /**
    * 通用解析函数 - 用于解析文档
@@ -294,36 +309,11 @@ const BatchActionBar = (props: BatchActionBarProps) => {
           } else {
             const attachment = await buildAttachmentMeta(item);
             let nextContent = '';
-            if (fileImportMode === 'content-with-attachment') {
-              if (isMarkdownFile(item)) {
-                nextContent = item.content || '';
-              } else {
-                const exportResp = await postApiV1CrawlerExport({
-                  id: item.platform_id!,
-                  doc_id: item.id!,
-                  kb_id,
-                  space_id: item.space_id,
-                  file_type: item.file_type,
-                });
-
-                setData(prev =>
-                  prev.map(prevItem =>
-                    prevItem.uuid === item.uuid
-                      ? { ...prevItem, task_id: exportResp.task_id }
-                      : prevItem,
-                  ),
-                );
-
-                const pollResult = await pollCrawlerResults(
-                  exportResp.task_id!,
-                );
-                if (
-                  pollResult.status === ConstsCrawlerStatus.CrawlerStatusFailed
-                ) {
-                  throw new Error('文件转换失败');
-                }
-                nextContent = pollResult.content || '';
-              }
+            if (
+              fileImportMode === 'content-with-attachment' &&
+              isMarkdownFile(item)
+            ) {
+              nextContent = item.content || '';
               if (!nextContent.trim()) {
                 throw new Error('未获取到转换后的 Markdown 内容');
               }
@@ -485,7 +475,6 @@ const BatchActionBar = (props: BatchActionBarProps) => {
 
       // 文件上传完成后，直接在前端区分 markdown 与附件
       if (uploadedUuids.length > 0) {
-        const itemsToParse: ListDataItem[] = [];
         await Promise.all(
           uploadedUuids.map(async uuid => {
             const uploadedItem = items.find(item => item.uuid === uuid);
@@ -511,14 +500,6 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               content,
             };
 
-            if (
-              isFileImportType &&
-              fileImportMode === 'content-with-attachment' &&
-              !isMarkdown
-            ) {
-              itemsToParse.push(baseItem);
-            }
-
             setData(prev =>
               prev.map(prevItem =>
                 prevItem.uuid === uuid
@@ -531,23 +512,14 @@ const BatchActionBar = (props: BatchActionBarProps) => {
                         ? fileImportMode === 'content-with-attachment'
                           ? 'document-with-attachment'
                           : 'blank-document-with-attachment'
-                        : fileImportMode === 'content-with-attachment'
-                          ? 'document-with-attachment'
-                          : 'blank-document-with-attachment',
+                        : 'blank-document-with-attachment',
                       summary: isMarkdown
                         ? fileImportMode === 'content-with-attachment'
                           ? '将生成 Markdown 文档，并附带原始附件'
                           : '将生成空白文档，并附带原始附件'
-                        : fileImportMode === 'content-with-attachment'
-                          ? '等待文件转换为 Markdown 文档'
-                          : '将生成空白文档，并附带原始附件',
+                        : '将生成空白文档，并附带原始附件',
                       content,
-                      status:
-                        isFileImportType &&
-                        fileImportMode === 'content-with-attachment' &&
-                        !isMarkdown
-                          ? 'common'
-                          : 'parsed',
+                      status: 'parsed',
                       progress: undefined,
                     }
                   : prevItem,
@@ -555,9 +527,6 @@ const BatchActionBar = (props: BatchActionBarProps) => {
             );
           }),
         );
-        if (itemsToParse.length > 0) {
-          await handleParse(itemsToParse);
-        }
       }
     },
     [
@@ -598,6 +567,33 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     }
   }, [data.length]);
 
+  useEffect(() => {
+    if (!isFileImportType || data.length === 0) {
+      return;
+    }
+    setData(prev =>
+      prev.map(item => {
+        if (!item.file || item.status === 'upload-error') {
+          return item;
+        }
+        const markdown = isMarkdownFile(item);
+        return {
+          ...item,
+          import_kind: markdown
+            ? fileImportMode === 'content-with-attachment'
+              ? 'document-with-attachment'
+              : 'blank-document-with-attachment'
+            : 'blank-document-with-attachment',
+          summary: markdown
+            ? fileImportMode === 'content-with-attachment'
+              ? '将生成 Markdown 文档，并附带原始附件'
+              : '将生成空白文档，并附带原始附件'
+            : '将生成空白文档，并附带原始附件',
+        };
+      }),
+    );
+  }, [data.length, fileImportMode, isFileImportType, isMarkdownFile, setData]);
+
   // 监听新文件，自动触发上传
   useEffect(() => {
     if (data.length > 0) {
@@ -620,10 +616,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
 
   return (
     <Stack
-      direction='row'
-      alignItems='center'
-      justifyContent={'space-between'}
-      gap='10px'
+      gap={1}
       sx={{
         p: 1,
         pr: 2,
@@ -635,130 +628,179 @@ const BatchActionBar = (props: BatchActionBarProps) => {
         zIndex: 1,
       }}
     >
-      <Stack direction='row' gap={1} alignItems='center' sx={{ lineHeight: 1 }}>
-        {isSupportSelect && (
-          <Stack
-            direction='row'
-            gap={1}
-            alignItems='center'
-            sx={{
-              fontSize: 14,
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-            onClick={handleToggleSelectAll}
-          >
-            <Checkbox
-              aria-labelledby='checked-all-label'
-              edge='start'
-              size='small'
-              checked={isAllChecked}
-              indeterminate={isIndeterminate}
-              tabIndex={-1}
-              disableRipple
-              sx={{ ml: '2px' }}
-              inputProps={{ 'aria-labelledby': 'checked-all-label' }}
-            />
-            <Box>全选</Box>
-          </Stack>
-        )}
-        {importedCount > 0 ? (
-          <Box
-            sx={{
-              fontSize: 12,
-              color: 'success.main',
-              bgcolor: alpha(theme.palette.success.main, 0.1),
-              px: 1,
-              py: 0.5,
-              borderRadius: 1,
-            }}
-          >
-            导入成功：{importedCount}{' '}
-            {data.length - importedCount > 0 && <> / {data.length}</>}
-          </Box>
-        ) : (
-          <Box
-            sx={{
-              fontSize: 12,
-              color: 'text.disabled',
-              bgcolor: 'background.paper2',
-              px: 1,
-              py: 0.5,
-              borderRadius: 1,
-            }}
-          >
-            未导入：{data.length - importedCount}
-          </Box>
-        )}
-        {parseErrorCount > 0 && (
-          <Box
-            sx={{
-              fontSize: 12,
-              color: 'error.main',
-              bgcolor: alpha(theme.palette.error.main, 0.1),
-              px: 1,
-              py: 0.5,
-              borderRadius: 1,
-            }}
-          >
-            {isFileImportType ? '处理失败' : '解析失败'}：{parseErrorCount}
-          </Box>
-        )}
-        {importErrorCount > 0 && (
-          <Box
-            sx={{
-              fontSize: 12,
-              color: 'error.main',
-              bgcolor: alpha(theme.palette.error.main, 0.1),
-              px: 1,
-              py: 0.5,
-              borderRadius: 1,
-            }}
-          >
-            导入失败：{importErrorCount}
-          </Box>
-        )}
-        {loadingCount > 0 && (
-          <Stack
-            direction='row'
-            gap={1}
-            alignItems='center'
-            sx={{
-              fontSize: 12,
-              color: 'warning.main',
-              bgcolor: alpha(theme.palette.warning.main, 0.1),
-              px: 1,
-              py: 0.5,
-              borderRadius: 1,
-            }}
-          >
-            <CircularProgress
-              size={12}
-              sx={{ color: theme.palette.warning.main }}
-            />
-            处理中：{loadingCount}
-          </Stack>
-        )}
-      </Stack>
-      <Stack direction='row' gap={2} alignItems='center'>
-        <Button
-          size='small'
-          color='primary'
-          disabled={parseErrorCount === 0 || loading}
-          sx={{ minWidth: 0, p: 0, color: 'primary.main' }}
-          onClick={handleBatchParse}
+      {isFileImportType && hasMarkdownFiles && (
+        <Stack
+          sx={{
+            px: 1.5,
+            py: 1,
+            borderRadius: 1,
+            fontSize: 12,
+            color: 'text.secondary',
+            bgcolor: alpha(theme.palette.info.main, 0.08),
+          }}
+          gap={1}
         >
-          {isFileImportType ? '批量重试' : '批量解析'}
-        </Button>
-        <Button
-          size='small'
-          color='primary'
-          disabled={!(parsedCount > 0 || importErrorCount > 0) || loading}
-          onClick={handleBatchImport}
-          sx={{ minWidth: 0, p: 0, color: 'primary.main' }}
+          <Box>Markdown 文件导入方式</Box>
+          <RadioGroup
+            value={fileImportMode}
+            onChange={event =>
+              setFileImportMode(event.target.value as FileImportMode)
+            }
+          >
+            <FormControlLabel
+              value='content-with-attachment'
+              control={<Radio size='small' />}
+              label='生成 Markdown 文档，并附带原始附件'
+            />
+            <FormControlLabel
+              value='blank-with-attachment'
+              control={<Radio size='small' />}
+              label='生成空白文档，并附带原始附件'
+            />
+          </RadioGroup>
+          {hasNonMarkdownFiles && (
+            <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
+              非 Markdown 文件将固定导入为“空白文档 + 原始附件”。
+            </Box>
+          )}
+        </Stack>
+      )}
+      <Stack
+        direction='row'
+        alignItems='center'
+        justifyContent={'space-between'}
+        gap='10px'
+      >
+        <Stack
+          direction='row'
+          gap={1}
+          alignItems='center'
+          sx={{ lineHeight: 1 }}
         >
-          批量导入
-        </Button>
+          {isSupportSelect && (
+            <Stack
+              direction='row'
+              gap={1}
+              alignItems='center'
+              sx={{
+                fontSize: 14,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+              onClick={handleToggleSelectAll}
+            >
+              <Checkbox
+                aria-labelledby='checked-all-label'
+                edge='start'
+                size='small'
+                checked={isAllChecked}
+                indeterminate={isIndeterminate}
+                tabIndex={-1}
+                disableRipple
+                sx={{ ml: '2px' }}
+                inputProps={{ 'aria-labelledby': 'checked-all-label' }}
+              />
+              <Box>全选</Box>
+            </Stack>
+          )}
+          {importedCount > 0 ? (
+            <Box
+              sx={{
+                fontSize: 12,
+                color: 'success.main',
+                bgcolor: alpha(theme.palette.success.main, 0.1),
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+              }}
+            >
+              导入成功：{importedCount}{' '}
+              {data.length - importedCount > 0 && <> / {data.length}</>}
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                fontSize: 12,
+                color: 'text.disabled',
+                bgcolor: 'background.paper2',
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+              }}
+            >
+              未导入：{data.length - importedCount}
+            </Box>
+          )}
+          {parseErrorCount > 0 && (
+            <Box
+              sx={{
+                fontSize: 12,
+                color: 'error.main',
+                bgcolor: alpha(theme.palette.error.main, 0.1),
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+              }}
+            >
+              {isFileImportType ? '处理失败' : '解析失败'}：{parseErrorCount}
+            </Box>
+          )}
+          {importErrorCount > 0 && (
+            <Box
+              sx={{
+                fontSize: 12,
+                color: 'error.main',
+                bgcolor: alpha(theme.palette.error.main, 0.1),
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+              }}
+            >
+              导入失败：{importErrorCount}
+            </Box>
+          )}
+          {loadingCount > 0 && (
+            <Stack
+              direction='row'
+              gap={1}
+              alignItems='center'
+              sx={{
+                fontSize: 12,
+                color: 'warning.main',
+                bgcolor: alpha(theme.palette.warning.main, 0.1),
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+              }}
+            >
+              <CircularProgress
+                size={12}
+                sx={{ color: theme.palette.warning.main }}
+              />
+              处理中：{loadingCount}
+            </Stack>
+          )}
+        </Stack>
+        <Stack direction='row' gap={2} alignItems='center'>
+          <Button
+            size='small'
+            color='primary'
+            disabled={parseErrorCount === 0 || loading}
+            sx={{ minWidth: 0, p: 0, color: 'primary.main' }}
+            onClick={handleBatchParse}
+          >
+            {isFileImportType ? '批量重试' : '批量解析'}
+          </Button>
+          <Button
+            size='small'
+            color='primary'
+            disabled={!(parsedCount > 0 || importErrorCount > 0) || loading}
+            onClick={handleBatchImport}
+            sx={{ minWidth: 0, p: 0, color: 'primary.main' }}
+          >
+            批量导入
+          </Button>
+        </Stack>
       </Stack>
     </Stack>
   );

@@ -18,6 +18,7 @@ interface ListRenderProps {
   isSupportSelect: boolean;
   queue: ReturnType<typeof useGlobalQueue>;
   fileImportMode: FileImportMode;
+  setFileImportMode: React.Dispatch<React.SetStateAction<FileImportMode>>;
 }
 
 interface FlattenedItem {
@@ -36,6 +37,7 @@ const ListRender = ({
   parent_id,
   queue,
   fileImportMode,
+  setFileImportMode,
 }: ListRenderProps) => {
   // 将树形数据展平为线性列表（只包含展开的节点）
   const flattenedData = useMemo(() => {
@@ -186,6 +188,7 @@ const ListRender = ({
         parent_id={parent_id}
         queue={queue}
         fileImportMode={fileImportMode}
+        setFileImportMode={setFileImportMode}
       />
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
         <Virtuoso

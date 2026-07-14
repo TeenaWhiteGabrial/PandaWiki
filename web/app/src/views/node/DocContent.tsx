@@ -15,6 +15,7 @@ import {
 import { ConstsCopySetting, V1ShareNodeDetailResp } from '@/request/types';
 import { copyText, findAdjacentDocuments } from '@/utils';
 import { UseTiptapReturn } from '@ctzhian/tiptap';
+import type { TocList } from '@ctzhian/tiptap';
 import { message } from '@ctzhian/ui';
 import { Box, alpha } from '@mui/material';
 import { EditorContent } from '@tiptap/react';
@@ -30,8 +31,8 @@ import FolderList from './folderList';
 import AdjacentDocNav from './components/AdjacentDocNav';
 import DocMetaInfo from './components/DocMetaInfo';
 import CommentSection from './components/CommentSection';
-import FilePreview from './components/FilePreview';
 import AttachmentList from './components/AttachmentList';
+import LegacyFileNotice from './components/LegacyFileNotice';
 
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
@@ -44,6 +45,7 @@ const DocContent = ({
   commentList: propsCommentList,
   characterCount,
   loading = false,
+  headings = [],
 }: {
   docWidth?: string;
   info?: V1ShareNodeDetailResp;
@@ -52,6 +54,7 @@ const DocContent = ({
   commentList?: any[];
   characterCount?: number;
   loading?: boolean;
+  headings?: TocList;
 }) => {
   const { mobile = false, authInfo, kbDetail, catalogWidth, tree } = useStore();
   const basePath = useBasePath();
@@ -59,7 +62,6 @@ const DocContent = ({
   const [commentLoading, setCommentLoading] = useState(false);
   const docId = params.id as string;
   const [commentList, setCommentList] = useState<any[]>(propsCommentList ?? []);
-  const [appDetail, setAppDetail] = useState<any>(kbDetail?.settings);
   const [canRenderEditor, setCanRenderEditor] = useState(false);
   const [contentReady, setContentReady] = useState(false);
   const {
@@ -79,6 +81,7 @@ const DocContent = ({
     if (!tree || !docId || info?.type !== 2) return undefined;
     return findAdjacentDocuments(tree, docId);
   }, [tree, docId, info?.type]);
+  const appDetail: any = kbDetail?.settings;
   const isMarkdown = info?.meta?.content_type === 'md';
   const shouldPageMarkdown = (info?.content?.length || 0) > 120000;
   const isReadonlyFilePreview = useMemo(() => {
@@ -107,6 +110,26 @@ const DocContent = ({
       getComment();
     }
   }, [docId, info?.kb_id, appDetail?.web_app_comment_settings?.is_enable]);
+
+  const commentUserName = useMemo(() => {
+    if (authInfo?.account) {
+      return authInfo.account;
+    }
+    const cacheKey = 'pw_guest_comment_name';
+    if (typeof window === 'undefined') {
+      return '游客0000';
+    }
+    const cached = window.sessionStorage.getItem(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    const suffix = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, '0');
+    const generated = `游客${suffix}`;
+    window.sessionStorage.setItem(cacheKey, generated);
+    return generated;
+  }, [authInfo?.account]);
 
   const onSubmit = handleSubmit(
     async (data: { content: string; name: string }) => {
@@ -137,7 +160,7 @@ const DocContent = ({
             content: data.content,
             pic_urls: imageUrls,
             node_id: docId,
-            user_name: data.name,
+            user_name: commentUserName,
             captcha_token: token,
           },
           {
@@ -311,11 +334,12 @@ const DocContent = ({
             {!contentReady ? (
               <DocSkeleton showSummary={false} />
             ) : isReadonlyFilePreview ? (
-              <FilePreview info={info} />
+              <LegacyFileNotice info={info} />
             ) : isMarkdown ? (
               <MarkDown
                 content={info.content || ''}
                 paged={shouldPageMarkdown}
+                headings={headings}
               />
             ) : (
               <>
@@ -353,7 +377,6 @@ const DocContent = ({
               onContentBlur={() => setContentFocused(false)}
               onImagesChange={setCommentImages}
               basePath={basePath}
-              showNameInput={!authInfo?.account}
             />
           )}
         </>

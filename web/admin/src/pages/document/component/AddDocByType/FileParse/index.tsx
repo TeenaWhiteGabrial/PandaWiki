@@ -6,16 +6,7 @@ import {
 } from '@/request';
 import { useAppSelector } from '@/store';
 import { formatByte } from '@/utils';
-import {
-  alpha,
-  Box,
-  CircularProgress,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-  Stack,
-  useTheme,
-} from '@mui/material';
+import { alpha, Box, CircularProgress, Stack, useTheme } from '@mui/material';
 import { useCallback, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { FileImportMode, ListDataItem } from '..';
@@ -49,6 +40,7 @@ const FileParse = ({
 
   const handleInitFiles = useCallback(
     async (uploadFiles: File[]) => {
+      setFileImportMode('content-with-attachment');
       if (NoParseTypes.includes(type)) {
         const newFileList: ListDataItem[] = uploadFiles.map(file => ({
           uuid: uuidv4(),
@@ -92,39 +84,6 @@ const FileParse = ({
 
   return (
     <Box>
-      {type === ConstsCrawlerSource.CrawlerSourceFile && !loading && (
-        <Stack
-          sx={{
-            mb: 1.5,
-            px: 1.5,
-            py: 1,
-            borderRadius: 1,
-            fontSize: 12,
-            color: 'text.secondary',
-            bgcolor: alpha(theme.palette.info.main, 0.08),
-          }}
-          gap={1}
-        >
-          <Box>上传文件是否单独作为附件显示</Box>
-          <RadioGroup
-            value={fileImportMode}
-            onChange={event =>
-              setFileImportMode(event.target.value as FileImportMode)
-            }
-          >
-            <FormControlLabel
-              value='content-with-attachment'
-              control={<Radio size='small' />}
-              label='是：生成文件转换后的 Markdown 文档，并附带原始附件'
-            />
-            <FormControlLabel
-              value='blank-with-attachment'
-              control={<Radio size='small' />}
-              label='否：生成空白文档，并附带原始附件'
-            />
-          </RadioGroup>
-        </Stack>
-      )}
       {loading && fileList.length > 0 ? (
         <Stack
           direction='row'

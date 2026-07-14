@@ -246,7 +246,6 @@ const DocAddByCustomText = ({
           <Box sx={{ fontSize: 14, lineHeight: '36px', mt: 1 }}>附件</Box>
           <Stack gap={1}>
             <Upload
-              accept='.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.md,.markdown'
               multiple
               type='drag'
               onChange={acceptedFiles => setAttachments(acceptedFiles)}

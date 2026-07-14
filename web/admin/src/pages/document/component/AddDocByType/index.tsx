@@ -126,6 +126,7 @@ const AddDocByType = ({
             type={type}
             queue={queue}
             fileImportMode={fileImportMode}
+            setFileImportMode={setFileImportMode}
           />
         </>
       ) : isUploadFileType ? (

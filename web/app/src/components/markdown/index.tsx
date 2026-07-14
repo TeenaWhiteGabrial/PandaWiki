@@ -1,4 +1,5 @@
 import { useStore } from '@/provider';
+import type { TocList } from '@ctzhian/tiptap';
 import { addOpacityToColor, copyText } from '@/utils';
 import {
   Box,
@@ -27,6 +28,7 @@ interface MarkDownProps {
   content: string;
   paged?: boolean;
   pageSize?: number;
+  headings?: TocList;
 }
 
 const DEFAULT_PAGE_SIZE = 120000;
@@ -36,6 +38,7 @@ const MarkDown = ({
   content,
   paged = false,
   pageSize = DEFAULT_PAGE_SIZE,
+  headings = [],
 }: MarkDownProps) => {
   const theme = useTheme();
   const { themeMode = 'light' } = useStore();
@@ -43,6 +46,7 @@ const MarkDown = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImgSrc, setPreviewImgSrc] = useState('');
   const [pageIndex, setPageIndex] = useState(0);
+  const headingIndexRef = React.useRef(0);
 
   const pages = useMemo(() => {
     if (!paged || content.length <= pageSize) {
@@ -73,6 +77,10 @@ const MarkDown = ({
   useEffect(() => {
     setPageIndex(0);
   }, [content, paged, pageSize]);
+
+  useEffect(() => {
+    headingIndexRef.current = 0;
+  }, [content, pageIndex, headings]);
 
   const currentContent = pages[pageIndex] || content;
 
@@ -252,9 +260,30 @@ const MarkDown = ({
           error: (props: React.HTMLAttributes<HTMLElement>) => {
             return <span className='chat-error' {...props}></span>;
           },
-          h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-            <h2 {...props} />
-          ),
+          h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => {
+            const heading = headings[headingIndexRef.current++];
+            return <h2 id={heading?.id} {...props} />;
+          },
+          h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => {
+            const heading = headings[headingIndexRef.current++];
+            return <h2 id={heading?.id} {...props} />;
+          },
+          h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => {
+            const heading = headings[headingIndexRef.current++];
+            return <h3 id={heading?.id} {...props} />;
+          },
+          h4: (props: React.HTMLAttributes<HTMLHeadingElement>) => {
+            const heading = headings[headingIndexRef.current++];
+            return <h4 id={heading?.id} {...props} />;
+          },
+          h5: (props: React.HTMLAttributes<HTMLHeadingElement>) => {
+            const heading = headings[headingIndexRef.current++];
+            return <h5 id={heading?.id} {...props} />;
+          },
+          h6: (props: React.HTMLAttributes<HTMLHeadingElement>) => {
+            const heading = headings[headingIndexRef.current++];
+            return <h6 id={heading?.id} {...props} />;
+          },
           a: ({
             children,
             style,

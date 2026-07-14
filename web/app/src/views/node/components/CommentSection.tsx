@@ -6,7 +6,7 @@ import CommentInput, {
 } from '@/components/commentInput';
 import { getImagePath } from '@/utils/getImagePath';
 import { Image } from '@ctzhian/ui';
-import { Box, Button, Divider, Stack, TextField } from '@mui/material';
+import { Box, Button, Divider, Stack } from '@mui/material';
 import React from 'react';
 import {
   Control,
@@ -37,7 +37,6 @@ interface CommentSectionProps {
   onContentBlur: () => void;
   onImagesChange: (images: ImageItem[]) => void;
   basePath: string;
-  showNameInput: boolean;
 }
 
 const CommentSection = ({
@@ -53,7 +52,6 @@ const CommentSection = ({
   onContentBlur,
   onImagesChange,
   basePath,
-  showNameInput,
 }: CommentSectionProps) => (
   <>
     <Divider sx={{ my: 4 }} />
@@ -100,28 +98,6 @@ const CommentSection = ({
         <Button variant='contained' onClick={onSubmit} loading={commentLoading}>
           发送
         </Button>
-        {showNameInput && (
-          <Controller
-            rules={{ required: '请输入你的昵称' }}
-            name='name'
-            control={control}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                placeholder='你的昵称'
-                size='small'
-                sx={{
-                  '.MuiOutlinedInput-notchedOutline': {
-                    border: '1px solid',
-                    borderColor: 'var(--mui-palette-divider) !important',
-                  },
-                }}
-                error={!!errors.name}
-                helperText={errors.name?.message}
-              />
-            )}
-          />
-        )}
       </Stack>
     </Box>
     <Stack gap={1} sx={{ mt: 4 }}>

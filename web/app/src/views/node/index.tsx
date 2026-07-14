@@ -7,6 +7,7 @@ import { useBasePath } from '@/hooks/useBasePath';
 import { getShareV1NodeDetail } from '@/request/ShareNode';
 import type { V1ShareNodeDetailResp } from '@/request/types';
 import { getDocContentSx } from '@/utils/getDocContentSx';
+import { extractMarkdownToc } from '@/utils/markdownToc';
 import useCopy from '@/hooks/useCopy';
 import { useStore } from '@/provider';
 import { ConstsCopySetting } from '@/request/types';
@@ -137,7 +138,9 @@ const Doc = ({
     if (isReadonlyFilePreview || isMarkdown) {
       setLoading(false);
       setEditorReady(false);
-      setHeadings([]);
+      setHeadings(
+        isMarkdown ? extractMarkdownToc(currentNode?.content || '') : [],
+      );
       setCharacterCount(currentNode?.content?.length ?? 0);
     }
   }, [currentNode?.content, isMarkdown, isReadonlyFilePreview]);
@@ -222,8 +225,11 @@ const Doc = ({
             editorReady={editorReady}
             characterCount={characterCount}
             loading={loading && !isReadonlyFilePreview}
+            headings={headings}
           />
-          {!mobile && shouldUseTiptap && <DocAnchor headings={headings} />}
+          {!mobile && !isReadonlyFilePreview && headings.length > 0 && (
+            <DocAnchor headings={headings} />
+          )}
           <DocFab />
           {!mobile && <ScrollToTopFab />}
         </>

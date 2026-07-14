@@ -193,7 +193,6 @@ const AttachmentList = ({
               hidden
               type='file'
               multiple
-              accept='.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.md,.markdown'
               onChange={event => handleUploadFiles(event.target.files)}
             />
             <Button

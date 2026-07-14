@@ -2,8 +2,6 @@ import { ITreeItem } from '@/api';
 import Cascader from '@/components/Cascader';
 import VersionPublish from '@/pages/release/components/VersionPublish';
 import { postApiV1Node } from '@/request';
-import { postApiV1FilePreviewGenerate } from '@/request/FilePreview';
-import { putApiV1NodeDetail } from '@/request/Node';
 import { V1NodeDetailResp } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { addOpacityToColor, getShortcutKeyText } from '@/utils';
@@ -68,14 +66,10 @@ const Header = ({
   const [renameOpen, setRenameOpen] = useState(false);
   const [delOpen, setDelOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
 
   const [showSaveTip, setShowSaveTip] = useState(false);
   const isReadonlyFilePreview =
     !!detail.meta?.file_key && !!detail.meta?.file_readonly;
-  const isOfficeFile = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(
-    (detail.meta?.file_type || '').toLowerCase(),
-  );
 
   const handlePublish = useCallback(() => {
     if (readOnlyUser) return;
@@ -166,55 +160,6 @@ const Header = ({
       }
     };
   }, [detail.updated_at, edit, nodeDetail?.updated_at]);
-
-  const handleGeneratePreview = useCallback(async () => {
-    if (
-      readOnlyUser ||
-      !kb_id ||
-      !detail.id ||
-      !detail.meta?.file_key ||
-      !isOfficeFile
-    ) {
-      return;
-    }
-    setPreviewLoading(true);
-    try {
-      const resp = await postApiV1FilePreviewGenerate({
-        kb_id,
-        file_key: detail.meta.file_key,
-        file_name: detail.meta.file_name || detail.name || 'document',
-      });
-      const nextMeta = {
-        ...detail.meta,
-        preview_key: resp.preview_key || '',
-      };
-      await putApiV1NodeDetail({
-        id: detail.id,
-        kb_id,
-        nav_id: detail.nav_id || '',
-        meta: nextMeta,
-      });
-      updateDetail({
-        meta: nextMeta,
-        updated_at: new Date().toISOString(),
-      });
-      message.success('已生成预览');
-    } catch (error) {
-      console.error(error);
-      message.error('生成预览失败');
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [
-    detail.id,
-    detail.meta,
-    detail.name,
-    detail.nav_id,
-    isOfficeFile,
-    kb_id,
-    readOnlyUser,
-    updateDetail,
-  ]);
 
   return (
     <Box sx={{ p: 1 }}>
@@ -322,20 +267,6 @@ const Header = ({
                     }
                   },
                 },
-                ...(isReadonlyFilePreview && isOfficeFile
-                  ? [
-                      {
-                        key: 'generate_preview',
-                        textSx: { flex: 1 },
-                        label: (
-                          <StyledMenuSelect>
-                            {previewLoading ? '生成中...' : '生成PDF预览'}
-                          </StyledMenuSelect>
-                        ),
-                        onClick: handleGeneratePreview,
-                      },
-                    ]
-                  : []),
                 ...(!isReadonlyFilePreview
                   ? [
                       {
