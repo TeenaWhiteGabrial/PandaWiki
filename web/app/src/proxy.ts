@@ -6,7 +6,7 @@ import { getShareV1AppWidgetInfo } from './request/ShareApp';
 import { getBasePath, parsePathname } from '@/utils';
 import { postShareV1StatPage } from '@/request/ShareStat';
 import { getShareV1NodeList } from '@/request/ShareNode';
-import { getShareV1AppWebInfo } from '@/request/ShareApp';
+import { getFreshWebAppInfo } from '@/request/appInfo';
 import {
   filterEmptyFolders,
   convertToTree,
@@ -36,7 +36,7 @@ const getFirstNode = async () => {
 };
 
 const getHomePath = async () => {
-  const info = await getShareV1AppWebInfo();
+  const info = await getFreshWebAppInfo();
   return {
     homePageSetting: info?.settings?.home_page_setting,
     hasLandingConfigs:
@@ -168,7 +168,7 @@ export async function proxy(request: NextRequest) {
   const pathname = url.pathname;
   let basePath = '';
   try {
-    const kbDetail = await getShareV1AppWebInfo();
+    const kbDetail = await getFreshWebAppInfo();
     basePath = getBasePath(kbDetail?.base_url || '');
   } catch {
     // Allow the request flow to continue even when app info is temporarily unavailable.

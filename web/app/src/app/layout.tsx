@@ -1,7 +1,7 @@
 import ErrorComponent from '@/components/error';
 import StoreProvider from '@/provider';
 import { ThemeStoreProvider } from '@/provider/themeStore';
-import { getShareV1AppWebInfo } from '@/request/ShareApp';
+import { getFreshWebAppInfo } from '@/request/appInfo';
 import Script from 'next/script';
 import { Box } from '@mui/material';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter';
@@ -34,7 +34,7 @@ export const viewport: Viewport = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  const kbDetail: any = await getShareV1AppWebInfo();
+  const kbDetail: any = await getFreshWebAppInfo();
   const basePath = getBasePath(kbDetail?.base_url || '');
   const logo = getImagePath(kbDetail?.settings?.icon || '', basePath);
   const favicon = getImagePath(
@@ -71,7 +71,7 @@ const Layout = async ({
 
   let error: any = null;
 
-  const kbDetailResolve = await getShareV1AppWebInfo()
+  const kbDetailResolve = await getFreshWebAppInfo()
     .then(value => ({ status: 'fulfilled', value }) as const)
     .catch(reason => ({ status: 'rejected', reason }) as const);
   const kbDetail: any =
