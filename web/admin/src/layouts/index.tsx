@@ -5,8 +5,9 @@ import Sidebar from '@/components/Sidebar';
 import { getApiV1AppDetailCompat } from '@/request/appCompat';
 import { getApiV1ModelList } from '@/request/Model';
 import { getApiV1KnowledgeBaseList } from '@/request/KnowledgeBase';
+import { getShareWebAppBrand } from '@/request/shareAppBrand';
 import { getApiV1UserCompat } from '@/request/userCompat';
-import { useAppDispatch } from '@/store';
+import { useAppDispatch, useAppSelector } from '@/store';
 import {
   setAppBrand,
   setModelStatus,
@@ -59,24 +60,14 @@ const useAuth = (hasAuth: boolean) => {
     });
   };
 
-  const getAppBrand = () => {
-    return getApiV1AppDetailCompat({ type: '1' }).then(res => {
-      const brand = getAppBrandFromDetail(res);
-      dispatch(setAppBrand(brand));
-      applyAppBrand(brand);
-      return res;
-    });
-  };
-
   const initData = () => {
     getUser().then(user => {
       Promise.all([
         user.role === ConstsUserRole.UserRoleAdmin
           ? getModel()
           : Promise.resolve(null),
-        getAppBrand(),
         getKbList(),
-      ]).then(([, , kbList]) => {
+      ]).then(([, kbList]) => {
         if (
           (user.role === ConstsUserRole.UserRoleUser ||
             user.role === ConstsUserRole.UserRoleManager) &&
@@ -97,8 +88,30 @@ const useAuth = (hasAuth: boolean) => {
   }, [hasAuth]);
 };
 
+const useAdminBrand = (hasAuth: boolean) => {
+  const dispatch = useAppDispatch();
+  const kbId = useAppSelector(state => state.config.kb_id);
+
+  useEffect(() => {
+    if (hasAuth && !kbId) return;
+
+    const request = hasAuth
+      ? getApiV1AppDetailCompat({ type: '1', kb_id: kbId })
+      : getShareWebAppBrand();
+
+    request
+      .then(detail => {
+        const brand = getAppBrandFromDetail(detail);
+        dispatch(setAppBrand(brand));
+        applyAppBrand(brand);
+      })
+      .catch(() => undefined);
+  }, [dispatch, hasAuth, kbId]);
+};
+
 export const MainLayout = () => {
   useAuth(true);
+  useAdminBrand(true);
   return (
     <>
       <Box
@@ -134,6 +147,7 @@ export const NoSidebarHeaderLayout = ({
   hasAuth: boolean;
 }) => {
   useAuth(hasAuth);
+  useAdminBrand(hasAuth);
   return (
     <Box
       sx={{

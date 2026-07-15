@@ -321,6 +321,9 @@ export interface DomainAppInfoResp {
 export interface DomainAppSettings {
   /** AI feedback */
   ai_feedback_settings?: DomainAIFeedbackSettings;
+  admin_favicon?: string;
+  admin_logo?: string;
+  admin_title?: string;
   body_code?: string;
   btns?: unknown[];
   /** catalog settings */
@@ -348,6 +351,7 @@ export interface DomainAppSettings {
   feishu_bot_is_enabled?: boolean;
   /** footer settings */
   footer_settings?: DomainFooterSettings;
+  favicon?: string;
   /** inject code */
   head_code?: string;
   home_page_setting?: ConstsHomePageSetting;
@@ -411,6 +415,9 @@ export interface DomainAppSettings {
 export interface DomainAppSettingsResp {
   /** AI feedback */
   ai_feedback_settings?: DomainAIFeedbackSettings;
+  admin_favicon?: string;
+  admin_logo?: string;
+  admin_title?: string;
   body_code?: string;
   btns?: unknown[];
   /** catalog settings */
@@ -438,6 +445,7 @@ export interface DomainAppSettingsResp {
   feishu_bot_is_enabled?: boolean;
   /** footer settings */
   footer_settings?: DomainFooterSettings;
+  favicon?: string;
   /** inject code */
   head_code?: string;
   home_page_setting?: ConstsHomePageSetting;

@@ -17,6 +17,7 @@ import CardWebCustomCode from './CardWebCustomCode';
 import CardWebSEO from './CardWebSEO';
 import CardQaCopyright from './CardQaCopyright';
 import CardWebStats from './CardWebStats';
+import CardBrand from './CardBrand';
 
 interface CardWebProps {
   kb: DomainKnowledgeBaseDetail;
@@ -34,7 +35,7 @@ const CardWeb = ({ kb, refresh }: CardWebProps) => {
   };
 
   const getInfo = async () => {
-    const res = await getApiV1AppDetailCompat({ type: '1' });
+    const res = await getApiV1AppDetailCompat({ type: '1', kb_id: kb.id });
     syncBrand(res);
     setInfo(res);
   };
@@ -53,6 +54,13 @@ const CardWeb = ({ kb, refresh }: CardWebProps) => {
         pb: 4,
       }}
     >
+      <CardBrand
+        info={info}
+        refresh={nextInfo => {
+          syncBrand(nextInfo);
+          setInfo(nextInfo);
+        }}
+      />
       <CardCustom
         refresh={value => {
           const nextInfo = {

@@ -181,7 +181,7 @@ const Login = () => {
         >
           <Stack alignItems={'center'}>
             <Avatar
-              src={appBrand.icon || Logo}
+              src={appBrand.logo || Logo}
               sx={{ width: 68, height: 68, mb: 1.5 }}
             />
             <Stack

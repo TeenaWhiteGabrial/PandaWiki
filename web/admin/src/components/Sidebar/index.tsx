@@ -167,7 +167,7 @@ const Sidebar = () => {
         justifyContent={'center'}
         sx={{ flexShrink: 0 }}
       >
-        <Avatar src={appBrand.icon || Logo} sx={{ width: 30, height: 30 }} />
+        <Avatar src={appBrand.logo || Logo} sx={{ width: 30, height: 30 }} />
       </Stack>
       <Box
         sx={{

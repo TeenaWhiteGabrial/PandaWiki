@@ -496,6 +496,10 @@ func (u *AppUsecase) GetAppDetailByKBIDAndAppType(ctx context.Context, kbID stri
 	appDetailResp.Settings = domain.AppSettingsResp{
 		Title:              app.Settings.Title,
 		Icon:               app.Settings.Icon,
+		Favicon:            app.Settings.Favicon,
+		AdminTitle:         app.Settings.AdminTitle,
+		AdminLogo:          app.Settings.AdminLogo,
+		AdminFavicon:       app.Settings.AdminFavicon,
 		Btns:               app.Settings.Btns,
 		WelcomeStr:         app.Settings.WelcomeStr,
 		SearchPlaceholder:  app.Settings.SearchPlaceholder,
@@ -619,6 +623,12 @@ func (u *AppUsecase) SanitizeAppDetailForDocManage(app *domain.AppDetailResp) *d
 	}
 
 	sanitized.Settings = domain.AppSettingsResp{
+		Title:               app.Settings.Title,
+		Icon:                app.Settings.Icon,
+		Favicon:             app.Settings.Favicon,
+		AdminTitle:          app.Settings.AdminTitle,
+		AdminLogo:           app.Settings.AdminLogo,
+		AdminFavicon:        app.Settings.AdminFavicon,
 		ThemeMode:           app.Settings.ThemeMode,
 		ThemeAndStyle:       app.Settings.ThemeAndStyle,
 		CatalogSettings:     app.Settings.CatalogSettings,
@@ -701,6 +711,10 @@ func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, userID
 		Settings: domain.AppSettingsResp{
 			Title:              app.Settings.Title,
 			Icon:               app.Settings.Icon,
+			Favicon:            app.Settings.Favicon,
+			AdminTitle:         app.Settings.AdminTitle,
+			AdminLogo:          app.Settings.AdminLogo,
+			AdminFavicon:       app.Settings.AdminFavicon,
 			Btns:               app.Settings.Btns,
 			WelcomeStr:         app.Settings.WelcomeStr,
 			SearchPlaceholder:  app.Settings.SearchPlaceholder,

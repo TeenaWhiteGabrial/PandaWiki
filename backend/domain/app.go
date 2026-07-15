@@ -85,9 +85,13 @@ type App struct {
 
 type AppSettings struct {
 	// nav
-	Title string `json:"title,omitempty"`
-	Icon  string `json:"icon,omitempty"`
-	Btns  []any  `json:"btns,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Icon         string `json:"icon,omitempty"`
+	Favicon      string `json:"favicon,omitempty"`
+	AdminTitle   string `json:"admin_title,omitempty"`
+	AdminLogo    string `json:"admin_logo,omitempty"`
+	AdminFavicon string `json:"admin_favicon,omitempty"`
+	Btns         []any  `json:"btns,omitempty"`
 	// welcome
 	WelcomeStr         string   `json:"welcome_str,omitempty"`
 	SearchPlaceholder  string   `json:"search_placeholder,omitempty"`
@@ -493,9 +497,13 @@ type AppDetailResp struct {
 
 type AppSettingsResp struct {
 	// nav
-	Title string `json:"title,omitempty"`
-	Icon  string `json:"icon,omitempty"`
-	Btns  []any  `json:"btns,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Icon         string `json:"icon,omitempty"`
+	Favicon      string `json:"favicon,omitempty"`
+	AdminTitle   string `json:"admin_title,omitempty"`
+	AdminLogo    string `json:"admin_logo,omitempty"`
+	AdminFavicon string `json:"admin_favicon,omitempty"`
+	Btns         []any  `json:"btns,omitempty"`
 	// welcome
 	WelcomeStr         string   `json:"welcome_str,omitempty"`
 	SearchPlaceholder  string   `json:"search_placeholder,omitempty"`

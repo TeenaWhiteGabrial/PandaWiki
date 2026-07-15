@@ -24,7 +24,8 @@ export interface config {
 
 const initialBrand = loadAppBrand() || {
   title: '知识库管理台',
-  icon: `${window.__BASENAME__ || ''}/logo.png`,
+  logo: `${window.__BASENAME__ || ''}/logo.png`,
+  favicon: `${window.__BASENAME__ || ''}/logo.png`,
 };
 
 const initialState: config = {

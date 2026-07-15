@@ -36,19 +36,23 @@ export const viewport: Viewport = {
 export async function generateMetadata(): Promise<Metadata> {
   const kbDetail: any = await getShareV1AppWebInfo();
   const basePath = getBasePath(kbDetail?.base_url || '');
-  const icon = getImagePath(kbDetail?.settings?.icon || '', basePath);
+  const logo = getImagePath(kbDetail?.settings?.icon || '', basePath);
+  const favicon = getImagePath(
+    kbDetail?.settings?.favicon || kbDetail?.settings?.icon || '',
+    basePath,
+  );
   return {
     metadataBase: new URL(process.env.TARGET || ''),
     title: kbDetail?.settings?.title || '知识库',
     description: kbDetail?.settings?.desc || '',
     keywords: kbDetail?.settings?.keyword || '',
     icons: {
-      icon: icon || `${basePath}/favicon.png`,
+      icon: favicon || `${basePath}/favicon.png`,
     },
     openGraph: {
       title: kbDetail?.settings?.title || '知识库',
       description: kbDetail?.settings?.desc || '',
-      images: icon ? [icon] : [],
+      images: logo ? [logo] : [],
     },
   };
 }
