@@ -47,6 +47,29 @@ export const uploadFile = (
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
+export const uploadAttachment = (
+  data: FormData,
+  config?: {
+    onUploadProgress?: (event: { progress: number }) => void;
+    abortSignal?: AbortSignal;
+  },
+): Promise<{ key: string; filename: string }> =>
+  request({
+    url: '/api/v1/file/upload/attachment',
+    method: 'post',
+    data,
+    onUploadProgress: config?.onUploadProgress
+      ? progressEvent => {
+          const progress = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || 1),
+          );
+          config.onUploadProgress?.({ progress });
+        }
+      : undefined,
+    signal: config?.abortSignal,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
 export const uploadImage = (
   data: FormData,
   config?: {

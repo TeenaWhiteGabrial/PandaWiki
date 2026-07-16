@@ -134,6 +134,14 @@ func (u *FileUsecase) UploadFileGetUrl(ctx context.Context, kbID string, file *m
 }
 
 func (u *FileUsecase) UploadFile(ctx context.Context, kbID string, file *multipart.FileHeader) (string, error) {
+	return u.uploadFile(ctx, kbID, file, true)
+}
+
+func (u *FileUsecase) UploadAttachment(ctx context.Context, kbID string, file *multipart.FileHeader) (string, error) {
+	return u.uploadFile(ctx, kbID, file, false)
+}
+
+func (u *FileUsecase) uploadFile(ctx context.Context, kbID string, file *multipart.FileHeader, checkExtension bool) (string, error) {
 	src, err := file.Open()
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %w", err)
@@ -142,9 +150,10 @@ func (u *FileUsecase) UploadFile(ctx context.Context, kbID string, file *multipa
 
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 
-	// Check denied extensions
-	if err := u.checkDeniedExtension(ctx, ext); err != nil {
-		return "", err
+	if checkExtension {
+		if err := u.checkDeniedExtension(ctx, ext); err != nil {
+			return "", err
+		}
 	}
 
 	filename := fmt.Sprintf("%s/%s%s", kbID, uuid.New().String(), ext)

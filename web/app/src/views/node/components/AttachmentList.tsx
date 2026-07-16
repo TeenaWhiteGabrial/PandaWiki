@@ -19,7 +19,11 @@ interface AttachmentListProps {
 
 const canPreviewInline = (attachment: DomainNodeAttachmentMeta) => {
   const fileType = (attachment.file_type || '').toLowerCase();
-  return fileType === 'pdf' || !!attachment.preview_key;
+  return (
+    fileType === 'pdf' ||
+    (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(fileType) &&
+      !!attachment.preview_key)
+  );
 };
 
 const AttachmentList = ({ attachments = [] }: AttachmentListProps) => {
@@ -93,6 +97,7 @@ const AttachmentList = ({ attachments = [] }: AttachmentListProps) => {
                     <Button
                       component='a'
                       href={fileUrl}
+                      download={attachment.file_name || 'attachment'}
                       target='_blank'
                       rel='noreferrer'
                       variant='contained'

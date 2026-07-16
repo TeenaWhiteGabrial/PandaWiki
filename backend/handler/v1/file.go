@@ -36,11 +36,32 @@ func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *l
 	}
 	group := echo.Group("/api/v1/file")
 	group.POST("/upload", h.Upload, h.auth.Authorize)
+	group.POST("/upload/attachment", h.UploadAttachment, h.auth.Authorize)
 	group.POST("/upload/image", h.UploadImage, h.auth.Authorize)
 	group.POST("/upload/url", h.UploadByUrl, h.auth.Authorize)
 	group.POST("/preview/generate", h.GeneratePreview, h.auth.Authorize)
 	group.POST("/upload/anydoc", h.UploadAnydoc)
 	return h
+}
+
+func (h *FileHandler) UploadAttachment(c echo.Context) error {
+	kbID := c.FormValue("kb_id")
+	if kbID == "" {
+		kbID = uuid.New().String()
+	}
+	file, err := c.FormFile("file")
+	if err != nil {
+		return h.NewResponseWithError(c, "failed to get attachment", err)
+	}
+
+	key, err := h.fileUsecase.UploadAttachment(c.Request().Context(), kbID, file)
+	if err != nil {
+		return h.NewResponseWithError(c, "upload attachment failed", err)
+	}
+	return h.NewResponseWithData(c, domain.ObjectUploadResp{
+		Key:      key,
+		Filename: file.Filename,
+	})
 }
 
 func (h *FileHandler) UploadImage(c echo.Context) error {

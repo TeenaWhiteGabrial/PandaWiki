@@ -1,9 +1,9 @@
 import {
   ConstsCrawlerSource,
   postApiV1CrawlerParse,
-  postApiV1FileUpload,
   postApiV1Node,
 } from '@/request';
+import { uploadAttachment } from '@/api';
 import { postApiV1FilePreviewGenerate } from '@/request/FilePreview';
 import { useAppSelector } from '@/store';
 import { message } from '@/components/ui';
@@ -402,27 +402,22 @@ const BatchActionBar = (props: BatchActionBarProps) => {
 
             try {
               // 上传文件并监听进度
-              const resp = await postApiV1FileUpload(
-                { file: item.fileData },
-                {
-                  onUploadProgress: progressEvent => {
-                    const percentCompleted = progressEvent.total
-                      ? Math.round(
-                          (progressEvent.loaded * 100) / progressEvent.total,
-                        )
-                      : 0;
+              const formData = new FormData();
+              formData.append('file', item.fileData);
+              const resp = await uploadAttachment(formData, {
+                onUploadProgress: progressEvent => {
+                  const percentCompleted = progressEvent.progress;
 
-                    // 更新进度
-                    setData(prev =>
-                      prev.map(prevItem =>
-                        prevItem.uuid === item.uuid
-                          ? { ...prevItem, progress: percentCompleted }
-                          : prevItem,
-                      ),
-                    );
-                  },
+                  // 更新进度
+                  setData(prev =>
+                    prev.map(prevItem =>
+                      prevItem.uuid === item.uuid
+                        ? { ...prevItem, progress: percentCompleted }
+                        : prevItem,
+                    ),
+                  );
                 },
-              );
+              });
 
               if (!resp.key || !resp.filename) {
                 throw new Error('文件上传返回缺少关键信息');

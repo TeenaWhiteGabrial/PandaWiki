@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { uploadFile } from '@/api';
+import { uploadAttachment } from '@/api';
 import { DomainNodeAttachmentMeta } from '@/request/types';
 
 type FormValues = { name: string; emoji: string; content_type: string };
@@ -83,7 +83,7 @@ const DocAddByCustomText = ({
     for (const file of attachments) {
       const formData = new FormData();
       formData.append('file', file);
-      const uploaded = await uploadFile(formData);
+      const uploaded = await uploadAttachment(formData);
       const fileType = getFileExt(uploaded.filename || file.name);
       const previewKey =
         fileType === 'pdf'

@@ -1,4 +1,4 @@
-import { uploadFile } from '@/api';
+import { uploadAttachment } from '@/api';
 import { putApiV1NodeDetail } from '@/request';
 import { postApiV1FilePreviewGenerate } from '@/request/FilePreview';
 import { DomainNodeAttachmentMeta, V1NodeDetailResp } from '@/request/types';
@@ -38,11 +38,14 @@ const AttachmentList = ({
 
   const getPreviewUrl = useCallback((attachment: DomainNodeAttachmentMeta) => {
     const fileType = (attachment.file_type || '').toLowerCase();
-    if (attachment.preview_key) {
-      return `/static-file/${attachment.preview_key}`;
-    }
     if (fileType === 'pdf' && attachment.file_key) {
       return `/static-file/${attachment.file_key}`;
+    }
+    if (
+      ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(fileType) &&
+      attachment.preview_key
+    ) {
+      return `/static-file/${attachment.preview_key}`;
     }
     return '';
   }, []);
@@ -51,7 +54,7 @@ const AttachmentList = ({
     async (file: File): Promise<DomainNodeAttachmentMeta> => {
       const formData = new FormData();
       formData.append('file', file);
-      const uploaded = await uploadFile(formData);
+      const uploaded = await uploadAttachment(formData);
       const fileType = (uploaded.filename?.split('.').pop() || '')
         .trim()
         .toLowerCase();
@@ -292,6 +295,7 @@ const AttachmentList = ({
                     size='small'
                     variant='text'
                     href={fileUrl}
+                    download={attachment.file_name || `attachment-${index + 1}`}
                     target='_blank'
                     rel='noreferrer'
                   >
