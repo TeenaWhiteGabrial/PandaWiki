@@ -7,6 +7,7 @@ const (
 type ObjectUploadResp struct {
 	Key      string `json:"key"`
 	Filename string `json:"filename"`
+	URL      string `json:"url,omitempty"`
 }
 
 type UploadByUrlReq struct {

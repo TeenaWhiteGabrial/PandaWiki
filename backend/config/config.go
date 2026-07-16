@@ -9,19 +9,20 @@ import (
 )
 
 type Config struct {
-	Log           LogConfig    `mapstructure:"log"`
-	HTTP          HTTPConfig   `mapstructure:"http"`
-	AdminPassword string       `mapstructure:"admin_password"`
-	PG            PGConfig     `mapstructure:"pg"`
-	MQ            MQConfig     `mapstructure:"mq"`
-	RAG           RAGConfig    `mapstructure:"rag"`
-	Redis         RedisConfig  `mapstructure:"redis"`
-	Auth          AuthConfig   `mapstructure:"auth"`
-	S3            S3Config     `mapstructure:"s3"`
-	Sentry        SentryConfig `mapstructure:"sentry"`
-	CaddyAPI      string       `mapstructure:"caddy_api"`
-	SubnetPrefix  string       `mapstructure:"subnet_prefix"`
-	Preview       PreviewConfig `mapstructure:"preview"`
+	Log           LogConfig      `mapstructure:"log"`
+	HTTP          HTTPConfig     `mapstructure:"http"`
+	AdminPassword string         `mapstructure:"admin_password"`
+	PG            PGConfig       `mapstructure:"pg"`
+	MQ            MQConfig       `mapstructure:"mq"`
+	RAG           RAGConfig      `mapstructure:"rag"`
+	Redis         RedisConfig    `mapstructure:"redis"`
+	Auth          AuthConfig     `mapstructure:"auth"`
+	S3            S3Config       `mapstructure:"s3"`
+	ImageOSS      ImageOSSConfig `mapstructure:"image_oss"`
+	Sentry        SentryConfig   `mapstructure:"sentry"`
+	CaddyAPI      string         `mapstructure:"caddy_api"`
+	SubnetPrefix  string         `mapstructure:"subnet_prefix"`
+	Preview       PreviewConfig  `mapstructure:"preview"`
 }
 
 type LogConfig struct {
@@ -75,6 +76,19 @@ type S3Config struct {
 	Endpoint  string `mapstructure:"endpoint"`
 	AccessKey string `mapstructure:"access_key"`
 	SecretKey string `mapstructure:"secret_key"`
+}
+
+type ImageOSSConfig struct {
+	Endpoint    string `mapstructure:"endpoint"`
+	AccessKey   string `mapstructure:"access_key"`
+	SecretKey   string `mapstructure:"secret_key"`
+	Bucket      string `mapstructure:"bucket"`
+	DownloadURL string `mapstructure:"download_url"`
+	Region      string `mapstructure:"region"`
+}
+
+func (c ImageOSSConfig) IsConfigured() bool {
+	return c.Endpoint != "" || c.AccessKey != "" || c.SecretKey != "" || c.Bucket != "" || c.DownloadURL != "" || c.Region != ""
 }
 
 type SentryConfig struct {
@@ -208,6 +222,24 @@ func overrideWithEnv(c *Config) {
 	// s3
 	if env := os.Getenv("S3_ENDPOINT"); env != "" {
 		c.S3.Endpoint = env
+	}
+	if env := os.Getenv("IMAGE_OSS_ENDPOINT"); env != "" {
+		c.ImageOSS.Endpoint = env
+	}
+	if env := os.Getenv("IMAGE_OSS_ACCESS_KEY"); env != "" {
+		c.ImageOSS.AccessKey = env
+	}
+	if env := os.Getenv("IMAGE_OSS_SECRET_KEY"); env != "" {
+		c.ImageOSS.SecretKey = env
+	}
+	if env := os.Getenv("IMAGE_OSS_BUCKET"); env != "" {
+		c.ImageOSS.Bucket = env
+	}
+	if env := os.Getenv("IMAGE_OSS_DOWNLOAD_URL"); env != "" {
+		c.ImageOSS.DownloadURL = env
+	}
+	if env := os.Getenv("IMAGE_OSS_REGION"); env != "" {
+		c.ImageOSS.Region = env
 	}
 	// sentry
 	if env := os.Getenv("SENTRY_ENABLED"); env != "" {

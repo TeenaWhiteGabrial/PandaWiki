@@ -121,7 +121,11 @@ func createApp() (*App, error) {
 	appUsecase := usecase.NewAppUsecase(appRepository, authRepo, navRepository, nodeRepository, knowledgeBaseRepository, nodeUsecase, logger, configConfig, chatUsecase, cacheCache)
 	appHandler := v1.NewAppHandler(echo, baseHandler, logger, authMiddleware, appUsecase, modelUsecase, conversationUsecase, configConfig)
 	mcpRepository := pg2.NewMCPRepository(db, logger)
-	fileUsecase := usecase.NewFileUsecase(logger, minioClient, configConfig, systemSettingRepo)
+	imageOSSClient, err := s3.NewImageOSSClient(configConfig)
+	if err != nil {
+		return nil, err
+	}
+	fileUsecase := usecase.NewFileUsecase(logger, minioClient, imageOSSClient, configConfig, systemSettingRepo)
 	mqConsumer, err := mq.NewMQConsumer(configConfig, logger)
 	if err != nil {
 		return nil, err
@@ -183,7 +187,7 @@ func createApp() (*App, error) {
 	sitemapUsecase := usecase.NewSitemapUsecase(nodeRepository, knowledgeBaseRepository, logger)
 	shareSitemapHandler := share.NewShareSitemapHandler(echo, baseHandler, sitemapUsecase, appUsecase, logger)
 	shareStatHandler := share.NewShareStatHandler(baseHandler, echo, statUseCase, logger)
-	shareCommentHandler := share.NewShareCommentHandler(echo, baseHandler, logger, commentUsecase, appUsecase)
+	shareCommentHandler := share.NewShareCommentHandler(echo, baseHandler, logger, commentUsecase, appUsecase, fileUsecase)
 	shareContributeHandler := share.NewShareContributeHandler(echo, baseHandler, logger, contributeUsecase, appUsecase)
 	shareAuthHandler := share.NewShareAuthHandler(echo, baseHandler, configConfig, logger, knowledgeBaseUsecase, apiTokenRepo)
 	shareConversationHandler := share.NewShareConversationHandler(baseHandler, echo, conversationUsecase, logger)

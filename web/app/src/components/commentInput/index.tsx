@@ -152,7 +152,7 @@ const CommentInput = React.forwardRef<CommentInputRef, CommentInputProps>(
               file: image.file,
               captcha_token: token,
             });
-            const serverUrl = '/static-file/' + result.key;
+            const serverUrl = result.url || '/static-file/' + result.key;
             uploadedUrls.push(serverUrl);
 
             // 更新图片状态

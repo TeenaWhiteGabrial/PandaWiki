@@ -2,7 +2,6 @@ package share
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -17,6 +16,7 @@ type ShareCommentHandler struct {
 	logger  *log.Logger
 	usecase *usecase.CommentUsecase
 	app     *usecase.AppUsecase
+	file    *usecase.FileUsecase
 }
 
 func NewShareCommentHandler(
@@ -25,12 +25,14 @@ func NewShareCommentHandler(
 	logger *log.Logger,
 	usecase *usecase.CommentUsecase,
 	app *usecase.AppUsecase,
+	file *usecase.FileUsecase,
 ) *ShareCommentHandler {
 	h := &ShareCommentHandler{
 		BaseHandler: baseHandler,
 		logger:      logger.WithModule("handler.share.comment"),
 		usecase:     usecase,
 		app:         app,
+		file:        file,
 	}
 
 	share := e.Group("share/v1/comment",
@@ -90,7 +92,7 @@ func (h *ShareCommentHandler) CreateComment(c echo.Context) error {
 	}
 
 	for _, url := range req.PicUrls {
-		if !strings.HasPrefix(url, "/static-file/") {
+		if !h.file.IsManagedImageURL(url) {
 			return h.NewResponseWithError(c, "validate param pic_urls failed", err)
 		}
 	}

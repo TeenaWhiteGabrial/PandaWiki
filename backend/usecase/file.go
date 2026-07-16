@@ -42,6 +42,7 @@ func buildInternalStaticFileURL(endpoint, key string) string {
 type FileUsecase struct {
 	logger            *log.Logger
 	s3Client          *s3.MinioClient
+	imageOSSClient    *s3.ImageOSSClient
 	config            *config.Config
 	systemSettingRepo *pg.SystemSettingRepo
 	httpClient        *http.Client
@@ -56,9 +57,10 @@ var officePreviewExtensions = map[string]struct{}{
 	".xlsx": {},
 }
 
-func NewFileUsecase(logger *log.Logger, s3Client *s3.MinioClient, config *config.Config, systemSettingRepo *pg.SystemSettingRepo) *FileUsecase {
+func NewFileUsecase(logger *log.Logger, s3Client *s3.MinioClient, imageOSSClient *s3.ImageOSSClient, config *config.Config, systemSettingRepo *pg.SystemSettingRepo) *FileUsecase {
 	return &FileUsecase{
 		s3Client:          s3Client,
+		imageOSSClient:    imageOSSClient,
 		logger:            logger.WithModule("usecase.file"),
 		config:            config,
 		systemSettingRepo: systemSettingRepo,
@@ -74,6 +76,53 @@ func NewFileUsecase(logger *log.Logger, s3Client *s3.MinioClient, config *config
 			},
 		},
 	}
+}
+
+func (u *FileUsecase) UploadImage(ctx context.Context, kbID string, file *multipart.FileHeader) (string, string, error) {
+	if !u.imageOSSClient.Enabled() {
+		key, err := u.UploadFile(ctx, kbID, file)
+		if err != nil {
+			return "", "", err
+		}
+		return key, "/static-file/" + key, nil
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to open image: %w", err)
+	}
+	defer src.Close()
+
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	key := uuid.New().String() + ext
+	contentType := file.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = mime.TypeByExtension(ext)
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	uploadResult, err := u.imageOSSClient.PutImage(ctx, key, src, file.Size, contentType)
+	if err != nil {
+		return "", "", err
+	}
+	u.logger.Info("uploaded image to OSS",
+		log.String("bucket", uploadResult.Bucket),
+		log.String("key", uploadResult.Key),
+		log.String("etag", uploadResult.ETag),
+		log.Int64("size", uploadResult.Size),
+		log.String("version_id", uploadResult.VersionID),
+		log.String("last_modified", uploadResult.LastModified),
+	)
+	return uploadResult.Key, uploadResult.URL, nil
+}
+
+func (u *FileUsecase) IsManagedImageURL(rawURL string) bool {
+	if strings.HasPrefix(rawURL, "/static-file/") {
+		return true
+	}
+	return u.imageOSSClient.IsManagedURL(rawURL)
 }
 
 func (u *FileUsecase) UploadFileGetUrl(ctx context.Context, kbID string, file *multipart.FileHeader) (string, error) {

@@ -1,4 +1,4 @@
-import { uploadFile } from '@/api';
+import { uploadFile, uploadImage } from '@/api';
 import { Box, IconButton, LinearProgress, Stack } from '@mui/material';
 import { message } from '@/components/ui';
 import { useEffect, useRef, useState } from 'react';
@@ -17,6 +17,8 @@ interface UploadFileProps {
   width?: number;
   height?: number;
   label?: string;
+  storage?: 'default' | 'image-oss';
+  kbId?: string;
 }
 
 const UploadFile = ({
@@ -30,6 +32,8 @@ const UploadFile = ({
   height,
   disabled = false,
   label = '点击上传',
+  storage = 'default',
+  kbId,
 }: UploadFileProps) => {
   const [preview, setPreview] = useState<string>(value);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -93,13 +97,22 @@ const UploadFile = ({
       try {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await uploadFile(formData, {
-          onUploadProgress: event => {
-            setUploadProgress(event.progress);
-          },
-          abortSignal: abortController.signal,
-        });
-        onChange('/static-file/' + res.key);
+        if (kbId) {
+          formData.append('kb_id', kbId);
+        }
+        const upload = storage === 'image-oss' ? uploadImage : uploadFile;
+        const res: { key: string; filename: string; url?: string } =
+          await upload(formData, {
+            onUploadProgress: event => {
+              setUploadProgress(event.progress);
+            },
+            abortSignal: abortController.signal,
+          });
+        onChange(
+          storage === 'image-oss' && res.url
+            ? res.url
+            : '/static-file/' + res.key,
+        );
         setUploadProgress(null);
         setIsUploading(false);
         clearInputValue();

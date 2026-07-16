@@ -8,6 +8,7 @@ type ShareFileUploadReq struct {
 
 type FileUploadResp struct {
 	Key string `json:"key"`
+	URL string `json:"url,omitempty"`
 }
 
 type ShareFileUploadUrlReq struct {

@@ -1121,6 +1121,7 @@ export interface DomainNodeSummaryReq {
 export interface DomainObjectUploadResp {
   filename?: string;
   key?: string;
+  url?: string;
 }
 
 export interface DomainOpenAIAPIBotSettings {
@@ -1745,6 +1746,7 @@ export interface V1CreateUserResp {
 
 export interface V1FileUploadResp {
   key?: string;
+  url?: string;
 }
 
 export interface V1KBUserInviteReq {

@@ -36,10 +36,35 @@ func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *l
 	}
 	group := echo.Group("/api/v1/file")
 	group.POST("/upload", h.Upload, h.auth.Authorize)
+	group.POST("/upload/image", h.UploadImage, h.auth.Authorize)
 	group.POST("/upload/url", h.UploadByUrl, h.auth.Authorize)
 	group.POST("/preview/generate", h.GeneratePreview, h.auth.Authorize)
 	group.POST("/upload/anydoc", h.UploadAnydoc)
 	return h
+}
+
+func (h *FileHandler) UploadImage(c echo.Context) error {
+	kbID := c.FormValue("kb_id")
+	if kbID == "" {
+		kbID = uuid.New().String()
+	}
+	file, err := c.FormFile("file")
+	if err != nil {
+		return h.NewResponseWithError(c, "failed to get image", err)
+	}
+	if !utils.IsWebsiteImageFile(file.Filename) {
+		return h.NewResponseWithError(c, "unsupported image type", fmt.Errorf("unsupported image type: %s", file.Filename))
+	}
+
+	key, imageURL, err := h.fileUsecase.UploadImage(c.Request().Context(), kbID, file)
+	if err != nil {
+		return h.NewResponseWithError(c, "upload image failed", err)
+	}
+	return h.NewResponseWithData(c, domain.ObjectUploadResp{
+		Key:      key,
+		Filename: file.Filename,
+		URL:      imageURL,
+	})
 }
 
 // Upload

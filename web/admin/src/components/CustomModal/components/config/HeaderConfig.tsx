@@ -15,7 +15,7 @@ interface CardWebHeaderProps {
 }
 
 const HeaderConfig = ({ data, setIsEdit, isEdit }: CardWebHeaderProps) => {
-  const { appPreviewData } = useAppSelector(state => state.config);
+  const { appPreviewData, kb_id } = useAppSelector(state => state.config);
   const debouncedDispatch = useDebounceAppPreviewData();
   const {
     control,
@@ -149,6 +149,8 @@ const HeaderConfig = ({ data, setIsEdit, isEdit }: CardWebHeaderProps) => {
                 id='headerconfig_logo'
                 name='headerconfig_logo'
                 type='url'
+                storage='image-oss'
+                kbId={kb_id}
                 accept='image/*'
                 width={80}
                 onChange={(url: string) => {
