@@ -176,7 +176,7 @@ const Modal = ({
       cancelText={cancelText}
       okButtonProps={mapButtonProps(okButtonProps)}
       cancelButtonProps={mapButtonProps(cancelButtonProps)}
-      maskClosable={maskClosable}
+      mask={{ closable: maskClosable }}
       keyboard={disableEscapeKeyDown ? false : keyboard}
       closable={closable}
       footer={footerNode}
@@ -203,6 +203,7 @@ Modal.confirm = (config: ConfirmDialogProps) => {
     okButtonProps,
     cancelButtonProps,
     width,
+    maskClosable,
     ...rest
   } = config;
 
@@ -215,6 +216,7 @@ Modal.confirm = (config: ConfirmDialogProps) => {
     onOk,
     onCancel,
     width,
+    mask: maskClosable === undefined ? undefined : { closable: maskClosable },
     okButtonProps: mapButtonProps(okButtonProps),
     cancelButtonProps: mapButtonProps(cancelButtonProps),
     ...rest,
