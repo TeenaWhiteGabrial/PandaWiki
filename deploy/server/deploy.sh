@@ -240,6 +240,10 @@ cleanup_old_runtime_artifacts() {
 
 run_restart() {
   echo "==> 仅重启服务"
+  # Docker Compose V1.29.2 在重建旧镜像容器时可能因缺少
+  # ContainerConfig 字段失败。先移除应用容器再重建，不删除任何数据卷。
+  compose rm -sf api consumer admin app raglite qdrant loki alloy preview \
+    admin-build app-build >/dev/null 2>&1 || true
   compose up -d "${SERVICES_BASE[@]}"
   compose up -d --build "${SERVICES_BACKEND[@]}"
   compose up -d --build --no-deps "${SERVICES_FRONTEND[@]}"
