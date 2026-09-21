@@ -86,7 +86,7 @@ services:
       retries: 10
 
   qdrant:
-    image: chaitin-registry.cn-hangzhou.cr.aliyuncs.com/chaitin/panda-wiki-qdrant:v1.14.1
+    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/qdrant:v1.14.1
     container_name: panda-wiki-qdrant
     labels: *pandawiki-log-labels
     environment:
@@ -118,7 +118,7 @@ services:
         condition: service_healthy
 
   raglite:
-    image: chaitin-registry.cn-hangzhou.cr.aliyuncs.com/chaitin/raglite:v2.17.0
+    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/raglite:v2.17.0
     container_name: panda-wiki-raglite
     restart: unless-stopped
     labels: *pandawiki-log-labels
@@ -148,7 +148,7 @@ services:
         condition: service_started
 
   loki:
-    image: grafana/loki:3.7.0
+    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/loki:3.7.0
     container_name: panda-wiki-loki
     restart: unless-stopped
     command: -config.file=/etc/loki/config.yml
@@ -160,7 +160,7 @@ services:
     mem_limit: 768m
 
   alloy:
-    image: grafana/alloy:v1.11.3
+    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/alloy:v1.11.3
     container_name: panda-wiki-alloy
     restart: unless-stopped
     command:

@@ -268,7 +268,7 @@ services:
         condition: service_completed_successfully
 
   loki:
-    image: grafana/loki:3.7.0
+    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/loki:3.7.0
     container_name: ${PROJECT_NAME}-loki
     restart: unless-stopped
     command: -config.file=/etc/loki/config.yml
@@ -278,7 +278,7 @@ services:
     mem_limit: 768m
 
   alloy:
-    image: grafana/alloy:v1.11.3
+    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/alloy:v1.11.3
     container_name: ${PROJECT_NAME}-alloy
     restart: unless-stopped
     command:
