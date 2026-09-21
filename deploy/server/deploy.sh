@@ -8,6 +8,10 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
 MODE="${1:-deploy}"
 
+# 使用纯文本构建输出，便于在服务器终端实时查看 Docker 和 Go 构建进度。
+export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+export BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}"
+
 SERVICES_BASE=(
   postgres
   redis

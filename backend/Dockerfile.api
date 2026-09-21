@@ -12,8 +12,8 @@ RUN go mod download
 COPY . .
 
 ARG VERSION
-RUN go build -p 1 -ldflags "-s -w -extldflags '-static' -X github.com/chaitin/panda-wiki/telemetry.Version=${VERSION}" -o /build/panda-wiki-api cmd/api/main.go cmd/api/wire_gen.go \
-    && go build -p 1 -ldflags "-s -w -extldflags '-static' -X github.com/chaitin/panda-wiki/telemetry.Version=${VERSION}" -o /build/panda-wiki-migrate cmd/migrate/main.go cmd/migrate/wire_gen.go
+RUN go build -v -p 1 -ldflags "-s -w -extldflags '-static' -X github.com/chaitin/panda-wiki/telemetry.Version=${VERSION}" -o /build/panda-wiki-api cmd/api/main.go cmd/api/wire_gen.go \
+    && go build -v -p 1 -ldflags "-s -w -extldflags '-static' -X github.com/chaitin/panda-wiki/telemetry.Version=${VERSION}" -o /build/panda-wiki-migrate cmd/migrate/main.go cmd/migrate/wire_gen.go
 FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/golang:1.24.3-alpine AS api
 
 WORKDIR /app
