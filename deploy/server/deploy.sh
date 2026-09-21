@@ -8,8 +8,10 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
 MODE="${1:-deploy}"
 
-# 使用纯文本构建输出，便于在服务器终端实时查看 Docker 和 Go 构建进度。
-export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+# 默认兼容没有 buildx 的 Docker Compose V1；如服务器安装了 buildx，
+# 仍可通过 DOCKER_BUILDKIT=1 手动开启 BuildKit。
+export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-0}"
+# Go Dockerfile 使用 -v 输出编译包名；该变量对支持 BuildKit 的环境提供纯文本输出。
 export BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}"
 
 SERVICES_BASE=(
