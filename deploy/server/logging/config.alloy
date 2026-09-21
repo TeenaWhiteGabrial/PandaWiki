@@ -1,0 +1,72 @@
+discovery.docker "pandawiki" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "pandawiki" {
+  targets = discovery.docker.pandawiki.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_pandawiki_logs"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "pandawiki" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.pandawiki.output
+  labels     = { application = "pandawiki", location = "docker" }
+  forward_to = [loki.process.redact.receiver]
+}
+
+loki.process "redact" {
+  forward_to = [loki.write.local.receiver]
+
+  stage.replace {
+    expression = "(?i)password[\\\"']?\\s*[:=]\\s*[\\\"']?([^\\s,\\\"'}]+)"
+    replace    = "***REDACTED***"
+  }
+
+  stage.replace {
+    expression = "(?i)secret[\\w-]*[\\\"']?\\s*[:=]\\s*[\\\"']?([^\\s,\\\"'}]+)"
+    replace    = "***REDACTED***"
+  }
+
+  stage.replace {
+    expression = "(?i)access[_-]?key[\\w-]*[\\\"']?\\s*[:=]\\s*[\\\"']?([^\\s,\\\"'}]+)"
+    replace    = "***REDACTED***"
+  }
+
+  stage.replace {
+    expression = "(?i)api[_-]?key[\\w-]*[\\\"']?\\s*[:=]\\s*[\\\"']?([^\\s,\\\"'}]+)"
+    replace    = "***REDACTED***"
+  }
+
+  stage.replace {
+    expression = "(?i)authorization[\\w-]*[\\\"']?\\s*[:=]\\s*[\\\"']?([^,}]+)"
+    replace    = "***REDACTED***"
+  }
+
+  stage.replace {
+    expression = "(?i)token[\\w-]*[\\\"']?\\s*[:=]\\s*[\\\"']?([^,}]+)"
+    replace    = "***REDACTED***"
+  }
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

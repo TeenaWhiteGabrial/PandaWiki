@@ -33,13 +33,19 @@ go.work.sum
 .vscode
 
 deploy
+!deploy/
 !deploy/server/
+deploy/server/*
 !deploy/server/.env.example
 !deploy/server/README.md
 !deploy/server/deploy.sh
 !deploy/server/docker-compose.yml
 !deploy/server/postgres-init/
 !deploy/server/postgres-init/01-create-raglite-db.sql
+!deploy/server/logging/
+!deploy/server/logging/config.alloy
+!deploy/server/logging/config.local.alloy
+!deploy/server/logging/loki.yml
 local
 
 .idea
