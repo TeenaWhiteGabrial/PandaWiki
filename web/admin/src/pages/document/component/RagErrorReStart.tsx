@@ -79,14 +79,14 @@ const RagErrorReStart = ({
         kb_id,
         node_ids: [...selected],
       }).then(() => {
-        message.success('正在学习');
+        message.success('正在重建问答索引');
         setSelected([]);
         onClose();
         refresh();
       });
     } else {
       message.error(
-        list.length > 0 ? '请选择需要学习的文档' : '暂无需要学习的文档',
+        list.length > 0 ? '请选择需要重建索引的文档' : '暂无需要重建索引的文档',
       );
     }
   };
@@ -100,7 +100,7 @@ const RagErrorReStart = ({
   const selectedTotal = list.filter(it => selected.includes(it.id!)).length;
 
   return (
-    <Modal title='学习文档' open={open} onCancel={onClose} onOk={onSubmit}>
+    <Modal title='重建问答索引' open={open} onCancel={onClose} onOk={onSubmit}>
       <Stack
         direction='row'
         component='label'
@@ -114,7 +114,7 @@ const RagErrorReStart = ({
         }}
       >
         <Box>
-          未学习/学习失败文档
+          待建立索引或索引失败的文档
           <Box
             component='span'
             sx={{ color: 'text.tertiary', fontSize: 12, pl: 1 }}

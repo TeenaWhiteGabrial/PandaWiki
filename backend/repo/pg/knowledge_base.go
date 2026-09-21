@@ -696,91 +696,108 @@ func (r *KnowledgeBaseRepository) DeleteKnowledgeBase(ctx context.Context, kbID 
 }
 
 func (r *KnowledgeBaseRepository) CreateKBRelease(ctx context.Context, release *domain.KBRelease) error {
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// create new release
-		if err := tx.Create(release).Error; err != nil {
-			return err
-		}
-		// create release node for all released nodes
-		var nodeReleases []*domain.NodeRelease
-		if err := tx.Where("kb_id = ?", release.KBID).
-			Select("DISTINCT ON (node_id) id, node_id").
-			Order("node_id, updated_at DESC").
-			Find(&nodeReleases).Error; err != nil {
-			return err
-		}
-		if len(nodeReleases) == 0 {
-			return nil
-		}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return r.createKBRelease(tx, release)
+	})
+}
 
-		// build node_id -> nav_id map from current nodes
-		type nodeNavID struct {
-			ID    string `gorm:"column:id"`
-			NavID string `gorm:"column:nav_id"`
-		}
-		var nodeNavIDs []nodeNavID
-		nodeIDs := make([]string, len(nodeReleases))
-		for i, nr := range nodeReleases {
-			nodeIDs[i] = nr.NodeID
-		}
-		if err := tx.Model(&domain.Node{}).
-			Where("id IN ?", nodeIDs).
-			Select("id, nav_id").
-			Find(&nodeNavIDs).Error; err != nil {
-			return err
-		}
-		navIDMap := make(map[string]string, len(nodeNavIDs))
-		for _, n := range nodeNavIDs {
-			navIDMap[n.ID] = n.NavID
-		}
-
-		kbReleaseNodeReleases := make([]*domain.KBReleaseNodeRelease, len(nodeReleases))
-		for i, nodeRelease := range nodeReleases {
-			kbReleaseNodeReleases[i] = &domain.KBReleaseNodeRelease{
-				ID:            uuid.New().String(),
-				KBID:          release.KBID,
-				ReleaseID:     release.ID,
-				NodeID:        nodeRelease.NodeID,
-				NodeReleaseID: nodeRelease.ID,
-				NavID:         navIDMap[nodeRelease.NodeID],
-				CreatedAt:     time.Now(),
-			}
-		}
-		if err := tx.CreateInBatches(&kbReleaseNodeReleases, 2000).Error; err != nil {
-			return err
-		}
-
-		// snapshot current navs into nav_releases
-		var navs []*domain.Nav
-		if err := tx.Where("kb_id = ?", release.KBID).
-			Order("position ASC").
-			Find(&navs).Error; err != nil {
-			return err
-		}
-		if len(navs) > 0 {
-			navReleases := make([]*domain.NavRelease, len(navs))
-			now := time.Now()
-			for i, nav := range navs {
-				navReleases[i] = &domain.NavRelease{
-					ID:          uuid.New().String(),
-					NavID:       nav.ID,
-					ReleaseID:   release.ID,
-					KbID:        release.KBID,
-					Name:        nav.Name,
-					Position:    nav.Position,
-					Permissions: nav.Permissions,
-					CreatedAt:   now,
-				}
-			}
-			if err := tx.CreateInBatches(&navReleases, 2000).Error; err != nil {
+// PublishKBRelease atomically exposes the learned nodes and creates the KB
+// release snapshot. Until this transaction commits, the pending node releases
+// are not visible through a KB release.
+func (r *KnowledgeBaseRepository) PublishKBRelease(ctx context.Context, release *domain.KBRelease, nodeIDs []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(nodeIDs) > 0 {
+			if err := tx.Model(&domain.Node{}).
+				Where("kb_id = ? AND id IN ?", release.KBID, nodeIDs).
+				Update("status", domain.NodeStatusPublished).Error; err != nil {
 				return err
 			}
 		}
+		return r.createKBRelease(tx, release)
+	})
+}
 
-		return nil
-	}); err != nil {
+func (r *KnowledgeBaseRepository) createKBRelease(tx *gorm.DB, release *domain.KBRelease) error {
+	// create new release
+	if err := tx.Create(release).Error; err != nil {
 		return err
 	}
+	// create release node for all released nodes
+	var nodeReleases []*domain.NodeRelease
+	if err := tx.Where("kb_id = ?", release.KBID).
+		Select("DISTINCT ON (node_id) id, node_id").
+		Order("node_id, updated_at DESC").
+		Find(&nodeReleases).Error; err != nil {
+		return err
+	}
+	if len(nodeReleases) == 0 {
+		return nil
+	}
+
+	// build node_id -> nav_id map from current nodes
+	type nodeNavID struct {
+		ID    string `gorm:"column:id"`
+		NavID string `gorm:"column:nav_id"`
+	}
+	var nodeNavIDs []nodeNavID
+	nodeIDs := make([]string, len(nodeReleases))
+	for i, nr := range nodeReleases {
+		nodeIDs[i] = nr.NodeID
+	}
+	if err := tx.Model(&domain.Node{}).
+		Where("id IN ?", nodeIDs).
+		Select("id, nav_id").
+		Find(&nodeNavIDs).Error; err != nil {
+		return err
+	}
+	navIDMap := make(map[string]string, len(nodeNavIDs))
+	for _, n := range nodeNavIDs {
+		navIDMap[n.ID] = n.NavID
+	}
+
+	kbReleaseNodeReleases := make([]*domain.KBReleaseNodeRelease, len(nodeReleases))
+	for i, nodeRelease := range nodeReleases {
+		kbReleaseNodeReleases[i] = &domain.KBReleaseNodeRelease{
+			ID:            uuid.New().String(),
+			KBID:          release.KBID,
+			ReleaseID:     release.ID,
+			NodeID:        nodeRelease.NodeID,
+			NodeReleaseID: nodeRelease.ID,
+			NavID:         navIDMap[nodeRelease.NodeID],
+			CreatedAt:     time.Now(),
+		}
+	}
+	if err := tx.CreateInBatches(&kbReleaseNodeReleases, 2000).Error; err != nil {
+		return err
+	}
+
+	// snapshot current navs into nav_releases
+	var navs []*domain.Nav
+	if err := tx.Where("kb_id = ?", release.KBID).
+		Order("position ASC").
+		Find(&navs).Error; err != nil {
+		return err
+	}
+	if len(navs) > 0 {
+		navReleases := make([]*domain.NavRelease, len(navs))
+		now := time.Now()
+		for i, nav := range navs {
+			navReleases[i] = &domain.NavRelease{
+				ID:          uuid.New().String(),
+				NavID:       nav.ID,
+				ReleaseID:   release.ID,
+				KbID:        release.KBID,
+				Name:        nav.Name,
+				Position:    nav.Position,
+				Permissions: nav.Permissions,
+				CreatedAt:   now,
+			}
+		}
+		if err := tx.CreateInBatches(&navReleases, 2000).Error; err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

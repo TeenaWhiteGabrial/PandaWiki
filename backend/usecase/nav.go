@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/chaitin/panda-wiki/config"
 
 	"github.com/google/uuid"
 
@@ -137,6 +138,14 @@ func (u *NavUsecase) Update(ctx context.Context, req *v1.NavUpdateReq) error {
 func (u *NavUsecase) UpdatePermission(ctx context.Context, req *v1.NavPermissionEditReq) error {
 	if req.Permissions == nil {
 		return nil
+	}
+	if config.PermissionLevelsDisabled() {
+		nav, err := u.navRepo.GetById(ctx, req.ID)
+		if err != nil {
+			return err
+		}
+		req.Permissions.MinPermissionLevelID = nav.Permissions.MinPermissionLevelID
+		req.Permissions.MinPermissionLevelRank = nav.Permissions.MinPermissionLevelRank
 	}
 	if err := u.navRepo.UpdatePermissions(ctx, req.KbId, req.ID, *req.Permissions); err != nil {
 		return err

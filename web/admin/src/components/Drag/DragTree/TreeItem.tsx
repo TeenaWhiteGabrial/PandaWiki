@@ -4,7 +4,6 @@ import {
   TreeItemComponentProps,
   TreeItemWrapper,
 } from '@/components/TreeDragSortable';
-import RAG_SOURCES from '@/constant/rag';
 import { treeSx } from '@/constant/styles';
 import { postApiV1Node, putApiV1NodeDetail } from '@/request/Node';
 import { useAppSelector } from '@/store';
@@ -26,7 +25,6 @@ import {
   Stack,
   TextField,
   Theme,
-  Tooltip,
   alpha,
   styled,
 } from '@mui/material';
@@ -93,6 +91,7 @@ const TreeItem = React.forwardRef<
     refresh,
     disabled,
     scrollToItem,
+    onItemClick,
   } = context;
 
   const [value, setValue] = useState(item.name);
@@ -225,9 +224,7 @@ const TreeItem = React.forwardRef<
   }, [item, isEditting, createItem, renameItem, removeItem]);
 
   const permissions = useMemo(() => {
-    if (item.permissions) {
-      return item.permissions;
-    }
+    if (item.permissions) return item.permissions;
     return null;
   }, [item.permissions]);
 
@@ -238,20 +235,14 @@ const TreeItem = React.forwardRef<
     const minPermissionLevelID = (
       permissions as { min_permission_level_id?: string }
     ).min_permission_level_id;
-    const inherit = (permissions as { inherit?: boolean }).inherit;
     const allowedDepartmentIDs = (
-      permissions as {
-        allowed_department_ids?: string[];
-      }
+      permissions as { allowed_department_ids?: string[] }
     ).allowed_department_ids;
     const allowedUserIDs = (permissions as { allowed_user_ids?: string[] })
       .allowed_user_ids;
 
     if (scopeType && SCOPE_TYPE_MAP[scopeType as keyof typeof SCOPE_TYPE_MAP]) {
       tags.push(SCOPE_TYPE_MAP[scopeType as keyof typeof SCOPE_TYPE_MAP]);
-    }
-    if (inherit) {
-      tags.push({ label: '继承父级', color: 'info' });
     }
     if (minPermissionLevelID) {
       tags.push({ label: '等级受限', color: 'secondary' });
@@ -285,12 +276,7 @@ const TreeItem = React.forwardRef<
         },
       ]}
     >
-      <Stack
-        direction='row'
-        alignItems={'center'}
-        gap={supportSelect ? 0 : 0}
-        onClick={e => e.stopPropagation()}
-      >
+      <Stack direction='row' alignItems={'center'} gap={supportSelect ? 0 : 0}>
         {!readOnly ? (
           <div
             className={'dnd-sortable-tree_simple_handle'}
@@ -334,6 +320,7 @@ const TreeItem = React.forwardRef<
               flex={1}
               sx={{ pr: 2 }}
               onClick={() => {
+                onItemClick?.(item);
                 if (readOnly) return;
                 if (ui === 'select') {
                   handleSelectChange(item.id);
@@ -518,11 +505,19 @@ const TreeItem = React.forwardRef<
                     </Ellipsis>
                   ) : (
                     <>
-                      <Box>
+                      <Box
+                        sx={{
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                        title={item.name}
+                      >
                         {item.name}
                         {item.content_type === 'md' && (
                           <Box
-                            component={'span'}
+                            component='span'
                             sx={{
                               fontSize: 10,
                               color: 'white',
@@ -530,7 +525,7 @@ const TreeItem = React.forwardRef<
                                 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
                               px: 1,
                               ml: 1,
-                              fontWeight: '500',
+                              fontWeight: 500,
                               borderRadius: '4px',
                               height: '14px',
                               lineHeight: '14px',
@@ -545,7 +540,7 @@ const TreeItem = React.forwardRef<
                   )}
                 </Stack>
               )}
-              {menu && (
+              {menuList.length > 0 && (
                 <>
                   <Box
                     sx={{
@@ -557,58 +552,43 @@ const TreeItem = React.forwardRef<
                   />
                   <Stack
                     direction='row'
-                    alignItems={'center'}
+                    alignItems='center'
                     gap={2}
                     sx={{ flexShrink: 0 }}
                   >
-                    <Stack
-                      direction='row'
-                      alignItems={'center'}
-                      gap={1}
-                      sx={{ flexShrink: 0, fontSize: 12 }}
-                    >
-                      {item.status === 0 && (
-                        <StyledTag color='error'>未发布</StyledTag>
-                      )}
-                      {item.status === 1 && (
-                        <StyledTag color='error'>更新未发布</StyledTag>
-                      )}
-                      {item.type === 2 &&
-                        item.rag_status &&
-                        item.status !== 0 && (
-                          <Tooltip title={item.rag_message}>
-                            <StyledTag
-                              color={
-                                RAG_SOURCES[item.rag_status]?.color ||
-                                ('warning' as any)
-                              }
-                            >
-                              {RAG_SOURCES[item.rag_status]?.name || '处理失败'}
-                            </StyledTag>
-                          </Tooltip>
+                    {item.kind !== 'nav' && (
+                      <Stack
+                        direction='row'
+                        alignItems='center'
+                        gap={1}
+                        sx={{ flexShrink: 0, fontSize: 12 }}
+                      >
+                        {item.status === 0 && (
+                          <StyledTag color='error'>未发布</StyledTag>
                         )}
-
-                      {enterprisePermissionTags.length > 0 && (
-                        <>
-                          {enterprisePermissionTags.map(tag => (
-                            <StyledTag key={tag.label} color={tag.color}>
-                              {tag.label}
-                            </StyledTag>
-                          ))}
-                        </>
-                      )}
-                    </Stack>
-                    <Box
-                      sx={{
-                        fontSize: 12,
-                        fontFamily: 'monospace',
-                        color: 'text.disabled',
-                        width: 60,
-                        textAlign: 'right',
-                      }}
-                    >
-                      {dayjs(item.updated_at).fromNow()}
-                    </Box>
+                        {item.status === 1 && (
+                          <StyledTag color='error'>更新未发布</StyledTag>
+                        )}
+                        {enterprisePermissionTags.map(tag => (
+                          <StyledTag key={tag.label} color={tag.color}>
+                            {tag.label}
+                          </StyledTag>
+                        ))}
+                      </Stack>
+                    )}
+                    {item.kind !== 'nav' && (
+                      <Box
+                        sx={{
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                          color: 'text.disabled',
+                          width: 60,
+                          textAlign: 'right',
+                        }}
+                      >
+                        {dayjs(item.updated_at).fromNow()}
+                      </Box>
+                    )}
                     <Box onClick={e => e.stopPropagation()}>
                       <TreeMenu menu={menuList} />
                     </Box>

@@ -7,7 +7,6 @@ const PATH_TITLE_MAP: Record<string, string> = {
   '/stat': '统计',
   '/conversation': '问答',
   '/comment': '评论',
-  '/contribute': '贡献',
   '/release': '发布',
   '/setting': '设置',
 };

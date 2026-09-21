@@ -2,6 +2,8 @@ package pg
 
 import (
 	"context"
+	"github.com/chaitin/panda-wiki/config"
+	"sync"
 	"time"
 
 	"github.com/chaitin/panda-wiki/consts"
@@ -12,15 +14,37 @@ import (
 )
 
 type SystemSettingRepo struct {
-	db     *pg.DB
-	logger *log.Logger
+	permissionMu      sync.Mutex
+	permissionExpires time.Time
+	permissionEnabled bool
+	db                *pg.DB
+	logger            *log.Logger
 }
 
 func NewSystemSettingRepo(db *pg.DB, logger *log.Logger) *SystemSettingRepo {
-	return &SystemSettingRepo{
+	repo := &SystemSettingRepo{
 		db:     db,
 		logger: logger.WithModule("repo.pg.system_setting"),
 	}
+	config.BindPermissionsResolver(func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		enabled, err := repo.PermissionsEnabled(ctx)
+		return err == nil && !enabled
+	})
+	log.BindRuntimeSink(func(ctx context.Context, entry log.RuntimeEntry) error {
+		return repo.WriteRuntimeLog(ctx, runtimeLogFromEntry(
+			entry.Time,
+			entry.Level,
+			entry.Service,
+			entry.Module,
+			entry.Source,
+			entry.Message,
+			entry.Fields,
+			log.EventCode(entry.Module, entry.Message),
+		))
+	})
+	return repo
 }
 
 func (r *SystemSettingRepo) GetSystemSetting(ctx context.Context, key consts.SystemSettingKey) (*domain.SystemSetting, error) {

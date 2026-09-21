@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
+ROOT_ENV_FILE="${SCRIPT_DIR}/../../.env"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
 MODE="${1:-deploy}"
@@ -11,9 +12,9 @@ SERVICES_BASE=(
   postgres
   redis
   nats
-  minio
   qdrant
-  crawler
+  loki
+  alloy
   raglite
 )
 
@@ -38,12 +39,54 @@ required_env_keys=(
   SERVER_IP
   POSTGRES_PASSWORD
   RAGLITE_POSTGRES_DB
-  MINIO_ROOT_PASSWORD
   JWT_SECRET
   ADMIN_PASSWORD
   QDRANT_API_KEY
   RAGLITE_API_KEY
 )
+
+required_oss_env_keys=(
+  OSS_ENDPOINT
+  OSS_ACCESS_KEY
+  OSS_SECRET_KEY
+  OSS_BUCKET_NAME
+  OSS_DOWNLOAD_URL
+  OSS_REGION
+)
+
+load_oss_env() {
+  if [[ ! -f "${ROOT_ENV_FILE}" ]]; then
+    echo "缺少根目录 OSS 配置：${ROOT_ENV_FILE}"
+    echo "请参考 ${SCRIPT_DIR}/../../.env.example"
+    exit 1
+  fi
+  local key value
+  for key in "${required_oss_env_keys[@]}"; do
+    value="$(grep -E "^${key}=" "${ROOT_ENV_FILE}" | tail -n 1 | cut -d= -f2- || true)"
+    if [[ -z "${value}" ]] || [[ "${value}" == CHANGE_ME_* ]]; then
+      echo "根目录 .env 缺少或未正确配置：${key}"
+      exit 1
+    fi
+    export "${key}=${value}"
+  done
+
+  case "${OSS_ENDPOINT}" in
+    https://*)
+      export OSS_USE_SSL=true
+      export OSS_S3_ENDPOINT="${OSS_ENDPOINT#https://}"
+      ;;
+    http://*)
+      export OSS_USE_SSL=false
+      export OSS_S3_ENDPOINT="${OSS_ENDPOINT#http://}"
+      ;;
+    *)
+      export OSS_USE_SSL=false
+      export OSS_S3_ENDPOINT="${OSS_ENDPOINT}"
+      ;;
+  esac
+  OSS_S3_ENDPOINT="${OSS_S3_ENDPOINT%/}"
+  export OSS_S3_ENDPOINT
+}
 
 usage() {
   cat <<'EOF'
@@ -128,20 +171,18 @@ print_summary() {
   local admin_port
   local app_port
   local api_port
-  local minio_console_port
 
   server_ip="$(grep '^SERVER_IP=' "${ENV_FILE}" | cut -d= -f2-)"
   admin_port="$(grep '^ADMIN_PORT=' "${ENV_FILE}" | cut -d= -f2-)"
   app_port="$(grep '^APP_PORT=' "${ENV_FILE}" | cut -d= -f2-)"
   api_port="$(grep '^API_PORT=' "${ENV_FILE}" | cut -d= -f2-)"
-  minio_console_port="$(grep '^MINIO_CONSOLE_PORT=' "${ENV_FILE}" | cut -d= -f2-)"
 
   echo
   echo "部署完成，可访问："
   echo "  管理台:  http://${server_ip}:${admin_port}"
   echo "  前台:    http://${server_ip}:${app_port}"
   echo "  后端:    http://${server_ip}:${api_port}"
-  echo "  MinIO:   http://${server_ip}:${minio_console_port}"
+  echo "  对象存储: ${OSS_DOWNLOAD_URL}"
   echo
   echo "常用检查命令："
   echo "  ${COMPOSE_BIN[*]} --env-file ${ENV_FILE} -f ${COMPOSE_FILE} ps"
@@ -271,7 +312,7 @@ run_status() {
 
 run_logs() {
   echo "==> 最近日志"
-  compose logs --tail=100 api consumer admin app
+  compose logs --tail=100 postgres redis nats qdrant raglite loki alloy api consumer admin app
 }
 
 main() {
@@ -281,6 +322,7 @@ main() {
   fi
 
   require_env_file
+  load_oss_env
   detect_compose
   check_docker
 

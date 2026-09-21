@@ -12,7 +12,8 @@ type Logger struct {
 }
 
 func NewLogger(config *config.Config) *Logger {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.Level(config.Log.Level)}))
+	textHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.Level(config.Log.Level)})
+	logger := slog.New(newRuntimeHandler(textHandler))
 	return &Logger{logger}
 }
 

@@ -1,3 +1,4 @@
+import { useAppSelector } from '@/store';
 import Card from '@/components/Card';
 import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import { FormItem } from '@/components/Form';
@@ -56,6 +57,9 @@ type DepartmentRow = Omit<Department, 'children'> & {
 };
 
 const EnterpriseAccess = () => {
+  const levelsDisabled = useAppSelector(
+    state => state.config.user?.permission_levels_disabled,
+  );
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [levels, setLevels] = useState<PermissionLevel[]>([]);
@@ -261,9 +265,23 @@ const EnterpriseAccess = () => {
               size='small'
               color='error'
               sx={{ p: 0, minWidth: 'auto' }}
-              onClick={() =>
-                deleteApiV1EnterpriseDepartments(record.id).then(fetchData)
-              }
+              onClick={() => {
+                Modal.confirm({
+                  title: '确认删除部门？',
+                  content: `删除“${record.name}”后将无法恢复，请确认该部门没有用户。`,
+                  okText: '确认删除',
+                  cancelText: '取消',
+                  okButtonProps: { sx: { bgcolor: 'error.main' } },
+                  onOk: async () => {
+                    try {
+                      await deleteApiV1EnterpriseDepartments(record.id);
+                      fetchData();
+                    } catch {
+                      // API error is shown by the shared HTTP client.
+                    }
+                  },
+                });
+              }}
             >
               删除
             </Button>
@@ -370,7 +388,14 @@ const EnterpriseAccess = () => {
         />
       </Card>
 
-      <Card sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
+      <Card
+        sx={{
+          display: levelsDisabled ? 'none' : undefined,
+          p: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
         <Stack
           direction='row'
           alignItems='center'

@@ -365,7 +365,11 @@ const Member = () => {
         <MemberAdd refresh={getData} />
       </Stack>
       <AntdTable
-        columns={columns}
+        columns={columns.filter(
+          column =>
+            !user?.permission_levels_disabled ||
+            column.dataIndex !== 'permission_level_id',
+        )}
         dataSource={userList}
         rowKey='id'
         size='small'

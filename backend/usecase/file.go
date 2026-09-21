@@ -79,56 +79,30 @@ func NewFileUsecase(logger *log.Logger, s3Client *s3.MinioClient, imageOSSClient
 }
 
 func (u *FileUsecase) UploadImage(ctx context.Context, kbID string, file *multipart.FileHeader) (string, string, error) {
-	if !u.imageOSSClient.Enabled() {
-		key, err := u.UploadFile(ctx, kbID, file)
-		if err != nil {
-			return "", "", err
-		}
-		return key, "/static-file/" + key, nil
-	}
-
-	src, err := file.Open()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to open image: %w", err)
-	}
-	defer src.Close()
-
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	key := uuid.New().String() + ext
-	contentType := file.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = mime.TypeByExtension(ext)
-	}
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-
-	uploadResult, err := u.imageOSSClient.PutImage(ctx, key, src, file.Size, contentType)
+	key, err := u.UploadFile(ctx, kbID, file)
 	if err != nil {
 		return "", "", err
 	}
-	u.logger.Info("uploaded image to OSS",
-		log.String("bucket", uploadResult.Bucket),
-		log.String("key", uploadResult.Key),
-		log.String("etag", uploadResult.ETag),
-		log.Int64("size", uploadResult.Size),
-		log.String("version_id", uploadResult.VersionID),
-		log.String("last_modified", uploadResult.LastModified),
-	)
-	return uploadResult.Key, uploadResult.URL, nil
+	if publicURL := u.s3Client.PublicURL(key); publicURL != "" {
+		return key, publicURL, nil
+	}
+	return key, "/static-file/" + key, nil
 }
 
 func (u *FileUsecase) IsManagedImageURL(rawURL string) bool {
 	if strings.HasPrefix(rawURL, "/static-file/") {
 		return true
 	}
-	return u.imageOSSClient.IsManagedURL(rawURL)
+	return u.s3Client.IsPublicURL(rawURL) || u.imageOSSClient.IsManagedURL(rawURL)
 }
 
 func (u *FileUsecase) UploadFileGetUrl(ctx context.Context, kbID string, file *multipart.FileHeader) (string, error) {
 	key, err := u.UploadFile(ctx, kbID, file)
 	if err != nil {
 		return "", err
+	}
+	if publicURL := u.s3Client.PublicURL(key); publicURL != "" {
+		return publicURL, nil
 	}
 	return buildInternalStaticFileURL(u.config.S3.Endpoint, key), nil
 }
@@ -224,6 +198,51 @@ func (u *FileUsecase) UploadFileFromBytes(ctx context.Context, kbID string, file
 	}
 
 	return resp.Key, nil
+}
+
+// UploadBytesAtKey stores a file under a caller-provided object key. It is
+// used by structured imports where the object prefix must mirror the archive
+// directory structure instead of using the legacy random key layout.
+func (u *FileUsecase) UploadBytesAtKey(ctx context.Context, key, filename string, fileBytes []byte) (string, error) {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if err := u.checkDeniedExtension(ctx, ext); err != nil {
+		return "", err
+	}
+	contentType := mime.TypeByExtension(ext)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if _, err := u.s3Client.PutObject(
+		ctx,
+		domain.Bucket,
+		strings.TrimLeft(key, "/"),
+		bytes.NewReader(fileBytes),
+		int64(len(fileBytes)),
+		minio.PutObjectOptions{
+			ContentType: contentType,
+			UserMetadata: map[string]string{
+				"originalname": filename,
+			},
+		},
+	); err != nil {
+		return "", fmt.Errorf("upload failed: %w", err)
+	}
+	return strings.TrimLeft(key, "/"), nil
+}
+
+// PutObjectAtKey creates a small object such as a directory marker. Object
+// storage directories are virtual prefixes, but markers make imported empty
+// directories visible in storage consoles when needed.
+func (u *FileUsecase) PutObjectAtKey(ctx context.Context, key, contentType string, fileBytes []byte) error {
+	_, err := u.s3Client.PutObject(
+		ctx,
+		domain.Bucket,
+		strings.TrimLeft(key, "/"),
+		bytes.NewReader(fileBytes),
+		int64(len(fileBytes)),
+		minio.PutObjectOptions{ContentType: contentType},
+	)
+	return err
 }
 
 func (u *FileUsecase) ConvertOfficeToPDF(ctx context.Context, kbID string, filename string, fileBytes []byte) (string, error) {

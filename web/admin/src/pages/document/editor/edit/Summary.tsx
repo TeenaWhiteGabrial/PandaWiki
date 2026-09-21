@@ -9,8 +9,7 @@ import SSEClient from '@/utils/fetch';
 import { message, Modal } from '@/components/ui';
 import { Button, CircularProgress, Stack, TextField } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { WrapContext } from '..';
+import { useEditorContext } from '..';
 import { IconDJzhinengzhaiyao } from '@panda-wiki/icons';
 
 interface SummaryProps {
@@ -21,7 +20,7 @@ interface SummaryProps {
 
 const Summary = ({ open, onClose, updateDetail }: SummaryProps) => {
   const { kb_id } = useAppSelector(state => state.config);
-  const { nodeDetail } = useOutletContext<WrapContext>();
+  const { nodeDetail } = useEditorContext()!;
   const [summary, setSummary] = useState(nodeDetail?.meta?.summary || '');
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);

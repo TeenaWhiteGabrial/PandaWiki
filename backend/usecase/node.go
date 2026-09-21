@@ -28,21 +28,21 @@ import (
 )
 
 type NodeUsecase struct {
-	nodeRepo          *pg.NodeRepository
-	navRepo           *pg.NavRepository
-	appRepo           *pg.AppRepository
-	ragRepo           *mq.RAGRepository
-	kbRepo            *pg.KnowledgeBaseRepository
-	modelRepo         *pg.ModelRepository
-	userRepo          *pg.UserRepository
-	authRepo          *pg.AuthRepo
-	enterprise        *EnterpriseUsecase
-	llmUsecase        *LLMUsecase
-	config            *config.Config
-	logger            *log.Logger
-	s3Client          *s3.MinioClient
-	rAGService        rag.RAGService
-	modelUsecase      *ModelUsecase
+	nodeRepo     *pg.NodeRepository
+	navRepo      *pg.NavRepository
+	appRepo      *pg.AppRepository
+	ragRepo      *mq.RAGRepository
+	kbRepo       *pg.KnowledgeBaseRepository
+	modelRepo    *pg.ModelRepository
+	userRepo     *pg.UserRepository
+	authRepo     *pg.AuthRepo
+	enterprise   *EnterpriseUsecase
+	llmUsecase   *LLMUsecase
+	config       *config.Config
+	logger       *log.Logger
+	s3Client     *s3.MinioClient
+	rAGService   rag.RAGService
+	modelUsecase *ModelUsecase
 }
 
 func NewNodeUsecase(
@@ -64,21 +64,21 @@ func NewNodeUsecase(
 	config *config.Config,
 ) *NodeUsecase {
 	return &NodeUsecase{
-		nodeRepo:          nodeRepo,
-		navRepo:           navRepo,
-		rAGService:        ragService,
-		appRepo:           appRepo,
-		ragRepo:           ragRepo,
-		kbRepo:            kbRepo,
-		authRepo:          authRepo,
-		enterprise:        enterprise,
-		userRepo:          userRepo,
-		llmUsecase:        llmUsecase,
-		modelRepo:         modelRepo,
-		config:            config,
-		logger:            logger.WithModule("usecase.node"),
-		s3Client:          s3Client,
-		modelUsecase:      modelUsecase,
+		nodeRepo:     nodeRepo,
+		navRepo:      navRepo,
+		rAGService:   ragService,
+		appRepo:      appRepo,
+		ragRepo:      ragRepo,
+		kbRepo:       kbRepo,
+		authRepo:     authRepo,
+		enterprise:   enterprise,
+		userRepo:     userRepo,
+		llmUsecase:   llmUsecase,
+		modelRepo:    modelRepo,
+		config:       config,
+		logger:       logger.WithModule("usecase.node"),
+		s3Client:     s3Client,
+		modelUsecase: modelUsecase,
 	}
 }
 
@@ -666,7 +666,7 @@ func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermis
 					return domain.ErrNodePermissionOutOfParentScope
 				}
 
-				if parentPermissions.MinPermissionLevelID != "" && req.Permissions.MinPermissionLevelID != "" {
+				if !config.PermissionLevelsDisabled() && parentPermissions.MinPermissionLevelID != "" && req.Permissions.MinPermissionLevelID != "" {
 					parentLevel, err := u.enterprise.repo.GetPermissionLevelByID(ctx, parentPermissions.MinPermissionLevelID)
 					if err != nil {
 						return err
@@ -698,7 +698,20 @@ func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermis
 			"permissions": req.Permissions,
 		}
 
-		if err := u.nodeRepo.UpdateNodesByKbID(ctx, req.IDs, req.KbId, updateMap); err != nil {
+		if config.PermissionLevelsDisabled() {
+			for _, id := range req.IDs {
+				node, err := u.nodeRepo.GetNodeByID(ctx, id)
+				if err != nil {
+					return err
+				}
+				preserved := *req.Permissions
+				preserved.MinPermissionLevelID = node.Permissions.MinPermissionLevelID
+				preserved.MinPermissionLevelRank = node.Permissions.MinPermissionLevelRank
+				if err := u.nodeRepo.UpdateNodesByKbID(ctx, []string{id}, req.KbId, map[string]interface{}{"permissions": preserved}); err != nil {
+					return err
+				}
+			}
+		} else if err := u.nodeRepo.UpdateNodesByKbID(ctx, req.IDs, req.KbId, updateMap); err != nil {
 			return err
 		}
 	}

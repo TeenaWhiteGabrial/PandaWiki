@@ -4,6 +4,7 @@ import { Box, Button } from '@mui/material';
 import { useState } from 'react';
 import AddDocByType from './AddDocByType';
 import DocAddByCustomText from './DocAddByCustomText';
+import BatchZipImport from './BatchZipImport';
 
 interface InputContentProps {
   exportFile?: boolean;
@@ -37,6 +38,7 @@ const AddDocBtn = ({
   const [uploadOpen, setUploadOpen] = useState(false);
   const [key, setKey] = useState<ConstsCrawlerSource | null>(null);
   const [docFileKey, setDocFileKey] = useState<1 | 2>(1);
+  const [batchImportOpen, setBatchImportOpen] = useState(false);
 
   const menuItems: TreeMenuItem[] = [
     {
@@ -59,7 +61,7 @@ const AddDocBtn = ({
       ? [
           {
             key: ConstsCrawlerSource.CrawlerSourceFile,
-            label: '通过离线文件导入',
+            label: '导入文档',
             onClick: () => {
               setUploadOpen(true);
               setKey(ConstsCrawlerSource.CrawlerSourceFile);
@@ -67,6 +69,11 @@ const AddDocBtn = ({
           },
         ]
       : []),
+    {
+      key: 'batch-import-zip',
+      label: '批量导入 ZIP',
+      onClick: () => setBatchImportOpen(true),
+    },
   ];
 
   const close = () => {
@@ -95,6 +102,11 @@ const AddDocBtn = ({
           parentId={null}
         />
       )}
+      <BatchZipImport
+        open={batchImportOpen}
+        onClose={() => setBatchImportOpen(false)}
+        refresh={refresh}
+      />
       <DocAddByCustomText
         type={docFileKey}
         open={customDocOpen}

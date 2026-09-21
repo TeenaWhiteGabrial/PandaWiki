@@ -2,7 +2,16 @@ import { ModelProvider } from '@/constant/enums';
 import { postApiV1ModelProviderSupported } from '@/request/Model';
 import type { GithubComChaitinPandaWikiDomainModelProvider } from '@/request/types';
 import { Select } from 'antd';
-import { Box, Button, Stack, TextField, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  IconButton,
+  InputAdornment,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 import InfoOutlineSharpIcon from '@mui/icons-material/InfoOutlineSharp';
 import {
   forwardRef,
@@ -93,6 +102,7 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
       'analysis-vl': [],
     });
     const [loadingType, setLoadingType] = useState<ModelTypeKey | null>(null);
+    const [showApiKey, setShowApiKey] = useState(false);
     const fetchTokenRef = useRef(0);
     const provider = formData.provider;
     const baseURL = formData.base_url;
@@ -288,7 +298,22 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
               fullWidth
               size='small'
               value={formData.api_key}
+              type={showApiKey ? 'text' : 'password'}
               onChange={event => updateField('api_key', event.target.value)}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position='end'>
+                    <IconButton
+                      size='small'
+                      onClick={() => setShowApiKey(value => !value)}
+                      edge='end'
+                      aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
+                    >
+                      {showApiKey ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
           </Box>
 

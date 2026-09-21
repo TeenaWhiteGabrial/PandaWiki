@@ -9,24 +9,30 @@ import (
 )
 
 type Config struct {
-	Log           LogConfig      `mapstructure:"log"`
-	HTTP          HTTPConfig     `mapstructure:"http"`
-	AdminPassword string         `mapstructure:"admin_password"`
-	PG            PGConfig       `mapstructure:"pg"`
-	MQ            MQConfig       `mapstructure:"mq"`
-	RAG           RAGConfig      `mapstructure:"rag"`
-	Redis         RedisConfig    `mapstructure:"redis"`
-	Auth          AuthConfig     `mapstructure:"auth"`
-	S3            S3Config       `mapstructure:"s3"`
-	ImageOSS      ImageOSSConfig `mapstructure:"image_oss"`
-	Sentry        SentryConfig   `mapstructure:"sentry"`
-	CaddyAPI      string         `mapstructure:"caddy_api"`
-	SubnetPrefix  string         `mapstructure:"subnet_prefix"`
-	Preview       PreviewConfig  `mapstructure:"preview"`
+	Permissions   PermissionsConfig `mapstructure:"permissions"`
+	Log           LogConfig         `mapstructure:"log"`
+	HTTP          HTTPConfig        `mapstructure:"http"`
+	AdminPassword string            `mapstructure:"admin_password"`
+	PG            PGConfig          `mapstructure:"pg"`
+	MQ            MQConfig          `mapstructure:"mq"`
+	RAG           RAGConfig         `mapstructure:"rag"`
+	Redis         RedisConfig       `mapstructure:"redis"`
+	Auth          AuthConfig        `mapstructure:"auth"`
+	S3            S3Config          `mapstructure:"s3"`
+	ImageOSS      ImageOSSConfig    `mapstructure:"image_oss"`
+	Sentry        SentryConfig      `mapstructure:"sentry"`
+	CaddyAPI      string            `mapstructure:"caddy_api"`
+	SubnetPrefix  string            `mapstructure:"subnet_prefix"`
+	Preview       PreviewConfig     `mapstructure:"preview"`
+}
+
+type PermissionsConfig struct {
+	Disabled bool `mapstructure:"levels_disabled"`
 }
 
 type LogConfig struct {
-	Level int `mapstructure:"level"`
+	Level    int    `mapstructure:"level"`
+	StoreURL string `mapstructure:"store_url"`
 }
 
 type HTTPConfig struct {
@@ -73,9 +79,12 @@ type JWTConfig struct {
 }
 
 type S3Config struct {
-	Endpoint  string `mapstructure:"endpoint"`
-	AccessKey string `mapstructure:"access_key"`
-	SecretKey string `mapstructure:"secret_key"`
+	Endpoint    string `mapstructure:"endpoint"`
+	AccessKey   string `mapstructure:"access_key"`
+	SecretKey   string `mapstructure:"secret_key"`
+	Bucket      string `mapstructure:"bucket"`
+	DownloadURL string `mapstructure:"download_url"`
+	Region      string `mapstructure:"region"`
 }
 
 type ImageOSSConfig struct {
@@ -160,6 +169,9 @@ func NewConfig() (*Config, error) {
 	viper.AddConfigPath("./config")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
+	if file := os.Getenv("PANDA_WIKI_CONFIG_FILE"); file != "" {
+		viper.SetConfigFile(file)
+	}
 
 	// try to read config file
 	if err := viper.ReadInConfig(); err != nil {
@@ -176,6 +188,7 @@ func NewConfig() (*Config, error) {
 
 	// finally, override sensitive info with env variables
 	overrideWithEnv(defaultConfig)
+	defaultConfig.Permissions.Disabled = DefaultPermissionLevelsDisabled()
 
 	return defaultConfig, nil
 }
@@ -223,6 +236,27 @@ func overrideWithEnv(c *Config) {
 	if env := os.Getenv("S3_ENDPOINT"); env != "" {
 		c.S3.Endpoint = env
 	}
+	if env := os.Getenv("S3_ACCESS_KEY"); env != "" {
+		c.S3.AccessKey = env
+	}
+	if env := os.Getenv("OSS_ENDPOINT"); env != "" {
+		c.S3.Endpoint = env
+	}
+	if env := os.Getenv("OSS_ACCESS_KEY"); env != "" {
+		c.S3.AccessKey = env
+	}
+	if env := os.Getenv("OSS_SECRET_KEY"); env != "" {
+		c.S3.SecretKey = env
+	}
+	if env := os.Getenv("OSS_BUCKET_NAME"); env != "" {
+		c.S3.Bucket = env
+	}
+	if env := os.Getenv("OSS_DOWNLOAD_URL"); env != "" {
+		c.S3.DownloadURL = env
+	}
+	if env := os.Getenv("OSS_REGION"); env != "" {
+		c.S3.Region = env
+	}
 	if env := os.Getenv("IMAGE_OSS_ENDPOINT"); env != "" {
 		c.ImageOSS.Endpoint = env
 	}
@@ -266,6 +300,9 @@ func overrideWithEnv(c *Config) {
 		} else {
 			fmt.Fprintf(os.Stderr, "Invalid log level: %s with err: %s\n", env, err)
 		}
+	}
+	if env := os.Getenv("LOG_STORE_URL"); env != "" {
+		c.Log.StoreURL = env
 	}
 }
 

@@ -10,6 +10,7 @@ import {
 import { useAppSelector } from '@/store';
 import { convertToTree } from '@/utils/drag';
 import {
+  Alert,
   Box,
   Checkbox,
   Chip,
@@ -70,6 +71,7 @@ const VersionPublish = ({
   >([]);
   const [expandedNavIds, setExpandedNavIds] = useState<Set<string>>(new Set());
   const [list, setList] = useState<DomainNodeListItemResp[]>([]);
+  const [publishing, setPublishing] = useState(false);
 
   const {
     handleSubmit,
@@ -100,23 +102,34 @@ const VersionPublish = ({
     });
   };
 
-  const onSubmit = handleSubmit(data => {
+  const onSubmit = handleSubmit(async data => {
+    if (publishing) return;
     const nodeIds = Array.from(new Set([...selected, ...folderIds]));
     const hasReleasedNavs = releasedNavs.length > 0;
 
     // 有选中的文档/文件夹，或存在未发布目录时，允许提交
     if (nodeIds.length > 0 || hasReleasedNavs) {
-      postApiV1KnowledgeBaseRelease({
-        kb_id,
-        ...data,
-        ...(nodeIds.length ? { node_ids: nodeIds } : {}),
-      }).then(() => {
+      setPublishing(true);
+      try {
+        await postApiV1KnowledgeBaseRelease({
+          kb_id,
+          ...data,
+          ...(nodeIds.length ? { node_ids: nodeIds } : {}),
+        });
         message.success(`${data.tag} 版本发布成功`);
         reset();
         setSelected([]);
         onClose();
         refresh();
-      });
+      } catch (error) {
+        const reason =
+          error instanceof Error && error.message
+            ? `：${error.message}`
+            : '，请在运行日志中查看失败原因';
+        message.error(`发布失败${reason}`);
+      } finally {
+        setPublishing(false);
+      }
     } else {
       message.error(
         list.length > 0 ? '请选择要发布的文档' : '暂无未发布文档或目录',
@@ -146,13 +159,27 @@ const VersionPublish = ({
     <Modal
       title='发布新版本'
       open={open}
-      onCancel={onClose}
-      onOk={onSubmit}
-      okButtonProps={{
-        disabled: releasedNavs.length === 0 && list.length === 0,
+      onCancel={() => {
+        if (!publishing) onClose();
       }}
+      onOk={onSubmit}
+      closable={!publishing}
+      maskClosable={!publishing}
+      keyboard={!publishing}
+      cancelButtonProps={{ disabled: publishing }}
+      okButtonProps={{
+        disabled:
+          publishing || (releasedNavs.length === 0 && list.length === 0),
+        loading: publishing,
+      }}
+      okText={publishing ? '正在建立问答索引…' : '发布'}
     >
       <>
+        <Alert severity={publishing ? 'info' : 'success'} sx={{ mb: 1.5 }}>
+          {publishing
+            ? '正在后台解析文档并建立问答索引。全部完成后版本才会正式生效，请勿关闭页面。'
+            : '发布时系统会自动完成文档解析和问答索引；只有全部处理成功，版本才会正式生效。'}
+        </Alert>
         <Box sx={{ fontSize: 14, lineHeight: '32px' }}>
           版本号
           <Box component='span' sx={{ color: 'error.main', ml: 0.5 }}>
@@ -166,6 +193,7 @@ const VersionPublish = ({
           render={({ field }) => (
             <TextField
               {...field}
+              disabled={publishing}
               fullWidth
               size='small'
               placeholder='请输入版本号'
@@ -187,6 +215,7 @@ const VersionPublish = ({
           render={({ field }) => (
             <TextField
               {...field}
+              disabled={publishing}
               fullWidth
               multiline
               rows={2}
@@ -258,6 +287,7 @@ const VersionPublish = ({
             <Stack direction='row' alignItems='center'>
               <Box sx={{ color: 'text.tertiary', fontSize: 12 }}>全选</Box>
               <Checkbox
+                disabled={publishing}
                 size='small'
                 sx={{
                   p: 0,
@@ -354,6 +384,7 @@ const VersionPublish = ({
                           全选
                         </Box>
                         <Checkbox
+                          disabled={publishing}
                           size='small'
                           sx={{
                             p: 0,

@@ -107,7 +107,7 @@ func (r *NodeRepository) Create(ctx context.Context, req *domain.CreateNodeReq, 
 			UpdatedAt:     now,
 			EditTime:      now,
 			RagInfo: func() domain.RagInfo {
-				if meta.FileReadonly {
+				if meta.FileReadonly && strings.TrimSpace(req.Content) == "" {
 					return domain.RagInfo{}
 				}
 				return domain.RagInfo{
@@ -1036,15 +1036,26 @@ func (r *NodeRepository) TraverseNodesByCursor(ctx context.Context, callback fun
 
 // CreateNodeReleases create node releases
 func (r *NodeRepository) CreateNodeReleases(ctx context.Context, kbID, userId string, nodeIDs []string) ([]string, error) {
+	return r.createNodeReleases(ctx, kbID, userId, nodeIDs, true)
+}
+
+// CreatePendingNodeReleases snapshots drafts without making them visible.
+// The caller promotes the nodes only after their RAG documents are verified.
+func (r *NodeRepository) CreatePendingNodeReleases(ctx context.Context, kbID, userID string, nodeIDs []string) ([]string, error) {
+	return r.createNodeReleases(ctx, kbID, userID, nodeIDs, false)
+}
+
+func (r *NodeRepository) createNodeReleases(ctx context.Context, kbID, userId string, nodeIDs []string, publish bool) ([]string, error) {
 	releaseIDs := make([]string, 0)
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// update node status to published and return node ids
 		var updatedNodes []*domain.Node
-		if err := tx.Model(&domain.Node{}).
+		query := tx.Model(&domain.Node{}).
 			Where("kb_id = ?", kbID).
-			Where("id IN ?", nodeIDs).
-			Update("status", domain.NodeStatusPublished).
-			Find(&updatedNodes).Error; err != nil {
+			Where("id IN ?", nodeIDs)
+		if publish {
+			query = query.Update("status", domain.NodeStatusPublished)
+		}
+		if err := query.Find(&updatedNodes).Error; err != nil {
 			return err
 		}
 		if len(updatedNodes) == 0 {
@@ -1086,6 +1097,20 @@ func (r *NodeRepository) CreateNodeReleases(ctx context.Context, kbID, userId st
 	return releaseIDs, nil
 }
 
+func (r *NodeRepository) DeleteNodeReleases(ctx context.Context, releaseIDs []string) error {
+	if len(releaseIDs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Where("id IN ?", releaseIDs).Delete(&domain.NodeRelease{}).Error
+}
+
+func (r *NodeRepository) UpdateNodeStatuses(ctx context.Context, kbID string, nodeIDs []string, status domain.NodeStatus) error {
+	if len(nodeIDs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&domain.Node{}).Where("kb_id = ? AND id IN ?", kbID, nodeIDs).Update("status", status).Error
+}
+
 func (r *NodeRepository) GetOldNodeDocIDsByNodeID(ctx context.Context, nodeReleaseID, nodeID string) ([]string, error) {
 	var docIDs []string
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -1111,6 +1136,31 @@ func (r *NodeRepository) GetOldNodeDocIDsByNodeID(ctx context.Context, nodeRelea
 		return nil, err
 	}
 	return docIDs, nil
+}
+
+func (r *NodeRepository) ListOldNodeDocIDsByNodeID(ctx context.Context, nodeReleaseID, nodeID string) ([]string, error) {
+	var docIDs []string
+	if err := r.db.WithContext(ctx).
+		Model(&domain.NodeRelease{}).
+		Where("node_id = ?", nodeID).
+		Where("id != ?", nodeReleaseID).
+		Where("doc_id != ''").
+		Select("doc_id").
+		Find(&docIDs).Error; err != nil {
+		return nil, err
+	}
+	return docIDs, nil
+}
+
+func (r *NodeRepository) ClearNodeReleaseDocIDs(ctx context.Context, docIDs []string) error {
+	if len(docIDs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).
+		Model(&domain.NodeRelease{}).
+		Where("doc_id IN ?", docIDs).
+		Omit("updated_at").
+		Update("doc_id", "").Error
 }
 
 func (r *NodeRepository) MoveNodeNav(ctx context.Context, kbID, navID string, nodeIDs []string) error {

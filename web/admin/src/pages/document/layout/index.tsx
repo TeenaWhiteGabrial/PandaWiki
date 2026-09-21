@@ -25,10 +25,9 @@ import {
 import { arrayMove } from '@dnd-kit/sortable';
 import { Stack } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import RagErrorReStart from '../component/RagErrorReStart';
 import DocPageHeader from './DocPageHeader';
-import DocPageList from './DocPageList';
 import DocPageNavs from './DocPageNavs';
+import DocPagePreview from './DocPagePreview';
 
 const Content = () => {
   const { kb_id, isRefreshDocList, kbDetail } = useAppSelector(
@@ -44,14 +43,20 @@ const Content = () => {
 
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishIds, setPublishIds] = useState<string[]>([]);
-  const [ragOpen, setRagOpen] = useState(false);
-  const [ragIds, setRagIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<
     GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
   >([]);
   const [navList, setNavList] = useState<V1NavListResp[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [navWidth, setNavWidth] = useState(() =>
+    Math.max(300, Math.round(window.innerWidth * 0.3)),
+  );
+  const [previewCollapsed, setPreviewCollapsed] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(
+    null,
+  );
 
   const getData = useCallback(() => {
     if (!kb_id) {
@@ -228,21 +233,25 @@ const Content = () => {
     }
   }, [isRefreshDocList, refresh, dispatch]);
 
+  useEffect(() => {
+    document.body.classList.toggle('document-workbench-fullscreen', fullscreen);
+    return () => {
+      document.body.classList.remove('document-workbench-fullscreen');
+    };
+  }, [fullscreen]);
+
   return (
     <>
-      <DocPageHeader
-        onPublishClick={() => {
-          if (readOnlyUser) return;
-          setPublishIds([]);
-          setPublishOpen(true);
-        }}
-        onRagClick={() => {
-          if (readOnlyUser) return;
-          setRagIds([]);
-          setRagOpen(true);
-        }}
-        refreshTrigger={refreshTrigger}
-      />
+      {!fullscreen && (
+        <DocPageHeader
+          onPublishClick={() => {
+            if (readOnlyUser) return;
+            setPublishIds([]);
+            setPublishOpen(true);
+          }}
+          refreshTrigger={refreshTrigger}
+        />
+      )}
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -252,36 +261,41 @@ const Content = () => {
         onDragEnd={handleLayoutDragEnd}
         onDragCancel={handleLayoutDragCancel}
       >
-        <Stack direction={'row'} sx={{ mt: 2 }}>
-          <DocPageNavs
-            navList={navList}
-            onNavListChange={setNavList}
-            onNavDeleted={navId => {
-              setGroups(prev => prev.filter(g => g.nav_id !== navId));
-            }}
-            refresh={refresh}
-            isSearching={!!search}
-            loading={loading && !hasLoadedOnce}
-          />
-          <DocPageList
-            groups={groups}
-            nav_id={nav_id}
-            search={search}
-            refresh={refresh}
-            wikiUrl={wikiUrl}
-            loading={loading && !hasLoadedOnce}
-            onPublishOpen={ids => {
-              if (readOnlyUser) return;
-              setPublishIds(ids ?? []);
-              setPublishOpen(true);
-            }}
-            onRagOpen={ids => {
-              if (readOnlyUser) return;
-              setRagIds(ids ?? []);
-              setRagOpen(true);
-            }}
-            registerTreeDragHandlers={handlers => {
-              treeDragHandlersRef.current = handlers;
+        <Stack direction={'row'} sx={{ mt: fullscreen ? 0 : 2, width: '100%' }}>
+          {!fullscreen && (
+            <DocPageNavs
+              navList={navList}
+              groups={groups}
+              onNavListChange={setNavList}
+              onNavDeleted={navId => {
+                setGroups(prev => prev.filter(g => g.nav_id !== navId));
+              }}
+              refresh={refresh}
+              isSearching={!!search}
+              loading={loading && !hasLoadedOnce}
+              width={navWidth}
+              onWidthChange={setNavWidth}
+              onDocumentSelect={item => {
+                setSelectedDocumentId(item.id);
+                setPreviewCollapsed(false);
+              }}
+              fill={previewCollapsed}
+              wikiUrl={wikiUrl}
+              onPublishOpen={ids => {
+                if (readOnlyUser) return;
+                setPublishIds(ids ?? []);
+                setPublishOpen(true);
+              }}
+            />
+          )}
+          <DocPagePreview
+            documentId={selectedDocumentId}
+            collapsed={fullscreen ? false : previewCollapsed}
+            onToggle={() => setPreviewCollapsed(value => !value)}
+            fullscreen={fullscreen}
+            onToggleFullscreen={() => {
+              setFullscreen(value => !value);
+              setPreviewCollapsed(false);
             }}
           />
         </Stack>
@@ -293,17 +307,6 @@ const Content = () => {
           onClose={() => {
             setPublishOpen(false);
             setPublishIds([]);
-          }}
-          refresh={refresh}
-        />
-      )}
-      {!readOnlyUser && (
-        <RagErrorReStart
-          open={ragOpen}
-          defaultSelected={ragIds}
-          onClose={() => {
-            setRagOpen(false);
-            setRagIds([]);
           }}
           refresh={refresh}
         />

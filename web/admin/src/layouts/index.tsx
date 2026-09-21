@@ -132,6 +132,11 @@ export const MainLayout = () => {
             pt: '64px',
             ml: '170px',
             color: 'text.primary',
+            'body.document-workbench-fullscreen &': {
+              ml: 0,
+              pr: 0,
+              width: '100%',
+            },
           }}
         >
           <Outlet />

@@ -81,6 +81,9 @@ func createApp() (*App, error) {
 	shareAuthMiddleware := middleware.NewShareAuthMiddleware(configConfig, logger, knowledgeBaseUsecase, apiTokenRepo)
 	captchaCaptcha := captcha.NewCaptcha()
 	baseHandler := handler.NewBaseHandler(echo, logger, configConfig, authMiddleware, shareAuthMiddleware, captchaCaptcha)
+	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
+	permissionSettingsHandler := v1.NewPermissionSettingsHandler(echo, baseHandler, authMiddleware, systemSettingRepo)
+	runtimeLogHandler := v1.NewRuntimeLogHandler(echo, baseHandler, authMiddleware, systemSettingRepo, configConfig)
 	enterpriseRepository := pg2.NewEnterpriseRepository(db, logger)
 	userUsecase, err := usecase.NewUserUsecase(userRepository, enterpriseRepository, logger, configConfig)
 	if err != nil {
@@ -102,7 +105,6 @@ func createApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
 	modelUsecase := usecase.NewModelUsecase(modelRepository, nodeRepository, ragRepository, ragService, logger, configConfig, knowledgeBaseRepository, systemSettingRepo)
 	nodeUsecase := usecase.NewNodeUsecase(nodeRepository, navRepository, appRepository, ragRepository, userRepository, knowledgeBaseRepository, llmUsecase, ragService, logger, minioClient, modelRepository, authRepo, modelUsecase, enterpriseUsecase, systemSettingRepo, configConfig)
 	nodeHandler := v1.NewNodeHandler(baseHandler, echo, nodeUsecase, authMiddleware, logger)
@@ -138,7 +140,8 @@ func createApp() (*App, error) {
 	mcpHandler := v1.NewMCPHandler(baseHandler, echo, mcpUsecase, authMiddleware, logger)
 	apiTokenUsecase := usecase.NewAPITokenUsecase(apiTokenRepo, knowledgeBaseUsecase, logger)
 	apiTokenHandler := v1.NewAPITokenHandler(baseHandler, echo, apiTokenUsecase, authMiddleware, logger)
-	fileHandler := v1.NewFileHandler(echo, baseHandler, logger, authMiddleware, minioClient, configConfig, fileUsecase)
+	batchImportUsecase := usecase.NewBatchImportUsecase(logger, fileUsecase, crawlerUsecase, nodeRepository)
+	fileHandler := v1.NewFileHandler(echo, baseHandler, logger, authMiddleware, minioClient, configConfig, fileUsecase, batchImportUsecase)
 	modelHandler := v1.NewModelHandler(echo, baseHandler, logger, authMiddleware, modelUsecase, llmUsecase)
 	conversationHandler := v1.NewConversationHandler(echo, baseHandler, logger, authMiddleware, conversationUsecase)
 	crawlerHandler := v1.NewCrawlerHandler(echo, baseHandler, authMiddleware, logger, configConfig, crawlerUsecase, fileUsecase)
@@ -151,7 +154,7 @@ func createApp() (*App, error) {
 	commentUsecase := usecase.NewCommentUsecase(commentRepository, logger, nodeRepository, ipAddressRepo, userRepository)
 	commentHandler := v1.NewCommentHandler(echo, baseHandler, logger, authMiddleware, commentUsecase)
 	contributeRepository := pg2.NewContributeRepository(db, logger)
-	contributeUsecase := usecase.NewContributeUsecase(contributeRepository, nodeRepository, userRepository, appRepository, knowledgeBaseRepository, ragRepository, logger)
+	contributeUsecase := usecase.NewContributeUsecase(contributeRepository, nodeRepository, userRepository, appRepository, knowledgeBaseUsecase, logger)
 	contributeHandler := v1.NewContributeHandler(echo, baseHandler, logger, authMiddleware, contributeUsecase)
 	authUsecase, err := usecase.NewAuthUsecase(authRepo, logger, knowledgeBaseRepository, cacheCache)
 	if err != nil {
@@ -162,23 +165,25 @@ func createApp() (*App, error) {
 	navHandler := v1.NewNavHandler(baseHandler, echo, navUsecase, authMiddleware, logger)
 	enterpriseHandler := v1.NewEnterpriseHandler(echo, baseHandler, enterpriseUsecase, userUsecase, authMiddleware)
 	apiHandlers := &v1.APIHandlers{
-		UserHandler:          userHandler,
-		KnowledgeBaseHandler: knowledgeBaseHandler,
-		NodeHandler:          nodeHandler,
-		AppHandler:           appHandler,
-		MCPHandler:           mcpHandler,
-		APITokenHandler:      apiTokenHandler,
-		FileHandler:          fileHandler,
-		ModelHandler:         modelHandler,
-		ConversationHandler:  conversationHandler,
-		CrawlerHandler:       crawlerHandler,
-		CreationHandler:      creationHandler,
-		StatHandler:          statHandler,
-		CommentHandler:       commentHandler,
-		ContributeHandler:    contributeHandler,
-		AuthV1Handler:        authV1Handler,
-		NavHandler:           navHandler,
-		EnterpriseHandler:    enterpriseHandler,
+		PermissionSettingsHandler: permissionSettingsHandler,
+		RuntimeLogHandler:         runtimeLogHandler,
+		UserHandler:               userHandler,
+		KnowledgeBaseHandler:      knowledgeBaseHandler,
+		NodeHandler:               nodeHandler,
+		AppHandler:                appHandler,
+		MCPHandler:                mcpHandler,
+		APITokenHandler:           apiTokenHandler,
+		FileHandler:               fileHandler,
+		ModelHandler:              modelHandler,
+		ConversationHandler:       conversationHandler,
+		CrawlerHandler:            crawlerHandler,
+		CreationHandler:           creationHandler,
+		StatHandler:               statHandler,
+		CommentHandler:            commentHandler,
+		ContributeHandler:         contributeHandler,
+		AuthV1Handler:             authV1Handler,
+		NavHandler:                navHandler,
+		EnterpriseHandler:         enterpriseHandler,
 	}
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)

@@ -54,7 +54,6 @@ export interface UpdateUserEnterpriseAccessReq {
   user_id: string;
   permission_level_id?: string;
   department_ids: string[];
-  primary_department?: string;
 }
 
 export const getApiV1EnterpriseDepartments = () =>

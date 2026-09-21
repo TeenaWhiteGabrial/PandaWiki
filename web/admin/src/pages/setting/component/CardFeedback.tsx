@@ -266,80 +266,6 @@ const AIQuestion = ({
   );
 };
 
-const DocumentContribution = ({
-  data,
-  refresh,
-}: {
-  data: DomainAppDetailResp;
-  refresh: () => void;
-}) => {
-  const [isEdit, setIsEdit] = useState(false);
-  const { control, handleSubmit, setValue } = useForm({
-    defaultValues: {
-      is_enable: false,
-    },
-  });
-
-  const onSubmit = handleSubmit(formData => {
-    putApiV1AppCompat(
-      { id: data.id! },
-      {
-        settings: {
-          ...data.settings,
-          contribute_settings: {
-            is_enable: formData.is_enable,
-          },
-        },
-      },
-    ).then(() => {
-      message.success('保存成功');
-      setIsEdit(false);
-      refresh();
-    });
-  });
-
-  useEffect(() => {
-    setValue(
-      'is_enable',
-      // @ts-expect-error 忽略类型错误
-      data?.settings?.contribute_settings?.is_enable,
-    );
-  }, [data, setValue]);
-
-  return (
-    <SettingCardItem title='文档贡献' isEdit={isEdit} onSubmit={onSubmit}>
-      <FormItem label='文档贡献'>
-        <Controller
-          control={control}
-          name='is_enable'
-          render={({ field }) => (
-            <RadioGroup
-              row
-              {...field}
-              value={field.value}
-              onChange={e => {
-                setIsEdit(true);
-                field.onChange(e.target.value === 'true');
-              }}
-            >
-              <FormControlLabel
-                value={true}
-                control={<Radio size='small' />}
-                label={<StyledRadioLabel>启用</StyledRadioLabel>}
-              />
-              <FormControlLabel
-                value={false}
-                control={<Radio size='small' />}
-                label={<StyledRadioLabel>禁用</StyledRadioLabel>}
-              />
-            </RadioGroup>
-          )}
-        />
-      </FormItem>
-    </SettingCardItem>
-  );
-};
-
 const CardFeedback = ({ kb }: CardCommentProps) => {
   const [info, setInfo] = useState<DomainAppDetailResp | null>(null);
 
@@ -364,7 +290,6 @@ const CardFeedback = ({ kb }: CardCommentProps) => {
     >
       <AIQuestion data={info} refresh={getInfo} />
       <DocumentComments data={info} refresh={getInfo} />
-      <DocumentContribution data={info} refresh={getInfo} />
     </Box>
   );
 };

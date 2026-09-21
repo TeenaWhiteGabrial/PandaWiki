@@ -28,7 +28,6 @@ type MemberEnterpriseAccessProps = {
 
 type FormValues = {
   permission_level_id: string;
-  primary_department: string;
   department_ids: string[];
 };
 
@@ -42,17 +41,13 @@ const MemberEnterpriseAccess = ({
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [levels, setLevels] = useState<PermissionLevel[]>([]);
-  const { control, handleSubmit, reset, watch, setValue } = useForm<FormValues>(
-    {
-      defaultValues: {
-        permission_level_id: '',
-        primary_department: '',
-        department_ids: [],
-      },
+  const { control, handleSubmit, reset } = useForm<FormValues>({
+    defaultValues: {
+      permission_level_id: '',
+      department_ids: [],
     },
-  );
+  });
 
-  const departmentIDs = watch('department_ids');
   const departmentTree = useMemo(
     () => buildDepartmentTree(departments),
     [departments],
@@ -72,7 +67,6 @@ const MemberEnterpriseAccess = ({
       setLevels(levelResp.levels || []);
       reset({
         permission_level_id: user.permission_level_id || '',
-        primary_department: user.primary_department || '',
         department_ids: user.department_ids || [],
       });
     });
@@ -101,7 +95,6 @@ const MemberEnterpriseAccess = ({
           user_id: user.id || '',
           permission_level_id: values.permission_level_id || undefined,
           department_ids: fullDepartmentIds,
-          primary_department: values.primary_department || undefined,
         })
           .then(() => {
             refresh();
@@ -110,26 +103,28 @@ const MemberEnterpriseAccess = ({
           .finally(() => setLoading(false));
       })}
     >
-      <FormItem label='权限等级'>
-        <Controller
-          name='permission_level_id'
-          control={control}
-          render={({ field }) => (
-            <Select
-              value={field.value}
-              onChange={field.onChange}
-              style={{ width: '100%' }}
-              options={[
-                { value: '', label: '默认' },
-                ...levels.map(item => ({
-                  value: item.id,
-                  label: `${item.name}（${item.rank}）`,
-                })),
-              ]}
-            />
-          )}
-        />
-      </FormItem>
+      {!currentUser?.permission_levels_disabled && (
+        <FormItem label='权限等级'>
+          <Controller
+            name='permission_level_id'
+            control={control}
+            render={({ field }) => (
+              <Select
+                value={field.value}
+                onChange={field.onChange}
+                style={{ width: '100%' }}
+                options={[
+                  { value: '', label: '默认' },
+                  ...levels.map(item => ({
+                    value: item.id,
+                    label: `${item.name}（${item.rank}）`,
+                  })),
+                ]}
+              />
+            )}
+          />
+        </FormItem>
+      )}
       <FormItem label='所属部门' sx={{ mt: 2 }}>
         <Controller
           name='department_ids'
@@ -139,39 +134,10 @@ const MemberEnterpriseAccess = ({
               departments={departmentTree}
               flatDepartments={flatDepartments}
               value={field.value || []}
-              onChange={newValue => {
-                field.onChange(newValue);
-                // 如果主部门不在新选中列表中，清空主部门
-                const currentPrimary = watch('primary_department');
-                if (currentPrimary && !newValue.includes(currentPrimary)) {
-                  setValue('primary_department', '');
-                }
-              }}
-              multiple
+              onChange={field.onChange}
+              multiple={false}
               label='所属部门'
               disabled={!canEdit}
-            />
-          )}
-        />
-      </FormItem>
-      <FormItem label='主部门' sx={{ mt: 2 }}>
-        <Controller
-          name='primary_department'
-          control={control}
-          render={({ field }) => (
-            <DepartmentTreeSelect
-              departments={departmentTree}
-              flatDepartments={flatDepartments}
-              value={field.value ? [field.value] : []}
-              onChange={newValue => {
-                field.onChange(newValue[0] || '');
-              }}
-              multiple={false}
-              label='主部门'
-              disabled={!canEdit}
-              excludeIds={flatDepartments
-                .filter(d => !departmentIDs?.includes(d.id))
-                .map(d => d.id)}
             />
           )}
         />

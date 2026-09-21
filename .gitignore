@@ -26,6 +26,7 @@ go.work.sum
 
 # env file
 .env
+!.env.example
 
 **/.DS_Store
 
@@ -33,7 +34,6 @@ go.work.sum
 
 deploy
 !deploy/server/
-!deploy/server/.env
 !deploy/server/.env.example
 !deploy/server/README.md
 !deploy/server/deploy.sh

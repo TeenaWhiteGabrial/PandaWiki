@@ -3,69 +3,135 @@ package s3
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/chaitin/panda-wiki/config"
-	"github.com/chaitin/panda-wiki/domain"
 )
 
+// MinioClient is kept as the public type name for compatibility with existing
+// usecases. It now represents any S3-compatible store, including Inspur OSS.
 type MinioClient struct {
-	*minio.Client
-	config *config.Config
+	client       *minio.Client
+	bucket       string
+	objectPrefix string
+	downloadURL  string
 }
 
-func NewMinioClient(config *config.Config) (*MinioClient, error) {
-	endpoint := config.S3.Endpoint
-	accessKey := config.S3.AccessKey
-	secretKey := config.S3.SecretKey
+func NewMinioClient(appConfig *config.Config) (*MinioClient, error) {
+	storage := appConfig.S3
+	endpoint, secure, err := normalizeEndpoint(storage.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(storage.AccessKey) == "" || strings.TrimSpace(storage.SecretKey) == "" {
+		return nil, fmt.Errorf("object storage credentials are incomplete")
+	}
 
-	minioClient, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: false,
+	client, err := minio.New(endpoint, &minio.Options{
+		Creds:        credentials.NewStaticV4(storage.AccessKey, storage.SecretKey, ""),
+		Secure:       secure,
+		Region:       storage.Region,
+		BucketLookup: minio.BucketLookupPath,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create object storage client: %w", err)
 	}
-	// check bucket
-	bucket := domain.Bucket
-	exists, err := minioClient.BucketExists(context.Background(), bucket)
+
+	// Local legacy deployments use a physical static-file bucket. OSS uses its
+	// configured bucket and keeps static-file as a prefix, preserving stored keys.
+	bucket := strings.TrimSpace(storage.Bucket)
+	prefix := ""
+	if bucket == "" {
+		bucket = "static-file"
+	} else {
+		prefix = "static-file"
+	}
+
+	exists, err := client.BucketExists(context.Background(), bucket)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check object storage bucket %q: %w", bucket, err)
 	}
 	if !exists {
-		err = minioClient.MakeBucket(context.Background(), bucket, minio.MakeBucketOptions{
-			Region: "us-east-1",
-		})
-		if err != nil {
-			return nil, fmt.Errorf("make bucket: %w", err)
+		if storage.Bucket != "" {
+			return nil, fmt.Errorf("configured object storage bucket %q does not exist", bucket)
 		}
-		err = minioClient.SetBucketPolicy(context.Background(), bucket, `{
-			"Version": "2012-10-17",
-			"Statement": [
-				{
-					"Action": ["s3:GetObject"],
-					"Effect": "Allow",
-					"Principal": "*",
-					"Resource": ["arn:aws:s3:::static-file/*"],
-					"Sid": "PublicRead"
-				}
-			]
-		}`)
-		if err != nil {
-			return nil, fmt.Errorf("set bucket policy: %w", err)
+		if err := client.MakeBucket(context.Background(), bucket, minio.MakeBucketOptions{Region: storage.Region}); err != nil {
+			return nil, fmt.Errorf("make local object storage bucket: %w", err)
 		}
 	}
-	return &MinioClient{Client: minioClient, config: config}, nil
+
+	return &MinioClient{
+		client:       client,
+		bucket:       bucket,
+		objectPrefix: prefix,
+		downloadURL:  strings.TrimRight(storage.DownloadURL, "/"),
+	}, nil
 }
 
-// sign url
-func (c *MinioClient) SignURL(ctx context.Context, bucket, object string, expires time.Duration) (string, error) {
-	url, err := c.PresignedGetObject(ctx, bucket, object, expires, nil)
+func normalizeEndpoint(raw string) (string, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false, fmt.Errorf("object storage endpoint is required")
+	}
+	if !strings.Contains(raw, "://") {
+		return strings.TrimRight(raw, "/"), false, nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return "", false, fmt.Errorf("invalid object storage endpoint %q", raw)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", false, fmt.Errorf("object storage endpoint must use http or https")
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", false, fmt.Errorf("object storage endpoint must not contain a path")
+	}
+	return parsed.Host, parsed.Scheme == "https", nil
+}
+
+func (c *MinioClient) physicalObject(object string) string {
+	object = strings.TrimLeft(object, "/")
+	if c.objectPrefix == "" {
+		return object
+	}
+	return path.Join(c.objectPrefix, object)
+}
+
+func (c *MinioClient) PutObject(ctx context.Context, _ string, object string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
+	info, err := c.client.PutObject(ctx, c.bucket, c.physicalObject(object), reader, size, opts)
+	if err == nil {
+		info.Bucket = c.bucket
+		info.Key = strings.TrimLeft(object, "/")
+	}
+	return info, err
+}
+
+func (c *MinioClient) GetObject(ctx context.Context, _ string, object string, opts minio.GetObjectOptions) (*minio.Object, error) {
+	return c.client.GetObject(ctx, c.bucket, c.physicalObject(object), opts)
+}
+
+func (c *MinioClient) SignURL(ctx context.Context, _ string, object string, expires time.Duration) (string, error) {
+	result, err := c.client.PresignedGetObject(ctx, c.bucket, c.physicalObject(object), expires, nil)
 	if err != nil {
 		return "", err
 	}
-	return url.String(), nil
+	return result.String(), nil
+}
+
+func (c *MinioClient) PublicURL(object string) string {
+	if c.downloadURL == "" {
+		return ""
+	}
+	return c.downloadURL + "/" + c.physicalObject(object)
+}
+
+func (c *MinioClient) IsPublicURL(rawURL string) bool {
+	return c.downloadURL != "" && strings.HasPrefix(rawURL, c.downloadURL+"/")
 }

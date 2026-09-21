@@ -6,19 +6,19 @@ const RAG_SOURCES = {
     color: 'warning',
   },
   [ConstsNodeRagInfoStatus.NodeRagStatusPending]: {
-    name: '待学习',
+    name: '待建立索引',
     color: 'warning',
   },
   [ConstsNodeRagInfoStatus.NodeRagStatusRunning]: {
-    name: '正在学习',
+    name: '正在建立索引',
     color: 'warning',
   },
   [ConstsNodeRagInfoStatus.NodeRagStatusFailed]: {
-    name: '学习失败',
+    name: '索引失败',
     color: 'error',
   },
   [ConstsNodeRagInfoStatus.NodeRagStatusSucceeded]: {
-    name: '学习成功',
+    name: '索引完成',
     color: 'success',
   },
 };

@@ -22,13 +22,8 @@ import IconPageview1 from '@panda-wiki/icons/IconPageview1';
 import dayjs from 'dayjs';
 import { debounce } from 'lodash-es';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  useLocation,
-  useNavigate,
-  useOutletContext,
-  useParams,
-} from 'react-router-dom';
-import { WrapContext } from '..';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { EditorContext, useEditorContext, WrapContext } from '..';
 import AIGenerate from './AIGenerate';
 import AttachmentList from './AttachmentList';
 import FullTextEditor from './FullTextEditor';
@@ -41,6 +36,9 @@ import { buildEditorBlocks } from './editorBlocks';
 interface WrapProps {
   detail: V1NodeDetailResp;
   readOnlyUser?: boolean;
+  embedded?: boolean;
+  context?: WrapContext;
+  embeddedActions?: React.ReactNode;
 }
 
 const isEditorPerfLogEnabled = () => {
@@ -71,8 +69,11 @@ const getEditorCharacterCount = (editor: { storage?: unknown }) => {
 const RichTextWrap = ({
   detail: defaultDetail,
   readOnlyUser = false,
+  embedded = false,
+  embeddedActions,
 }: WrapProps) => {
-  const { id = '' } = useParams();
+  const { id: routeId = '' } = useParams();
+  const id = routeId || defaultDetail.id || '';
   const navigate = useNavigate();
   const state = useLocation().state as { node?: V1NodeDetailResp };
   const {
@@ -83,7 +84,7 @@ const RichTextWrap = ({
     onSave,
     catalogData,
     saveCurrentDocRef,
-  } = useOutletContext<WrapContext>();
+  } = useEditorContext()!;
 
   const storageTocOpen = localStorage.getItem('toc-open');
   const postApiV1CreationTabCompleteController = useRef<AbortController | null>(
@@ -1008,18 +1009,21 @@ const RichTextWrap = ({
     <>
       <Box
         sx={{
-          position: 'fixed',
+          position: embedded ? 'sticky' : 'fixed',
           top: 0,
-          left: catalogOpen ? 292 : 0,
-          right: 0,
+          left: embedded ? 0 : catalogOpen ? 292 : 0,
+          right: embedded ? 'auto' : 0,
+          width: embedded ? '100%' : 'auto',
           zIndex: 10,
           bgcolor: 'background.default',
-          transition: 'left 0.3s ease-in-out',
+          transition: embedded ? 'none' : 'left 0.3s ease-in-out',
         }}
       >
         <Header
           edit={isEditing}
           detail={nodeDetail!}
+          embedded={embedded}
+          embeddedActions={embeddedActions}
           updateDetail={updateDetail}
           readOnlyUser={readOnlyUser}
           handleSave={async () => {
@@ -1084,6 +1088,7 @@ const RichTextWrap = ({
             editor={editorRef.editor}
             fixed={fixedToc}
             header={renderEditorTitleEmojiSummary()}
+            embedded={embedded}
           />
         )}
       </Box>
@@ -1115,8 +1120,23 @@ const RichTextWrap = ({
   );
 };
 
-const Wrap = ({ detail, readOnlyUser = false }: WrapProps) => {
-  return <RichTextWrap detail={detail} readOnlyUser={readOnlyUser} />;
+const Wrap = ({
+  detail,
+  readOnlyUser = false,
+  embedded = false,
+  context,
+  embeddedActions,
+}: WrapProps) => {
+  return (
+    <EditorContext.Provider value={context || null}>
+      <RichTextWrap
+        detail={detail}
+        readOnlyUser={readOnlyUser}
+        embedded={embedded}
+        embeddedActions={embeddedActions}
+      />
+    </EditorContext.Provider>
+  );
 };
 
 export default Wrap;

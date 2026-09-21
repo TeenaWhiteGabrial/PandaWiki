@@ -1,8 +1,12 @@
+x-pandawiki-log-labels: &pandawiki-log-labels
+  com.pandawiki.logs: 'true'
+
 services:
   caddy:
     image: chaitin-registry.cn-hangzhou.cr.aliyuncs.com/chaitin/panda-wiki-caddy:2.10-alpine
     container_name: panda-wiki-caddy
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     ports:
       - '2019:2019'
     environment:
@@ -14,6 +18,7 @@ services:
   postgres:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/postgres:15.17
     container_name: panda-wiki-postgres
+    labels: *pandawiki-log-labels
     environment:
       POSTGRES_DB: panda-wiki
       POSTGRES_USER: panda-wiki
@@ -31,6 +36,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: panda-wiki-redis
+    labels: *pandawiki-log-labels
     ports:
       - '16379:6379'
     volumes:
@@ -44,6 +50,7 @@ services:
   nats:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/nats:2.14.1
     container_name: panda-wiki-nats
+    labels: *pandawiki-log-labels
     command:
       - --jetstream
       - --store_dir
@@ -62,6 +69,7 @@ services:
   minio:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     container_name: panda-wiki-minio
+    labels: *pandawiki-log-labels
     environment:
       MINIO_ROOT_USER: s3panda-wiki
       MINIO_ROOT_PASSWORD: panda-wiki-secret
@@ -80,6 +88,7 @@ services:
   qdrant:
     image: chaitin-registry.cn-hangzhou.cr.aliyuncs.com/chaitin/panda-wiki-qdrant:v1.14.1
     container_name: panda-wiki-qdrant
+    labels: *pandawiki-log-labels
     environment:
       QDRANT__SERVICE__API_KEY: panda-wiki-qdrant-key
     ports:
@@ -91,6 +100,7 @@ services:
     image: chaitin-registry.cn-hangzhou.cr.aliyuncs.com/chaitin/anydoc:v0.9.11
     container_name: panda-wiki-crawler
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     init: true
     environment:
       GLOG_GLOBAL_LEVEL: info
@@ -111,6 +121,7 @@ services:
     image: chaitin-registry.cn-hangzhou.cr.aliyuncs.com/chaitin/raglite:v2.17.0
     container_name: panda-wiki-raglite
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     environment:
       GIN_MODE: release
       DATABASE_POSTGRESQL_HOST: panda-wiki-postgres
@@ -136,6 +147,36 @@ services:
       qdrant:
         condition: service_started
 
+  loki:
+    image: grafana/loki:3.7.0
+    container_name: panda-wiki-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/config.yml
+    ports:
+      - '127.0.0.1:13100:3100'
+    volumes:
+      - ./deploy/server/logging/loki.yml:/etc/loki/config.yml:ro
+      - panda_wiki_loki:/loki
+    mem_limit: 768m
+
+  alloy:
+    image: grafana/alloy:v1.11.3
+    container_name: panda-wiki-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./deploy/server/logging/config.local.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./.logs:/var/log/pandawiki:ro
+      - panda_wiki_alloy:/var/lib/alloy/data
+    mem_limit: 256m
+    depends_on:
+      loki:
+        condition: service_started
+
 volumes:
   panda_wiki_caddy_config:
   panda_wiki_caddy_data:
@@ -145,3 +186,5 @@ volumes:
   panda_wiki_minio:
   panda_wiki_qdrant:
   panda_wiki_raglite:
+  panda_wiki_loki:
+  panda_wiki_alloy:

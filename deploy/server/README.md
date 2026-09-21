@@ -9,7 +9,7 @@
 ## 资源建议
 
 - 最低可试跑：`2C4G`
-- 更推荐：`4C8G`
+- 完整服务推荐：`8C16G`
 
 如果服务器上还跑着别的服务，不建议把完整链路部署在 `2C4G` 机器上。
 
@@ -33,17 +33,30 @@ cp .env.example .env
 - `SERVER_IP`
 - `POSTGRES_PASSWORD`
 - `RAGLITE_POSTGRES_DB`
-- `MINIO_ROOT_PASSWORD`
 - `JWT_SECRET`
 - `ADMIN_PASSWORD`
 - `QDRANT_API_KEY`
 - `RAGLITE_API_KEY`
+
+对象存储配置统一放在仓库根目录 `.env`，参考根目录 `.env.example`。
+部署脚本会读取 `OSS_ENDPOINT`、`OSS_ACCESS_KEY`、`OSS_SECRET_KEY`、
+`OSS_BUCKET_NAME`、`OSS_DOWNLOAD_URL` 和 `OSS_REGION`。生产环境不再启动 MinIO。
 
 说明：
 
 - `POSTGRES_DB` 是 PandaWiki 主应用数据库
 - `RAGLITE_POSTGRES_DB` 是 raglite 独立数据库
 - 两者不要配置成同一个库名，否则会发生迁移表冲突
+
+## 运行日志
+
+部署会同时启动 Loki 与 Alloy：
+
+- Alloy 只采集带有 `com.pandawiki.logs=true` 标签的本项目容器日志。
+- Loki 保留 14 天日志，仅在 Compose 内网开放，不直接暴露公网端口。
+- 管理端“系统设置 → 运行日志”仅系统管理员可访问，可按时间、服务、容器位置和内容筛选。
+- “全部运行日志”显示各服务的完整 stdout/stderr；“业务事件日志”显示带问答、文档、发布、学习上下文的结构化事件。
+- 密码、密钥、令牌等常见敏感字段会在写入集中日志前脱敏。
 
 3. 执行一键部署：
 
@@ -59,7 +72,7 @@ bash deploy.sh
 - 管理台：`http://SERVER_IP:18080`
 - 前台：`http://SERVER_IP:3010`
 - 后端：`http://SERVER_IP:8000`
-- MinIO Console：`http://SERVER_IP:9001`
+- 文件访问：根目录 `.env` 中的 `OSS_DOWNLOAD_URL`
 
 ## 常用命令
 

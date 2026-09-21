@@ -2,6 +2,7 @@ import { getApiV1User, getApiV1UserList } from './User';
 import type { ConstsUserRole } from './types';
 
 export type UserInfoCompat = {
+  permission_levels_disabled?: boolean;
   id?: string;
   account?: string;
   name?: string;
@@ -11,7 +12,6 @@ export type UserInfoCompat = {
   created_at?: string;
   permission_level_id?: string;
   department_ids?: string[];
-  primary_department?: string;
 };
 
 export type UserListItemCompat = {
@@ -23,7 +23,6 @@ export type UserListItemCompat = {
   created_at?: string;
   permission_level_id?: string;
   department_ids?: string[];
-  primary_department?: string;
 };
 
 export const getApiV1UserCompat = () => getApiV1User() as Promise<UserInfoCompat>;

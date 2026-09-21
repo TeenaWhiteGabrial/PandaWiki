@@ -240,7 +240,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
         if (isModeChanged || isEmbeddingModelChanged) {
           Modal.confirm({
             title: '确认操作',
-            content: '此操作会触发重新学习，请确认是否继续？',
+            content: '此操作会在后台重建问答索引，请确认是否继续？',
             onOk: async () => {
               await performSave();
             },
@@ -446,7 +446,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                   >
                     提示：
                   </Box>
-                  切换配置模式或修改向量模型会触发重新学习
+                  切换配置模式或修改向量模型会在后台重建问答索引
                 </Box>
               )}
             </Stack>

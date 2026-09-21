@@ -54,6 +54,7 @@ const AttachmentList = ({
     async (file: File): Promise<DomainNodeAttachmentMeta> => {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('kb_id', detail.kb_id || '');
       const uploaded = await uploadAttachment(formData);
       const fileType = (uploaded.filename?.split('.').pop() || '')
         .trim()

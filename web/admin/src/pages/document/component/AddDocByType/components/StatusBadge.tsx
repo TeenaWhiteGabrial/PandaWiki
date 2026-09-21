@@ -22,6 +22,11 @@ const StatusBadge = ({ status, isFileImport = false }: StatusBadgeProps) => {
       color: theme.palette.text.secondary,
       loading: true,
     },
+    uploading: {
+      text: '上传中',
+      color: theme.palette.warning.main,
+      loading: true,
+    },
     'upload-error': {
       text: '上传失败',
       color: theme.palette.error.main,

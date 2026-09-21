@@ -4,7 +4,7 @@ import {
   ConstsCrawlerSource,
 } from '@/request';
 import { useAppSelector } from '@/store';
-import { Modal } from '@/components/ui';
+import { message, Modal } from '@/components/ui';
 import { useCallback, useMemo, useState } from 'react';
 import { TYPE_CONFIG, UPLOAD_FILE_TYPES } from './constants';
 import FileParse from './FileParse';
@@ -41,7 +41,8 @@ export interface ListDataItem {
     | 'markdown'
     | 'attachment'
     | 'document-with-attachment'
-    | 'blank-document-with-attachment';
+    | 'blank-document-with-attachment'
+    | 'file-document';
   progress?: number;
 
   open?: boolean;
@@ -52,6 +53,7 @@ export interface ListDataItem {
 
   status:
     | 'common'
+    | 'uploading'
     | 'upload-error'
     | 'parsing'
     | 'parsed'
@@ -60,10 +62,6 @@ export interface ListDataItem {
     | 'imported'
     | 'import-error';
 }
-
-export type FileImportMode =
-  | 'content-with-attachment'
-  | 'blank-with-attachment';
 
 const AddDocByType = ({
   type,
@@ -76,10 +74,6 @@ const AddDocByType = ({
   const [data, setData] = useState<ListDataItem[]>([]);
   const [checked, setChecked] = useState<string[]>([]);
   const [formSubmitLoading, setFormSubmitLoading] = useState(false);
-  const [fileImportMode, setFileImportMode] = useState<FileImportMode>(
-    'content-with-attachment',
-  );
-
   const queue = useGlobalQueue(5);
 
   const isUploadFileType = useMemo(() => {
@@ -96,13 +90,20 @@ const AddDocByType = ({
   }, [type]);
 
   const handleCancel = useCallback(() => {
+    const processing = data.some(item =>
+      ['common', 'uploading', 'parsing', 'importing'].includes(item.status),
+    );
+    if (processing || !queue.isIdle) {
+      message.warning('文件仍在处理中，请等待完成后再关闭');
+      return;
+    }
     onCancel();
     if (data.some(item => item.status === 'imported')) {
       refresh?.();
     }
     setData([]);
     setChecked([]);
-  }, [onCancel, refresh, data]);
+  }, [data, onCancel, queue.isIdle, refresh]);
 
   return (
     <Modal
@@ -125,19 +126,11 @@ const AddDocByType = ({
             loading={formSubmitLoading}
             type={type}
             queue={queue}
-            fileImportMode={fileImportMode}
-            setFileImportMode={setFileImportMode}
           />
         </>
       ) : isUploadFileType ? (
         <>
-          <FileParse
-            type={type}
-            parent_id={parentId}
-            setData={setData}
-            fileImportMode={fileImportMode}
-            setFileImportMode={setFileImportMode}
-          />
+          <FileParse type={type} parent_id={parentId} setData={setData} />
         </>
       ) : (
         <>

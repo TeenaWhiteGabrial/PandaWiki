@@ -49,6 +49,7 @@ func NewJWTMiddleware(config *config.Config, logger *log.Logger, userAccessRepo 
 }
 
 func (m *JWTMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc {
+	next = suspendPermissionWrites(next)
 	return func(c echo.Context) error {
 		authHeader := c.Request().Header.Get("Authorization")
 		if strings.HasPrefix(authHeader, "Bearer ") {
@@ -258,6 +259,11 @@ func GetKbID(c echo.Context) (string, error) {
 		return "", nil
 
 	case http.MethodPost, http.MethodPatch, http.MethodPut:
+		if strings.HasPrefix(c.Request().Header.Get("Content-Type"), "multipart/form-data") {
+			if kbID := c.FormValue("kb_id"); kbID != "" {
+				return kbID, nil
+			}
+		}
 
 		bodyBytes, err := io.ReadAll(c.Request().Body)
 		if err != nil {

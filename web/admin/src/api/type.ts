@@ -206,6 +206,9 @@ export interface ITreeItem {
   status?: 0 | 1 | 2;
   permissions?: DomainNodePermissions;
   collapsed?: boolean;
+  /** 文档管理统一树中的目录根节点标识 */
+  kind?: 'nav';
+  nav_id?: string;
 }
 
 export interface NodeReleaseItem {

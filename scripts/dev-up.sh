@@ -15,6 +15,8 @@ DEPENDENCY_SERVICES=(
   qdrant
   crawler
   raglite
+  loki
+  alloy
 )
 DEPENDENCY_PORTS=(
   15432
@@ -24,6 +26,7 @@ DEPENDENCY_PORTS=(
   6333
   8080
   5050
+  13100
 )
 
 mkdir -p \
@@ -242,8 +245,11 @@ start_if_not_running \
   GOMODCACHE="${ROOT_DIR}/.cache/gomod" \
   GOPROXY="https://goproxy.cn,direct" \
   ENV="local" \
+  SERVICE_NAME="api" \
   LOG_LEVEL="-4" \
+  LOG_STORE_URL="http://127.0.0.1:13100" \
   ADMIN_PASSWORD="admin123" \
+  PANDA_WIKI_CONFIG_FILE="${PANDA_WIKI_CONFIG_FILE:-${ROOT_DIR}/backend/config.yml}" \
   JWT_SECRET="dev-jwt-secret" \
   PG_DSN="host=127.0.0.1 user=panda-wiki password=panda-wiki-secret dbname=panda-wiki port=15432 sslmode=disable TimeZone=Asia/Shanghai" \
   MQ_NATS_SERVER="nats://127.0.0.1:4222" \
@@ -277,8 +283,11 @@ start_if_not_running \
   GOMODCACHE="${ROOT_DIR}/.cache/gomod" \
   GOPROXY="https://goproxy.cn,direct" \
   ENV="local" \
+  SERVICE_NAME="consumer" \
   LOG_LEVEL="-4" \
+  LOG_STORE_URL="http://127.0.0.1:13100" \
   PG_DSN="host=127.0.0.1 user=panda-wiki password=panda-wiki-secret dbname=panda-wiki port=15432 sslmode=disable TimeZone=Asia/Shanghai" \
+  PANDA_WIKI_CONFIG_FILE="${PANDA_WIKI_CONFIG_FILE:-${ROOT_DIR}/backend/config.yml}" \
   MQ_NATS_SERVER="nats://127.0.0.1:4222" \
   REDIS_ADDR="127.0.0.1:16379" \
   S3_ENDPOINT="127.0.0.1:9000" \

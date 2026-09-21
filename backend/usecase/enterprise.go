@@ -10,6 +10,7 @@ import (
 	"github.com/samber/lo"
 
 	enterpriseV1 "github.com/chaitin/panda-wiki/api/enterprise/v1"
+	"github.com/chaitin/panda-wiki/config"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/repo/pg"
@@ -113,10 +114,7 @@ func (u *EnterpriseUsecase) UpdateUserEnterpriseAccess(ctx context.Context, req 
 	if len(req.DepartmentIDs) == 0 {
 		return errors.New("department is required")
 	}
-	if req.PrimaryDepartment == "" {
-		return errors.New("primary department is required")
-	}
-	return u.repo.UpdateUserEnterpriseAccess(ctx, req.UserID, req.PermissionLevelID, req.DepartmentIDs, req.PrimaryDepartment)
+	return u.repo.UpdateUserEnterpriseAccess(ctx, req.UserID, req.PermissionLevelID, req.DepartmentIDs)
 }
 
 func (u *EnterpriseUsecase) GetUserAccessContext(ctx context.Context, userID string) (*domain.EnterpriseAccessContext, error) {
@@ -142,12 +140,14 @@ func (u *EnterpriseUsecase) BuildShareAccessContext(ctx context.Context, userID 
 		PrincipalID: "visitor",
 	}
 
-	defaultLevel, err := u.repo.GetDefaultPermissionLevel(ctx)
-	if err == nil {
-		result.PermissionLevelID = defaultLevel.ID
-		result.PermissionLevelRank = defaultLevel.Rank
-	}
+	if !config.PermissionLevelsDisabled() {
+		defaultLevel, err := u.repo.GetDefaultPermissionLevel(ctx)
+		if err == nil {
+			result.PermissionLevelID = defaultLevel.ID
+			result.PermissionLevelRank = defaultLevel.Rank
+		}
 
+	}
 	return result, nil
 }
 
@@ -309,7 +309,7 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 		access = &domain.EnterpriseAccessContext{}
 	}
 
-	if perm.MinPermissionLevelRank > 0 && access.PermissionLevelRank < perm.MinPermissionLevelRank {
+	if !config.PermissionLevelsDisabled() && perm.MinPermissionLevelRank > 0 && access.PermissionLevelRank < perm.MinPermissionLevelRank {
 		return false
 	}
 

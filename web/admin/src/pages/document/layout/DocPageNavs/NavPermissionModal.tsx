@@ -1,3 +1,4 @@
+import { useAppSelector } from '@/store';
 import { Form, FormItem } from '@/pages/setting/component/Common';
 import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import {
@@ -43,6 +44,9 @@ const NavPermissionModal = ({
   onClose,
   onSuccess,
 }: NavPermissionModalProps) => {
+  const levelsDisabled = useAppSelector(
+    state => state.config.user?.permission_levels_disabled,
+  );
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [permissionLevels, setPermissionLevels] = useState<
@@ -164,26 +168,28 @@ const NavPermissionModal = ({
             )}
           />
         </FormItem>
-        <FormItem label='最低权限等级'>
-          <Controller
-            name='min_permission_level_id'
-            control={control}
-            render={({ field }) => (
-              <Select
-                value={field.value}
-                onChange={field.onChange}
-                style={{ width: '100%' }}
-                options={[
-                  { value: '', label: '不限制' },
-                  ...permissionLevels.map(item => ({
-                    value: item.id,
-                    label: `${item.name}（${item.rank}）`,
-                  })),
-                ]}
-              />
-            )}
-          />
-        </FormItem>
+        {!levelsDisabled && (
+          <FormItem label='最低权限等级'>
+            <Controller
+              name='min_permission_level_id'
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onChange={field.onChange}
+                  style={{ width: '100%' }}
+                  options={[
+                    { value: '', label: '不限制' },
+                    ...permissionLevels.map(item => ({
+                      value: item.id,
+                      label: `${item.name}（${item.rank}）`,
+                    })),
+                  ]}
+                />
+              )}
+            />
+          </FormItem>
+        )}
         {scopeType === 'department' && (
           <>
             <FormItem label='允许部门'>

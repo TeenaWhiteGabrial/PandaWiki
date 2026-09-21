@@ -1,17 +1,9 @@
 'use client';
 
-import { useStore } from '@/provider';
 import { ConstsCopySetting, V1ShareNodeDetailResp } from '@/request/types';
 import { Box, IconButton, Stack, Tooltip } from '@mui/material';
-import {
-  IconFuzhi,
-  IconTianjia,
-  IconWenjian,
-  IconWenjianjia,
-} from '@panda-wiki/icons';
+import { IconFuzhi, IconWenjian, IconWenjianjia } from '@panda-wiki/icons';
 import dayjs from 'dayjs';
-import { useState } from 'react';
-import ContributeModal from './ContributeModal';
 
 interface DocMetaInfoProps {
   info: V1ShareNodeDetailResp;
@@ -26,11 +18,6 @@ const DocMetaInfo = ({
   kbDetailCopySetting,
   onCopyDocMd,
 }: DocMetaInfoProps) => {
-  const { kbDetail } = useStore();
-  const [contributeOpen, setContributeOpen] = useState(false);
-  const contributeEnabled =
-    kbDetail?.settings?.contribute_settings?.is_enable ?? false;
-
   return (
     <>
       <Stack
@@ -99,23 +86,6 @@ const DocMetaInfo = ({
           )}
         </Stack>
         <Stack direction='row' gap={1}>
-          {info?.type === 2 && contributeEnabled && (
-            <>
-              <Tooltip title='提交文档贡献' arrow placement='top'>
-                <IconButton
-                  size='small'
-                  onClick={() => setContributeOpen(true)}
-                >
-                  <IconTianjia sx={{ fontSize: 16 }} />
-                </IconButton>
-              </Tooltip>
-              <ContributeModal
-                open={contributeOpen}
-                onClose={() => setContributeOpen(false)}
-                info={info}
-              />
-            </>
-          )}
           {info?.type === 2 &&
             kbDetailCopySetting !== ConstsCopySetting.CopySettingDisabled && (
               <Tooltip title='复制 MarkDown 格式' arrow placement='top'>

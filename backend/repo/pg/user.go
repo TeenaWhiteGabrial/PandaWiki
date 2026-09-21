@@ -60,7 +60,7 @@ func (r *UserRepository) UpsertDefaultUser(ctx context.Context, user *domain.Use
 	})
 }
 
-func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User, departmentIDs []string, primaryDepartment string, edition consts.LicenseEdition, enterpriseRepo *EnterpriseRepository) error {
+func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User, departmentIDs []string, edition consts.LicenseEdition, enterpriseRepo *EnterpriseRepository) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
@@ -81,7 +81,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User, depa
 			return err
 		}
 		if enterpriseRepo != nil {
-			if err := enterpriseRepo.UpdateUserEnterpriseAccess(ctx, user.ID, "", departmentIDs, primaryDepartment); err != nil {
+			if err := enterpriseRepo.UpdateUserEnterpriseAccess(ctx, user.ID, "", departmentIDs); err != nil {
 				return err
 			}
 		}
@@ -155,12 +155,11 @@ func (r *UserRepository) ListUsersWithEnterpriseAccess(ctx context.Context, ente
 	}
 	filtered := make([]v1.UserListItemResp, 0, len(users))
 	for i := range users {
-		departmentIDs, primaryDepartment, err := enterpriseRepo.GetUserDepartments(ctx, users[i].ID)
+		departmentIDs, _, err := enterpriseRepo.GetUserDepartments(ctx, users[i].ID)
 		if err != nil {
 			return nil, err
 		}
 		users[i].DepartmentIDs = departmentIDs
-		users[i].PrimaryDepartment = primaryDepartment
 		if req != nil && req.DepartmentID != "" {
 			matched := false
 			for _, departmentID := range departmentIDs {

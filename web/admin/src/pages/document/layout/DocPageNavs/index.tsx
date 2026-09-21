@@ -1,19 +1,23 @@
 import Card from '@/components/Card';
+import DragTree, { type DragTreeHandle } from '@/components/Drag/DragTree';
+import type { TreeMenuItem } from '@/components/Drag/DragTree/TreeMenu';
+import type { ITreeItem } from '@/api';
 import Cascader from '@/components/Cascader';
 import EmptyState from '@/components/EmptyState';
 import Loading from '@/components/Loading';
 import { useURLSearchParams } from '@/hooks';
 import { deleteApiV1NavDelete } from '@/request/Nav';
-import type { V1NavListResp } from '@/request/types';
+import type {
+  ConstsCrawlerSource,
+  DomainNodeListItemResp,
+  V1NavListResp,
+} from '@/request/types';
+import type { GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp } from '@/request/types';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setIsRefreshDocList, setNavId } from '@/store/slices/config';
 import { addOpacityToColor } from '@/utils';
 import { Ellipsis, message, Modal } from '@/components/ui';
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import {
@@ -30,9 +34,14 @@ import {
   IconJiahao,
   IconXiajiantou,
 } from '@panda-wiki/icons';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { convertToTree } from '@/utils/drag';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import NavEditModal from './NavEditModal';
 import NavPermissionModal from './NavPermissionModal';
+import DocListModals from '../DocPageList/DocListModals';
+import { useDocTreeMenu } from '../DocPageList/useDocTreeMenu';
+import { findItemInTree, removeDeep } from '../DocPageList/utils';
+import BatchZipImport from '../../component/BatchZipImport';
 
 const SortableNavItem = ({
   nav,
@@ -248,21 +257,35 @@ const SortableNavItem = ({
 
 interface DocPageNavsProps {
   navList: V1NavListResp[];
+  groups: GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[];
   onNavListChange: React.Dispatch<React.SetStateAction<V1NavListResp[]>>;
   onNavDeleted?: (navId: string) => void;
   /** 目录修改/移动后刷新 Header 统计 */
   refresh?: () => void;
   isSearching?: boolean;
   loading?: boolean;
+  width?: number;
+  onWidthChange?: (width: number) => void;
+  onDocumentSelect?: (item: ITreeItem) => void;
+  fill?: boolean;
+  wikiUrl?: string;
+  onPublishOpen?: (ids?: string[]) => void;
 }
 
 const DocPageNavs = ({
   navList: navListProp,
+  groups,
   onNavListChange,
   onNavDeleted,
   refresh,
   isSearching = false,
   loading = false,
+  width = 300,
+  onWidthChange,
+  onDocumentSelect,
+  fill = false,
+  wikiUrl = '',
+  onPublishOpen,
 }: DocPageNavsProps) => {
   const dispatch = useAppDispatch();
   const { kb_id } = useAppSelector(state => state.config);
@@ -277,31 +300,61 @@ const DocPageNavs = ({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingNav, setDeletingNav] = useState<V1NavListResp | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [opraData, setOpraData] = useState<DomainNodeListItemResp[]>([]);
+  const [modalList, setModalList] = useState<DomainNodeListItemResp[]>([]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [urlOpen, setUrlOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [moreSummaryOpen, setMoreSummaryOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState<'delete' | null>(null);
+  const [batchImportParentId, setBatchImportParentId] = useState<string | null>(
+    null,
+  );
+  const [batchImportOpen, setBatchImportOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [importKey, setImportKey] = useState<ConstsCrawlerSource | null>(null);
+  const [isBatch, setIsBatch] = useState(false);
+  const dragTreeRef = useRef<DragTreeHandle>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const hasScrolledToSelectedRef = useRef(false);
-  const [expend, setExpend] = useState(
-    localStorage.getItem(`doc_nav_expend_${kb_id}`) !== '0',
-  );
-
-  useEffect(() => {
-    if (!kb_id) return;
-    const stored = localStorage.getItem(`doc_nav_expend_${kb_id}`);
-    if (stored === '0') {
-      setExpend(false);
-    } else if (stored === '1') {
-      setExpend(true);
-    }
-  }, [kb_id]);
-
-  useEffect(() => {
-    if (!kb_id) return;
-    localStorage.setItem(`doc_nav_expend_${kb_id}`, expend ? '1' : '0');
-  }, [kb_id, expend]);
-
+  const expend = true;
   const navs = navListProp || [];
-  const sortedNavs = [...navs].sort(
-    (a, b) => (a.position ?? 0) - (b.position ?? 0),
+  const sortedNavs = useMemo(
+    () => [...navs].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
+    [navs],
   );
+
+  const unifiedTree = useMemo<ITreeItem[]>(() => {
+    const attachNav = (items: ITreeItem[], navId: string): ITreeItem[] =>
+      items.map(item => ({
+        ...item,
+        nav_id: navId,
+        children: item.children
+          ? attachNav(item.children, navId)
+          : item.children,
+      }));
+
+    return sortedNavs.map(nav => {
+      const group = groups.find(item => item.nav_id === nav.id);
+      const children = attachNav(convertToTree(group?.list || []), nav.id!);
+      return {
+        id: nav.id!,
+        name: nav.name || '未命名目录',
+        level: 0,
+        type: 1,
+        kind: 'nav',
+        nav_id: nav.id!,
+        children,
+        collapsed: false,
+      };
+    });
+  }, [groups, sortedNavs]);
+  const [treeData, setTreeData] = useState<ITreeItem[]>(unifiedTree);
+
+  useEffect(() => {
+    setTreeData(unifiedTree);
+  }, [unifiedTree]);
 
   useEffect(() => {
     const navIdFromStorage = kb_id
@@ -348,6 +401,10 @@ const DocPageNavs = ({
   useEffect(() => {
     hasScrolledToSelectedRef.current = false;
   }, [kb_id]);
+
+  useEffect(() => {
+    setModalList(groups.find(group => group.nav_id === selectedId)?.list || []);
+  }, [groups, selectedId]);
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -399,6 +456,137 @@ const DocPageNavs = ({
     setDeleteConfirmOpen(true);
   }, []);
 
+  const navMenu = useCallback(
+    ({ item }: { item: ITreeItem }): TreeMenuItem[] => {
+      if (item.kind !== 'nav') return [];
+      const nav = sortedNavs.find(value => value.id === item.id);
+      if (!nav) return [];
+      return [
+        { key: 'edit', label: '修改目录', onClick: () => handleEdit(nav) },
+        {
+          key: 'permission',
+          label: '目录权限',
+          onClick: () => handlePermission(nav),
+        },
+        ...(sortedNavs.length > 1
+          ? [
+              {
+                key: 'delete',
+                label: '删除目录',
+                color: 'error' as const,
+                onClick: () => handleDeleteClick(nav),
+              },
+            ]
+          : []),
+      ];
+    },
+    [handleDeleteClick, handleEdit, handlePermission, sortedNavs],
+  );
+
+  const getNodeData = useCallback(
+    (item: ITreeItem): DomainNodeListItemResp[] => {
+      const group = groups.find(value => value.nav_id === item.nav_id);
+      const found = group
+        ? findItemInTree(convertToTree(group.list || []), item.id)
+        : null;
+      return found ? [found] : [item as unknown as DomainNodeListItemResp];
+    },
+    [groups],
+  );
+
+  const handleUrl = useCallback(
+    (item: ITreeItem, key: ConstsCrawlerSource) => {
+      setImportKey(key);
+      setUrlOpen(true);
+      setOpraData(getNodeData(item));
+    },
+    [getNodeData],
+  );
+  const handleDelete = useCallback(
+    (item: ITreeItem) => {
+      setDeleteOpen(true);
+      setOpraData(getNodeData(item));
+    },
+    [getNodeData],
+  );
+  const handleProperties = useCallback(
+    (item: ITreeItem) => {
+      setPropertiesOpen(true);
+      setIsBatch(false);
+      setOpraData(getNodeData(item));
+    },
+    [getNodeData],
+  );
+  const handleFrontDoc = useCallback(
+    (id: string) => {
+      const item = groups
+        .flatMap(group => group.list || [])
+        .find(value => value.id === id);
+      if (item?.status !== 2 && !item?.publisher_id) {
+        message.warning('当前文档未发布，无法查看前台文档');
+        return;
+      }
+      window.open(`${wikiUrl}/node/${id}`, '_blank');
+    },
+    [groups, wikiUrl],
+  );
+  const documentMenu = useDocTreeMenu(
+    {
+      handleUrl,
+      handleBatchImport: item => {
+        setBatchImportParentId(item.id);
+        setBatchImportOpen(true);
+      },
+      handleDelete,
+      handlePublish: item => onPublishOpen?.([item.id]),
+      handleProperties,
+      handleFrontDoc,
+    },
+    false,
+  );
+  const treeMenu = useCallback(
+    (options: Parameters<typeof documentMenu>[0]) =>
+      options.item.kind === 'nav' ? navMenu(options) : documentMenu(options),
+    [documentMenu, navMenu],
+  );
+
+  const handleTreeItemClick = useCallback(
+    (item: ITreeItem) => {
+      const targetNavId = item.kind === 'nav' ? item.id : item.nav_id;
+      if (targetNavId && targetNavId !== selectedId) {
+        handleSelect(targetNavId);
+      }
+      if (item.kind !== 'nav' && item.type === 2) {
+        onDocumentSelect?.(item);
+      }
+    },
+    [handleSelect, onDocumentSelect, selectedId],
+  );
+
+  const handleResizeStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!onWidthChange || !expend) return;
+      event.preventDefault();
+      const startX = event.clientX;
+      const startWidth = width;
+      const minWidth = Math.max(240, Math.round(window.innerWidth * 0.3));
+      const handleMove = (moveEvent: PointerEvent) => {
+        const nextWidth = Math.min(
+          Math.round(window.innerWidth * 0.65),
+          Math.max(minWidth, startWidth + moveEvent.clientX - startX),
+        );
+        onWidthChange(nextWidth);
+      };
+      const handleUp = () => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleUp);
+      };
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+    },
+    [expend, onWidthChange, width],
+  );
+
   const handleDeleteConfirmClose = useCallback(() => {
     setDeleteConfirmOpen(false);
     setDeletingNav(null);
@@ -448,13 +636,19 @@ const DocPageNavs = ({
   const showEmptySearch = isSearching && sortedNavs.length === 0;
 
   return (
-    <Box sx={{ position: 'relative' }}>
+    <Box
+      sx={{
+        position: 'relative',
+        flex: fill && expend ? 1 : expend ? '0 0 auto' : '0 0 40px',
+        minWidth: expend ? 0 : 40,
+      }}
+    >
       <Card
         sx={{
-          width: expend ? 220 : 0,
+          width: fill && expend ? '100%' : expend ? width : 0,
           height: '100%',
           mr: expend ? 2 : 0,
-          transition: 'width 0.1s ease-in-out, mr 0.1s ease-in-out',
+          transition: 'width 0.15s ease-in-out, margin-right 0.15s ease-in-out',
         }}
       >
         {loading ? (
@@ -463,29 +657,24 @@ const DocPageNavs = ({
           <EmptyState text='无搜索结果' sx={{ p: 4 }} />
         ) : (
           <>
-            <SortableContext
-              items={sortedNavs.map(n => n.id || '')}
-              strategy={verticalListSortingStrategy}
+            <Box
+              sx={{
+                height: 'calc(100vh - 216px)',
+                overflowY: 'auto',
+                p: 1,
+              }}
             >
-              <Stack
-                sx={{ maxHeight: 'calc(100vh - 216px)', overflowY: 'auto' }}
-              >
-                {sortedNavs.map((nav, i) => (
-                  <SortableNavItem
-                    key={nav.id}
-                    nav={nav}
-                    selected={selectedId === nav.id}
-                    onSelect={() => handleSelect(nav.id!)}
-                    onEdit={() => handleEdit(nav)}
-                    onPermission={() => handlePermission(nav)}
-                    onDelete={() => handleDeleteClick(nav)}
-                    showDelete={sortedNavs.length > 1}
-                    isLast={i === sortedNavs.length - 1}
-                    selectedItemRef={selectedItemRef}
-                  />
-                ))}
-              </Stack>
-            </SortableContext>
+              <DragTree
+                readOnly
+                supportSelect={false}
+                ref={dragTreeRef}
+                menu={treeMenu}
+                onItemClick={handleTreeItemClick}
+                data={treeData}
+                updateData={data => setTreeData([...data])}
+                virtualized
+              />
+            </Box>
             {!isSearching && (
               <Box sx={{ px: 2, py: 1, borderTop: 1, borderColor: 'divider' }}>
                 <Button
@@ -507,47 +696,87 @@ const DocPageNavs = ({
           </>
         )}
       </Card>
-      <Box
-        sx={{
-          position: 'absolute',
-          height: '40px',
-          width: '10px',
-          bgcolor: 'background.paper3',
-          borderRadius: '5px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          right: 3,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          ':hover': {
-            bgcolor: 'background.paper',
-            svg: {
-              color: 'text.tertiary',
-            },
-          },
-        }}
-        onClick={() => setExpend(!expend)}
-      >
-        <IconXiajiantou
+      {expend && onWidthChange && !fill && (
+        <Box
+          onPointerDown={handleResizeStart}
           sx={{
-            fontSize: 16,
-            color: '#cccccc',
-            transform: 'rotate(-90deg)',
-            transition: 'all 0.1s ease-in-out',
-            ...(expend && {
-              transform: 'rotate(90deg)',
-            }),
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: width - 4,
+            width: 8,
+            cursor: 'col-resize',
+            zIndex: 3,
+            bgcolor: 'transparent',
+            '&:after': {
+              content: '""',
+              position: 'absolute',
+              left: 3,
+              top: '50%',
+              width: 2,
+              height: 40,
+              borderRadius: 2,
+              bgcolor: 'divider',
+              transform: 'translateY(-50%)',
+            },
+            '&:hover': {
+              bgcolor: 'action.hover',
+              '&:after': { bgcolor: 'primary.main' },
+            },
           }}
         />
-      </Box>
+      )}
       <NavEditModal
         open={editOpen}
         onClose={handleEditClose}
         onSuccess={handleEditSuccess}
         nav={editingNav}
         kb_id={kb_id}
+      />
+      <DocListModals
+        kb_id={kb_id}
+        deleteOpen={deleteOpen}
+        opraData={opraData}
+        data={treeData}
+        list={modalList}
+        dragTreeRef={dragTreeRef}
+        importKey={importKey}
+        urlOpen={urlOpen}
+        summaryOpen={summaryOpen}
+        moreSummaryOpen={moreSummaryOpen}
+        statusOpen={statusOpen}
+        moveOpen={moveOpen}
+        propertiesOpen={propertiesOpen}
+        isBatch={isBatch}
+        refresh={refresh || (() => {})}
+        setData={setTreeData}
+        onCloseDelete={() => {
+          setDeleteOpen(false);
+          setOpraData([]);
+        }}
+        onCancelAddDoc={() => {
+          setUrlOpen(false);
+          setOpraData([]);
+        }}
+        onCloseSummary={() => setSummaryOpen(false)}
+        onCloseMoreSummary={() => setMoreSummaryOpen(false)}
+        onCloseStatus={() => setStatusOpen(null)}
+        onCloseMove={() => setMoveOpen(false)}
+        onCloseProperties={() => setPropertiesOpen(false)}
+        onOkProperties={() => {
+          setPropertiesOpen(false);
+          refresh?.();
+        }}
+        removeDeep={removeDeep}
+      />
+      <BatchZipImport
+        open={batchImportOpen}
+        parentId={batchImportParentId}
+        refresh={refresh}
+        onClose={() => {
+          setBatchImportOpen(false);
+          setBatchImportParentId(null);
+        }}
       />
       <NavPermissionModal
         open={permissionOpen}

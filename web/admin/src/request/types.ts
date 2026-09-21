@@ -1736,7 +1736,6 @@ export interface V1CreateUserReq {
   department_ids: string[];
   /** @minLength 8 */
   password: string;
-  primary_department: string;
   role: "manager" | "user";
 }
 
@@ -1875,7 +1874,7 @@ export interface V1NodeStatsResp {
   unpublished_count?: number;
   /** 未发布目录数量 */
   unreleased_nav_count?: number;
-  /** 未学习的文档数 */
+  /** 待建立索引的文档数 */
   unstudied_count?: number;
 }
 
@@ -1929,6 +1928,7 @@ export interface V1StatCountResp {
 }
 
 export interface V1UserInfoResp {
+  permission_levels_disabled?: boolean;
   account?: string;
   created_at?: string;
   id?: string;

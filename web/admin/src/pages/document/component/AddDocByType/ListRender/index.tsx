@@ -2,7 +2,7 @@ import { ConstsCrawlerSource } from '@/request';
 import { Box } from '@mui/material';
 import { useCallback, useMemo } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { FileImportMode, ListDataItem } from '..';
+import { ListDataItem } from '..';
 import { useGlobalQueue } from '../hooks/useGlobalQueue';
 import BatchActionBar from './Action';
 import ListRenderItem from './Item';
@@ -17,8 +17,6 @@ interface ListRenderProps {
   type: ConstsCrawlerSource;
   isSupportSelect: boolean;
   queue: ReturnType<typeof useGlobalQueue>;
-  fileImportMode: FileImportMode;
-  setFileImportMode: React.Dispatch<React.SetStateAction<FileImportMode>>;
 }
 
 interface FlattenedItem {
@@ -36,8 +34,6 @@ const ListRender = ({
   isSupportSelect,
   parent_id,
   queue,
-  fileImportMode,
-  setFileImportMode,
 }: ListRenderProps) => {
   // 将树形数据展平为线性列表（只包含展开的节点）
   const flattenedData = useMemo(() => {
@@ -187,8 +183,6 @@ const ListRender = ({
         isSupportSelect={isSupportSelect}
         parent_id={parent_id}
         queue={queue}
-        fileImportMode={fileImportMode}
-        setFileImportMode={setFileImportMode}
       />
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
         <Virtuoso

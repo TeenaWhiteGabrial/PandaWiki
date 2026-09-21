@@ -6,10 +6,12 @@ import {
 } from '@/request';
 import { useAppSelector } from '@/store';
 import { formatByte } from '@/utils';
+import { message } from '@/components/ui';
 import { alpha, Box, CircularProgress, Stack, useTheme } from '@mui/material';
 import { useCallback, useMemo, useState } from 'react';
+import { FileRejection } from 'react-dropzone';
 import { v4 as uuidv4 } from 'uuid';
-import { FileImportMode, ListDataItem } from '..';
+import { ListDataItem } from '..';
 import { NoParseTypes, TYPE_CONFIG } from '../constants';
 import { flattenCrawlerParseResponse } from '../util';
 
@@ -17,17 +19,9 @@ interface FileParseProps {
   type: ConstsCrawlerSource;
   parent_id: string | null;
   setData: React.Dispatch<React.SetStateAction<ListDataItem[]>>;
-  fileImportMode: FileImportMode;
-  setFileImportMode: React.Dispatch<React.SetStateAction<FileImportMode>>;
 }
 
-const FileParse = ({
-  type,
-  parent_id,
-  setData,
-  fileImportMode,
-  setFileImportMode,
-}: FileParseProps) => {
+const FileParse = ({ type, parent_id, setData }: FileParseProps) => {
   const { kb_id } = useAppSelector(state => state.config);
   const theme = useTheme();
   const [loading, setLoading] = useState(false);
@@ -39,8 +33,13 @@ const FileParse = ({
   }, [type]);
 
   const handleInitFiles = useCallback(
-    async (uploadFiles: File[]) => {
-      setFileImportMode('content-with-attachment');
+    async (uploadFiles: File[], rejectedFiles: FileRejection[] = []) => {
+      if (rejectedFiles.length > 0) {
+        message.error(
+          `${rejectedFiles.length} 个文件格式不受支持，请选择 Markdown、TXT、HTML、PDF、Word、Excel 或 PPT`,
+        );
+      }
+      if (uploadFiles.length === 0) return;
       if (NoParseTypes.includes(type)) {
         const newFileList: ListDataItem[] = uploadFiles.map(file => ({
           uuid: uuidv4(),
@@ -79,7 +78,7 @@ const FileParse = ({
         setData(prev => [...prev, ...flattenedData]);
       }
     },
-    [type, parent_id],
+    [kb_id, parent_id, setData, type],
   );
 
   return (
@@ -129,6 +128,7 @@ const FileParse = ({
       ) : (
         <Upload
           accept={TYPE_CONFIG[type].accept}
+          acceptDisplay={TYPE_CONFIG[type].acceptDisplay}
           multiple={isMultiple}
           type={'drag'}
           onChange={handleInitFiles}

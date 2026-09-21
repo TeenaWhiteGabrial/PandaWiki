@@ -109,7 +109,7 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 		Name:     req.Name,
 		Password: req.Password,
 		Role:     req.Role,
-	}, req.DepartmentIDs, req.PrimaryDepartment, consts.GetLicenseEdition(c))
+	}, req.DepartmentIDs, consts.GetLicenseEdition(c))
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to create user", err)
 	}
@@ -181,18 +181,18 @@ func (h *UserHandler) GetUserInfo(c echo.Context) error {
 	}
 
 	userInfo := &v1.UserInfoResp{
-		ID:                user.ID,
-		Account:           user.Account,
-		Name:              user.Name,
-		Role:              user.Role,
-		PermissionLevelID: user.PermissionLevelID,
-		IsToken:           authInfo.IsToken,
-		LastAccess:        &user.LastAccess,
-		CreatedAt:         user.CreatedAt,
+		PermissionLevelsDisabled: config.PermissionLevelsDisabled(),
+		ID:                       user.ID,
+		Account:                  user.Account,
+		Name:                     user.Name,
+		Role:                     user.Role,
+		PermissionLevelID:        user.PermissionLevelID,
+		IsToken:                  authInfo.IsToken,
+		LastAccess:               &user.LastAccess,
+		CreatedAt:                user.CreatedAt,
 	}
-	if departments, primaryDepartment, err := h.usecase.GetUserDepartments(ctx, user.ID); err == nil {
+	if departments, _, err := h.usecase.GetUserDepartments(ctx, user.ID); err == nil {
 		userInfo.DepartmentIDs = departments
-		userInfo.PrimaryDepartment = primaryDepartment
 	}
 
 	return h.NewResponseWithData(c, userInfo)

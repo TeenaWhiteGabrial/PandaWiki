@@ -1,16 +1,7 @@
 import Logo from '@/assets/images/logo.png';
-import { message, Modal } from '@/components/ui';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import {
-  Box,
-  Button,
-  IconButton,
-  Stack,
-  Tooltip,
-  useTheme,
-} from '@mui/material';
+import { Box, Button, Stack, useTheme } from '@mui/material';
 import { ConstsUserKBPermission, ConstsUserRole } from '@/request/types';
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import Avatar from '../Avatar';
 import { useAppSelector } from '@/store';
@@ -21,8 +12,6 @@ import {
   IconDuihualishi1,
   IconChilun,
   IconKehupingjia,
-  IconTianjia,
-  IconDengchu,
 } from '@panda-wiki/icons';
 
 const MENUS = [
@@ -71,17 +60,6 @@ const MENUS = [
     ],
   },
   {
-    label: '贡献',
-    value: '/contribute',
-    pathname: 'contribute',
-    icon: IconTianjia,
-    show: true,
-    perms: [
-      ConstsUserKBPermission.UserKBPermissionFullControl,
-      ConstsUserKBPermission.UserKBPermissionDataOperate,
-    ],
-  },
-  {
     label: '发布',
     value: '/release',
     pathname: 'release',
@@ -110,7 +88,6 @@ const Sidebar = () => {
   const { kbDetail, user, appBrand } = useAppSelector(state => state.config);
   const theme = useTheme();
   const navigate = useNavigate();
-  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const menus = useMemo(() => {
     return MENUS.filter(it => {
       if (
@@ -159,6 +136,9 @@ const Sidebar = () => {
         top: 0,
         left: 0,
         overflow: 'auto',
+        'body.document-workbench-fullscreen &': {
+          display: 'none',
+        },
       }}
     >
       <Stack
@@ -232,81 +212,6 @@ const Sidebar = () => {
           );
         })}
       </Stack>
-      <Stack gap={1} sx={{ flexShrink: 0 }}>
-        <Stack
-          direction='row'
-          alignItems='center'
-          justifyContent='space-between'
-          sx={{
-            px: 1,
-            py: 1.25,
-            borderTop: `1px solid ${theme.palette.divider}`,
-            gap: 1,
-          }}
-        >
-          <Box
-            sx={{
-              flexGrow: 1,
-              minWidth: 0,
-              fontSize: 13,
-              color: 'text.secondary',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {user.account || '当前用户'}
-          </Box>
-          <Tooltip arrow title='退出登录'>
-            <IconButton
-              size='small'
-              sx={{
-                flexShrink: 0,
-                color: 'text.secondary',
-                '&:hover': {
-                  color: 'primary.main',
-                },
-              }}
-              onClick={() => {
-                setLogoutConfirmOpen(true);
-              }}
-            >
-              <IconDengchu sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      </Stack>
-      <Modal
-        open={logoutConfirmOpen}
-        onCancel={() => setLogoutConfirmOpen(false)}
-        onOk={() => {
-          message.success('退出登录成功，请重新登录');
-          setTimeout(() => {
-            localStorage.removeItem('panda_wiki_token');
-            navigate('/login');
-          }, 1500);
-        }}
-        cancelButtonProps={{
-          variant: 'outlined',
-          sx: { '&:hover': { borderColor: 'grey.300' } },
-        }}
-        okButtonProps={{
-          variant: 'contained',
-          sx: {
-            bgcolor: 'primary.main',
-            '&:hover': { bgcolor: 'primary.dark' },
-          },
-        }}
-        title={
-          <Stack direction='column' gap={3}>
-            <Stack direction='row' alignItems='center' gap={1}>
-              <ErrorOutlineIcon sx={{ color: 'error.main', fontSize: 24 }} />
-              <span style={{ fontWeight: 'bold' }}>确定要退出当前账号？</span>
-            </Stack>
-          </Stack>
-        }
-        transitionDuration={300}
-      />
     </Stack>
   );
 };

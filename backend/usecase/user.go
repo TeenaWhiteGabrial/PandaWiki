@@ -44,24 +44,14 @@ func NewUserUsecase(repo *pg.UserRepository, enterpriseRepo *pg.EnterpriseReposi
 	}, nil
 }
 
-func (u *UserUsecase) CreateUser(ctx context.Context, user *domain.User, departmentIDs []string, primaryDepartment string, edition consts.LicenseEdition) error {
+func (u *UserUsecase) CreateUser(ctx context.Context, user *domain.User, departmentIDs []string, edition consts.LicenseEdition) error {
 	if user.Role == consts.UserRoleAdmin {
 		return errors.New("admin user cannot be created from ui")
 	}
 	if len(departmentIDs) == 0 {
 		return errors.New("department is required")
 	}
-	hasPrimary := false
-	for _, departmentID := range departmentIDs {
-		if departmentID == primaryDepartment {
-			hasPrimary = true
-			break
-		}
-	}
-	if !hasPrimary {
-		return errors.New("primary department must be included in departments")
-	}
-	return u.repo.CreateUser(ctx, user, departmentIDs, primaryDepartment, edition, u.enterpriseRepo)
+	return u.repo.CreateUser(ctx, user, departmentIDs, edition, u.enterpriseRepo)
 }
 
 func (u *UserUsecase) VerifyUserAndGenerateToken(ctx context.Context, req v1.LoginReq) (string, error) {

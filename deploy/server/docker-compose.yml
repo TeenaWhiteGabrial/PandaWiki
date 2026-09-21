@@ -1,8 +1,12 @@
+x-pandawiki-log-labels: &pandawiki-log-labels
+  com.pandawiki.logs: 'true'
+
 services:
   postgres:
     image: ${POSTGRES_IMAGE}
     container_name: ${PROJECT_NAME}-postgres
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -22,6 +26,7 @@ services:
     image: ${REDIS_IMAGE}
     container_name: ${PROJECT_NAME}-redis
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     ports:
       - '${REDIS_PORT}:6379'
     volumes:
@@ -36,6 +41,7 @@ services:
     image: ${NATS_IMAGE}
     container_name: ${PROJECT_NAME}-nats
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     command:
       - --jetstream
       - --store_dir
@@ -46,29 +52,11 @@ services:
     volumes:
       - pandawiki_nats:/data
 
-  minio:
-    image: ${MINIO_IMAGE}
-    container_name: ${PROJECT_NAME}-minio
-    restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address ":9001"
-    ports:
-      - '${MINIO_PORT}:9000'
-      - '${MINIO_CONSOLE_PORT}:9001'
-    volumes:
-      - pandawiki_minio:/data
-    healthcheck:
-      test: ['CMD-SHELL', 'curl -f http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1 || exit 1']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   qdrant:
     image: ${QDRANT_IMAGE}
     container_name: ${PROJECT_NAME}-qdrant
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     ulimits:
       nofile:
         soft: 65536
@@ -80,32 +68,11 @@ services:
     volumes:
       - pandawiki_qdrant:/qdrant/storage
 
-  crawler:
-    image: ${CRAWLER_IMAGE}
-    container_name: ${PROJECT_NAME}-crawler
-    restart: unless-stopped
-    init: true
-    environment:
-      GLOG_GLOBAL_LEVEL: info
-      NAMESPACE: anydoc
-      MQ_NATS_URL: nats://${PROJECT_NAME}-nats:4222
-      OSS_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      OSS_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      OSS_MINIO_ENDPOINT: ${PROJECT_NAME}-minio:9000
-    ports:
-      - '${CRAWLER_PORT}:8080'
-    depends_on:
-      postgres:
-        condition: service_healthy
-      nats:
-        condition: service_started
-      minio:
-        condition: service_healthy
-
   preview:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/gotenberg:8
     container_name: ${PROJECT_NAME}-preview
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     command:
       - gotenberg
       - --api-timeout=300s
@@ -117,6 +84,7 @@ services:
     image: ${RAGLITE_IMAGE}
     container_name: ${PROJECT_NAME}-raglite
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     environment:
       GIN_MODE: release
       API_KEY: ${RAGLITE_API_KEY}
@@ -126,9 +94,11 @@ services:
       DATABASE_POSTGRESQL_DATABASE: ${RAGLITE_POSTGRES_DB}
       DATABASE_QDRANT_HOST: ${PROJECT_NAME}-qdrant
       DATABASE_QDRANT_API_KEY: ${QDRANT_API_KEY}
-      STORAGE_MINIO_ENDPOINT: ${PROJECT_NAME}-minio:9000
-      STORAGE_MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      STORAGE_MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      STORAGE_MINIO_ENDPOINT: ${OSS_S3_ENDPOINT}
+      STORAGE_MINIO_ACCESS_KEY_ID: ${OSS_ACCESS_KEY}
+      STORAGE_MINIO_SECRET_ACCESS_KEY: ${OSS_SECRET_KEY}
+      STORAGE_MINIO_USE_SSL: ${OSS_USE_SSL}
+      STORAGE_MINIO_BUCKET_NAME: ${OSS_BUCKET_NAME}
       NATS_URL: nats://${PROJECT_NAME}-nats:4222
       EMBEDDER_RPM: 800
       LLM_RPM: 50
@@ -141,8 +111,6 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
-      minio:
-        condition: service_healthy
       nats:
         condition: service_started
 
@@ -154,27 +122,28 @@ services:
         VERSION: local
     container_name: ${PROJECT_NAME}-api
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     environment:
       ENV: production
+      SERVICE_NAME: api
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       PG_DSN: host=${PROJECT_NAME}-postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable TimeZone=Asia/Shanghai
       MQ_NATS_SERVER: nats://${PROJECT_NAME}-nats:4222
       REDIS_ADDR: ${PROJECT_NAME}-redis:6379
-      S3_ENDPOINT: ${PROJECT_NAME}-minio:9000
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      IMAGE_OSS_ENDPOINT: ${IMAGE_OSS_ENDPOINT:-}
-      IMAGE_OSS_ACCESS_KEY: ${IMAGE_OSS_ACCESS_KEY:-}
-      IMAGE_OSS_SECRET_KEY: ${IMAGE_OSS_SECRET_KEY:-}
-      IMAGE_OSS_BUCKET: ${IMAGE_OSS_BUCKET:-}
-      IMAGE_OSS_DOWNLOAD_URL: ${IMAGE_OSS_DOWNLOAD_URL:-}
-      IMAGE_OSS_REGION: ${IMAGE_OSS_REGION:-}
+      OSS_ENDPOINT: ${OSS_ENDPOINT}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY}
+      OSS_BUCKET_NAME: ${OSS_BUCKET_NAME}
+      OSS_DOWNLOAD_URL: ${OSS_DOWNLOAD_URL}
+      OSS_REGION: ${OSS_REGION}
       RAG_CT_RAG_BASE_URL: http://${PROJECT_NAME}-raglite:5050
       SENTRY_ENABLED: ${SENTRY_ENABLED}
       LOG_LEVEL: ${LOG_LEVEL}
+      LOG_STORE_URL: http://${PROJECT_NAME}-loki:3100
       CADDY_API: ''
-      FILE_BASE_URL: http://${SERVER_IP}:${API_PORT}/static-file
-      ANYDOC_CRAWLER_BASE_URL: http://${PROJECT_NAME}-crawler:8080
+      FILE_BASE_URL: ${OSS_DOWNLOAD_URL}/static-file
+      ANYDOC_STATIC_FILE_BASE_URL: ${OSS_DOWNLOAD_URL}/static-file
       PREVIEW_BASE_URL: http://${PROJECT_NAME}-preview:3000
     ports:
       - '${API_PORT}:8000'
@@ -185,13 +154,11 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
-      minio:
-        condition: service_healthy
       raglite:
         condition: service_started
-      crawler:
-        condition: service_started
       preview:
+        condition: service_started
+      loki:
         condition: service_started
 
   consumer:
@@ -200,18 +167,25 @@ services:
       dockerfile: Dockerfile.consumer
     container_name: ${PROJECT_NAME}-consumer
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     environment:
       ENV: production
+      SERVICE_NAME: consumer
       PG_DSN: host=${PROJECT_NAME}-postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable TimeZone=Asia/Shanghai
       MQ_NATS_SERVER: nats://${PROJECT_NAME}-nats:4222
       REDIS_ADDR: ${PROJECT_NAME}-redis:6379
-      S3_ENDPOINT: ${PROJECT_NAME}-minio:9000
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OSS_ENDPOINT: ${OSS_ENDPOINT}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY}
+      OSS_BUCKET_NAME: ${OSS_BUCKET_NAME}
+      OSS_DOWNLOAD_URL: ${OSS_DOWNLOAD_URL}
+      OSS_REGION: ${OSS_REGION}
       RAG_CT_RAG_BASE_URL: http://${PROJECT_NAME}-raglite:5050
       SENTRY_ENABLED: ${SENTRY_ENABLED}
       LOG_LEVEL: ${LOG_LEVEL}
-      FILE_BASE_URL: http://${SERVER_IP}:${API_PORT}/static-file
-      ANYDOC_CRAWLER_BASE_URL: http://${PROJECT_NAME}-crawler:8080
+      LOG_STORE_URL: http://${PROJECT_NAME}-loki:3100
+      FILE_BASE_URL: ${OSS_DOWNLOAD_URL}/static-file
+      ANYDOC_STATIC_FILE_BASE_URL: ${OSS_DOWNLOAD_URL}/static-file
       PREVIEW_BASE_URL: http://${PROJECT_NAME}-preview:3000
     depends_on:
       api:
@@ -220,10 +194,11 @@ services:
   admin-build:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/node:22-alpine
     container_name: ${PROJECT_NAME}-admin-build
+    labels: *pandawiki-log-labels
     working_dir: /workspace/web
     environment:
       TARGET: http://${SERVER_IP}:${API_PORT}
-      STATIC_FILE_TARGET: http://${SERVER_IP}:${MINIO_PORT}
+      STATIC_FILE_TARGET: ${OSS_DOWNLOAD_URL}
       SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
       NODE_OPTIONS: --max-old-space-size=4096
       CI: 'true'
@@ -241,10 +216,11 @@ services:
   app-build:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/node:22-alpine
     container_name: ${PROJECT_NAME}-app-build
+    labels: *pandawiki-log-labels
     working_dir: /workspace/web
     environment:
       TARGET: http://${SERVER_IP}:${API_PORT}
-      STATIC_FILE_TARGET: http://${SERVER_IP}:${MINIO_PORT}
+      STATIC_FILE_TARGET: ${OSS_DOWNLOAD_URL}
       SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
       DEV_KB_ID: ''
       NODE_OPTIONS: --max-old-space-size=4096
@@ -266,6 +242,9 @@ services:
       dockerfile: Dockerfile
     container_name: ${PROJECT_NAME}-admin
     restart: unless-stopped
+    labels: *pandawiki-log-labels
+    environment:
+      OSS_DOWNLOAD_URL: ${OSS_DOWNLOAD_URL}
     ports:
       - '${ADMIN_PORT}:80'
     depends_on:
@@ -278,6 +257,7 @@ services:
       dockerfile: Dockerfile
     container_name: ${PROJECT_NAME}-app
     restart: unless-stopped
+    labels: *pandawiki-log-labels
     environment:
       PORT: 3010
       HOSTNAME: 0.0.0.0
@@ -287,11 +267,39 @@ services:
       app-build:
         condition: service_completed_successfully
 
+  loki:
+    image: grafana/loki:3.7.0
+    container_name: ${PROJECT_NAME}-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./logging/loki.yml:/etc/loki/config.yml:ro
+      - pandawiki_loki:/loki
+    mem_limit: 768m
+
+  alloy:
+    image: grafana/alloy:v1.11.3
+    container_name: ${PROJECT_NAME}-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./logging/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - pandawiki_alloy:/var/lib/alloy/data
+    mem_limit: 256m
+    depends_on:
+      loki:
+        condition: service_started
+
 volumes:
   pandawiki_postgres:
   pandawiki_redis:
   pandawiki_nats:
-  pandawiki_minio:
   pandawiki_qdrant:
   pandawiki_raglite:
   pandawiki_pnpm_store:
+  pandawiki_loki:
+  pandawiki_alloy:

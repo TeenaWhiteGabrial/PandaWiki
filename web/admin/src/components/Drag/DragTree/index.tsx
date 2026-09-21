@@ -33,6 +33,7 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
       virtualized = false,
       virtualizedHeight,
       registerDragHandlers,
+      onItemClick,
     },
     ref,
   ) => {
@@ -64,6 +65,7 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
           scrollToItem: (itemId: string) => {
             sortableTreeRef.current?.scrollToItem(itemId);
           },
+          onItemClick,
         }}
       >
         <SortableTree

@@ -57,6 +57,9 @@ const DocPropertiesModal = ({
   onOk,
   isBatch = false,
 }: DocPropertiesModalProps) => {
+  const levelsDisabled = useAppSelector(
+    state => state.config.user?.permission_levels_disabled,
+  );
   const { kb_id, nav_id } = useAppSelector(state => state.config);
   const [loading, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -416,35 +419,39 @@ const DocPropertiesModal = ({
                   }`
                 : '公共权限：全员可见'}
             </StyledText>
-            <StyledText>
-              等级权限：
-              {selectedLevel
-                ? `${selectedLevel.name}（${selectedLevel.rank}）及以上`
-                : '不限制'}
-            </StyledText>
+            {!levelsDisabled && (
+              <StyledText>
+                等级权限：
+                {selectedLevel
+                  ? `${selectedLevel.name}（${selectedLevel.rank}）及以上`
+                  : '不限制'}
+              </StyledText>
+            )}
           </Stack>
         </FormItem>
 
-        <FormItem label='最低权限等级'>
-          <Controller
-            name='min_permission_level_id'
-            control={control}
-            render={({ field }) => (
-              <Select
-                value={field.value}
-                onChange={field.onChange}
-                style={{ width: '100%' }}
-                options={[
-                  { value: '', label: '不限制' },
-                  ...availablePermissionLevels.map(item => ({
-                    value: item.id,
-                    label: `${item.name}（${item.rank}）`,
-                  })),
-                ]}
-              />
-            )}
-          />
-        </FormItem>
+        {!levelsDisabled && (
+          <FormItem label='最低权限等级'>
+            <Controller
+              name='min_permission_level_id'
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onChange={field.onChange}
+                  style={{ width: '100%' }}
+                  options={[
+                    { value: '', label: '不限制' },
+                    ...availablePermissionLevels.map(item => ({
+                      value: item.id,
+                      label: `${item.name}（${item.rank}）`,
+                    })),
+                  ]}
+                />
+              )}
+            />
+          </FormItem>
+        )}
 
         {scopeType === 'department' && (
           <>

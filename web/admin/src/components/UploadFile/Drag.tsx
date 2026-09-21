@@ -10,11 +10,14 @@ const FILE_EXTENSION_TO_MIME: Record<string, string> = {
   '.txt': 'text/plain',
   '.md': 'text/markdown',
   '.html': 'text/html',
+  '.htm': 'text/html',
   // Office 文档
   '.xls': 'application/vnd.ms-excel',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '.docx':
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.doc': 'application/msword',
+  '.ppt': 'application/vnd.ms-powerpoint',
   '.pptx':
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   '.pdf': 'application/pdf',

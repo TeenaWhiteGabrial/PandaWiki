@@ -1,0 +1,17 @@
+DROP TABLE IF EXISTS publication_jobs;
+DROP TABLE IF EXISTS retrieval_candidates;
+DROP TABLE IF EXISTS retrieval_runs;
+DROP TABLE IF EXISTS chat_run_events;
+DROP TABLE IF EXISTS chat_citations;
+DROP TABLE IF EXISTS chat_runs;
+DROP TABLE IF EXISTS runtime_logs;
+DROP TABLE IF EXISTS publication_job_steps;
+DROP TABLE IF EXISTS document_publication_state;
+DROP INDEX IF EXISTS uq_publication_attempts_active;
+DROP TABLE IF EXISTS publication_attempts;
+DROP TABLE IF EXISTS index_builds;
+DROP INDEX IF EXISTS uq_index_generations_active;
+DROP TABLE IF EXISTS index_generations;
+DROP TABLE IF EXISTS parse_artifacts;
+DROP TABLE IF EXISTS chunks;
+DROP TABLE IF EXISTS document_revisions;

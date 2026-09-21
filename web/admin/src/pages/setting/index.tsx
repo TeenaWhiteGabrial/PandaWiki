@@ -3,6 +3,8 @@ import Member from '@/components/System/component/Member';
 import MCPAccess from '@/components/System/component/MCPAccess';
 import ModelConfig from '@/components/System/component/ModelConfig';
 import EnterpriseAccess from '@/components/System/component/EnterpriseAccess';
+import CardPermissions from './component/CardPermissions';
+import CardRuntimeLogs from './component/CardRuntimeLogs';
 import { useURLSearchParams } from '@/hooks';
 import { getApiV1KnowledgeBaseDetail } from '@/request/KnowledgeBase';
 import { getApiV1ModelList } from '@/request/Model';
@@ -23,6 +25,8 @@ const SettingTabs: { label: string; id: string }[] = [
   { label: 'MCP 接入', id: 'mcp-access' },
   { label: '用户管理', id: 'user-management' },
   { label: '组织和权限', id: 'enterprise-access' },
+  { label: '权限功能', id: 'permission-settings' },
+  { label: '运行日志', id: 'runtime-logs' },
 ];
 
 const Setting = () => {
@@ -148,6 +152,10 @@ const Setting = () => {
         {activeTab === 'user-management' && <Member />}
         {activeTab === 'mcp-access' && <MCPAccess />}
         {activeTab === 'enterprise-access' && <EnterpriseAccess />}
+        {activeTab === 'permission-settings' &&
+          user?.role === ConstsUserRole.UserRoleAdmin && <CardPermissions />}
+        {activeTab === 'runtime-logs' &&
+          user?.role === ConstsUserRole.UserRoleAdmin && <CardRuntimeLogs />}
         {activeTab === 'model-config' && (
           <ModelConfig
             onCloseModal={() => undefined}

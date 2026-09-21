@@ -35,19 +35,15 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
     handleSubmit,
     formState: { errors },
     reset,
-    watch,
-    setValue,
   } = useForm({
     defaultValues: {
       account: '',
       name: '',
       role: 'user' as Role,
       department_ids: [] as string[],
-      primary_department: '',
     },
   });
 
-  const departmentIDs = watch('department_ids');
   const departmentTree = useMemo(
     () => buildDepartmentTree(departments),
     [departments],
@@ -119,7 +115,6 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
         ]),
       ],
       password,
-      primary_department: data.primary_department,
       role: data.role,
     };
     const onSuccess = () => {
@@ -269,44 +264,11 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
                 departments={departmentTree}
                 flatDepartments={flatDepartments}
                 value={field.value || []}
-                onChange={newValue => {
-                  field.onChange(newValue);
-                  // 如果主部门不在新选中列表中，清空主部门
-                  const currentPrimary = watch('primary_department');
-                  if (currentPrimary && !newValue.includes(currentPrimary)) {
-                    setValue('primary_department', '');
-                  }
-                }}
-                multiple
+                onChange={field.onChange}
+                multiple={false}
                 label='所属部门'
                 error={!!fieldState.error}
                 helperText={fieldState.error?.message}
-              />
-            )}
-          />
-        </FormItem>
-        <FormItem label='主部门' required sx={{ mt: 2 }}>
-          <Controller
-            control={control}
-            name='primary_department'
-            rules={{
-              required: '请选择主部门',
-            }}
-            render={({ field, fieldState }) => (
-              <DepartmentTreeSelect
-                departments={departmentTree}
-                flatDepartments={flatDepartments}
-                value={field.value ? [field.value] : []}
-                onChange={newValue => {
-                  field.onChange(newValue[0] || '');
-                }}
-                multiple={false}
-                label='主部门'
-                error={!!fieldState.error}
-                helperText={fieldState.error?.message}
-                excludeIds={flatDepartments
-                  .filter(d => !departmentIDs?.includes(d.id))
-                  .map(d => d.id)}
               />
             )}
           />

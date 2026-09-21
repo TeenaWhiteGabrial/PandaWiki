@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"github.com/chaitin/panda-wiki/config"
 
 	"gorm.io/gorm"
 
@@ -55,10 +56,17 @@ func (r *EnterpriseRepository) UpsertDepartment(ctx context.Context, department 
 }
 
 func (r *EnterpriseRepository) DeleteDepartment(ctx context.Context, id string) error {
+	var userCount int64
+	if err := r.db.WithContext(ctx).
+		Model(&domain.UserDepartment{}).
+		Where("department_id = ?", id).
+		Count(&userCount).Error; err != nil {
+		return err
+	}
+	if userCount > 0 {
+		return fmt.Errorf("department has %d users and cannot be deleted", userCount)
+	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("department_id = ?", id).Delete(&domain.UserDepartment{}).Error; err != nil {
-			return err
-		}
 		return tx.Delete(&domain.Department{}, "id = ?", id).Error
 	})
 }
@@ -110,7 +118,7 @@ func (r *EnterpriseRepository) GetPermissionLevelByID(ctx context.Context, id st
 	return &level, nil
 }
 
-func (r *EnterpriseRepository) UpdateUserEnterpriseAccess(ctx context.Context, userID, permissionLevelID string, departmentIDs []string, primaryDepartment string) error {
+func (r *EnterpriseRepository) UpdateUserEnterpriseAccess(ctx context.Context, userID, permissionLevelID string, departmentIDs []string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		updateMap := map[string]any{
 			"permission_level_id": nil,
@@ -118,10 +126,12 @@ func (r *EnterpriseRepository) UpdateUserEnterpriseAccess(ctx context.Context, u
 		if permissionLevelID != "" {
 			updateMap["permission_level_id"] = permissionLevelID
 		}
-		if err := tx.Model(&domain.User{}).Where("id = ?", userID).Updates(updateMap).Error; err != nil {
-			return err
-		}
+		if !config.PermissionLevelsDisabled() {
+			if err := tx.Model(&domain.User{}).Where("id = ?", userID).Updates(updateMap).Error; err != nil {
+				return err
+			}
 
+		}
 		if err := tx.Where("user_id = ?", userID).Delete(&domain.UserDepartment{}).Error; err != nil {
 			return err
 		}
@@ -131,14 +141,17 @@ func (r *EnterpriseRepository) UpdateUserEnterpriseAccess(ctx context.Context, u
 		}
 
 		rows := make([]domain.UserDepartment, 0, len(departmentIDs))
-		for _, departmentID := range departmentIDs {
+		for index, departmentID := range departmentIDs {
 			if departmentID == "" {
 				continue
 			}
 			rows = append(rows, domain.UserDepartment{
 				UserID:       userID,
 				DepartmentID: departmentID,
-				IsPrimary:    departmentID == primaryDepartment,
+				// The final ID is the selected leaf department. Ancestors are
+				// retained for inherited department access, but the user has one
+				// effective department only.
+				IsPrimary: index == len(departmentIDs)-1,
 			})
 		}
 		if len(rows) == 0 {
@@ -158,21 +171,23 @@ func (r *EnterpriseRepository) GetUserAccessContext(ctx context.Context, userID 
 		PrincipalID: userID,
 	}
 
-	if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {
-		level, err := r.GetPermissionLevelByID(ctx, *user.PermissionLevelID)
-		if err != nil {
-			return nil, err
-		}
-		result.PermissionLevelID = level.ID
-		result.PermissionLevelRank = level.Rank
-	} else {
-		level, err := r.GetDefaultPermissionLevel(ctx)
-		if err == nil {
+	if !config.PermissionLevelsDisabled() {
+		if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {
+			level, err := r.GetPermissionLevelByID(ctx, *user.PermissionLevelID)
+			if err != nil {
+				return nil, err
+			}
 			result.PermissionLevelID = level.ID
 			result.PermissionLevelRank = level.Rank
+		} else {
+			level, err := r.GetDefaultPermissionLevel(ctx)
+			if err == nil {
+				result.PermissionLevelID = level.ID
+				result.PermissionLevelRank = level.Rank
+			}
 		}
-	}
 
+	}
 	ids := make([]string, 0)
 	if err := r.db.WithContext(ctx).Model(&domain.UserDepartment{}).Where("user_id = ?", userID).Pluck("department_id", &ids).Error; err != nil {
 		return nil, err

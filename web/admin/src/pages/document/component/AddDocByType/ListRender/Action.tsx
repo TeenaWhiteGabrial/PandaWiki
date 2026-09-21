@@ -1,5 +1,6 @@
 import {
   ConstsCrawlerSource,
+  postApiV1CrawlerExport,
   postApiV1CrawlerParse,
   postApiV1Node,
 } from '@/request';
@@ -13,15 +14,13 @@ import {
   Button,
   Checkbox,
   CircularProgress,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
   Stack,
   useTheme,
 } from '@mui/material';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { FileImportMode, ListDataItem } from '..';
+import { useCallback, useEffect, useMemo } from 'react';
+import { ListDataItem } from '..';
 import { useGlobalQueue } from '../hooks/useGlobalQueue';
+import { pollCrawlerResults } from '../util';
 
 interface BatchActionBarProps {
   loading: boolean;
@@ -33,8 +32,6 @@ interface BatchActionBarProps {
   isSupportSelect: boolean;
   parent_id: string | null;
   queue: ReturnType<typeof useGlobalQueue>;
-  fileImportMode: FileImportMode;
-  setFileImportMode: React.Dispatch<React.SetStateAction<FileImportMode>>;
 }
 
 const BatchActionBar = (props: BatchActionBarProps) => {
@@ -50,13 +47,8 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     isSupportSelect,
     parent_id,
     queue,
-    fileImportMode,
-    setFileImportMode,
   } = props;
   const isFileImportType = type === ConstsCrawlerSource.CrawlerSourceFile;
-
-  // 使用 ref 记录已经处理过的文件 UUID，避免重复上传
-  const uploadedUuidsRef = useRef<Set<string>>(new Set());
 
   const getFileExt = useCallback((name?: string) => {
     return (name?.split('.').pop() || '').trim().toLowerCase();
@@ -91,18 +83,24 @@ const BatchActionBar = (props: BatchActionBarProps) => {
       const normalizedFileType = getFileExt(
         item.file_name || item.title || item.file_type,
       );
-      const previewKey =
-        normalizedFileType === 'pdf'
-          ? item.file_key || item.id
-          : shouldGeneratePdfPreview(item)
-            ? (
-                await postApiV1FilePreviewGenerate({
-                  file_key: item.file_key || item.id || '',
-                  file_name: item.file_name || item.title || 'file',
-                  kb_id,
-                })
-              )?.preview_key
-            : undefined;
+      let previewKey: string | undefined;
+      if (normalizedFileType === 'pdf') {
+        previewKey = item.file_key || item.id;
+      } else if (shouldGeneratePdfPreview(item)) {
+        try {
+          previewKey = (
+            await postApiV1FilePreviewGenerate({
+              file_key: item.file_key || item.id || '',
+              file_name: item.file_name || item.title || 'file',
+              kb_id,
+            })
+          )?.preview_key;
+        } catch {
+          // 文件本身已经上传成功，预览转换失败不应阻止文档创建。
+          // 这种情况下仍保留原文件，用户可以下载查看或稍后重试预览。
+          previewKey = undefined;
+        }
+      }
       return {
         file_key: item.file_key || item.id,
         file_name: item.file_name || item.title,
@@ -114,6 +112,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
   );
 
   const {
+    uploadErrorCount,
     parseErrorCount,
     importErrorCount,
     parsedCount,
@@ -121,6 +120,8 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     loadingCount,
   } = useMemo(() => {
     return {
+      uploadErrorCount: data.filter(item => item.status === 'upload-error')
+        .length,
       parseErrorCount: data.filter(item => item.status === 'parse-error')
         .length,
       parsedCount: data.filter(item => item.status === 'parsed').length,
@@ -128,7 +129,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
         .length,
       importedCount: data.filter(item => item.status === 'imported').length,
       loadingCount: data.filter(item =>
-        ['parsing', 'importing'].includes(item.status),
+        ['uploading', 'parsing', 'importing'].includes(item.status),
       ).length,
     };
   }, [data]);
@@ -246,12 +247,6 @@ const BatchActionBar = (props: BatchActionBarProps) => {
       return;
     }
 
-    const importingFolderIds = new Set(
-      itemsToImport
-        .filter(item => !item.file && item.id)
-        .map(item => item.id!) as string[],
-    );
-
     const itemUuids = itemsToImport.map(item => item.uuid);
 
     setData(prev =>
@@ -307,24 +302,52 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               }),
             );
           } else {
-            const attachment = await buildAttachmentMeta(item);
-            let nextContent = '';
-            if (
-              fileImportMode === 'content-with-attachment' &&
-              isMarkdownFile(item)
-            ) {
-              nextContent = item.content || '';
-              if (!nextContent.trim()) {
-                throw new Error('未获取到转换后的 Markdown 内容');
+            const markdown = isMarkdownFile(item);
+            let nextContent = item.content || '';
+            if (!markdown) {
+              // 文件型文档保留原文件用于预览，同时提取一份内部 Markdown
+              // 作为后续发布和智能问答的知识内容。
+              try {
+                const parseResp = await postApiV1CrawlerParse({
+                  crawler_source: type,
+                  key: item.file_key || item.id || '',
+                  kb_id,
+                  filename: item.file_name || item.title || 'file',
+                });
+                const exportResp = await postApiV1CrawlerExport({
+                  kb_id,
+                  id: parseResp.id || '',
+                  doc_id: parseResp.docs?.value?.id || item.file_key || '',
+                  file_type: item.file_type || '',
+                });
+                if (exportResp.task_id) {
+                  const result = await pollCrawlerResults(exportResp.task_id);
+                  nextContent = result.content || '';
+                }
+              } catch (error) {
+                // 不阻止原文件导入；没有提取内容时仍可预览和下载。
+                nextContent = '';
+                console.warn('文件文本提取失败，文档仍将以只读文件导入', error);
               }
             }
+            if (markdown && !nextContent.trim()) {
+              throw new Error('未获取到 Markdown 内容');
+            }
+            const attachment = markdown
+              ? undefined
+              : await buildAttachmentMeta(item);
             const nodeResp = await postApiV1Node({
               name: item.title!,
-              content: nextContent,
-              content_type: 'md',
-              meta: {
-                attachments: [attachment],
-              },
+              content: markdown ? nextContent : '',
+              content_type: markdown ? 'md' : 'file',
+              meta: attachment
+                ? {
+                    ...attachment,
+                    // 文件型文档直接绑定 OSS 文件，不创建空白正文。
+                    file_readonly: true,
+                    content_type: 'file',
+                  }
+                : undefined,
               parent_id: actualParentId,
               type: 2,
               kb_id,
@@ -359,9 +382,36 @@ const BatchActionBar = (props: BatchActionBarProps) => {
         }
       });
     }
-  }, [data, setData, kb_id, isSupportSelect, checked, parent_id, queue]);
+  }, [
+    buildAttachmentMeta,
+    checked,
+    data,
+    isMarkdownFile,
+    isSupportSelect,
+    kb_id,
+    nav_id,
+    parent_id,
+    queue,
+    setData,
+  ]);
 
   const handleBatchParse = useCallback(async () => {
+    if (isFileImportType) {
+      const failedUploads = data.filter(item => item.status === 'upload-error');
+      if (failedUploads.length === 0) {
+        message.warning('没有需要重试的文件');
+        return;
+      }
+      setData(prev =>
+        prev.map(item =>
+          item.status === 'upload-error'
+            ? { ...item, status: 'common', summary: '', progress: 0 }
+            : item,
+        ),
+      );
+      return;
+    }
+
     // 筛选所有状态为 'parse-error' 的数据
     let itemsToParse = data.filter(item => item.status === 'parse-error');
 
@@ -378,7 +428,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     }
 
     handleParse(itemsToParse);
-  }, [checked, data, handleParse, isFileImportType, isSupportSelect]);
+  }, [checked, data, handleParse, isFileImportType, isSupportSelect, setData]);
 
   /**
    * 文件上传函数 - 上传文件到服务器
@@ -386,6 +436,14 @@ const BatchActionBar = (props: BatchActionBarProps) => {
    */
   const handleUploadFile = useCallback(
     async (items: ListDataItem[]) => {
+      const itemUuids = items.map(item => item.uuid);
+      setData(prev =>
+        prev.map(item =>
+          itemUuids.includes(item.uuid)
+            ? { ...item, status: 'uploading', summary: '', progress: 0 }
+            : item,
+        ),
+      );
       const uploadedUuids: string[] = []; // 记录成功上传的文件 UUID
       const uploadedFileMap = new Map<
         string,
@@ -396,14 +454,41 @@ const BatchActionBar = (props: BatchActionBarProps) => {
       await Promise.all(
         items.map(item =>
           queue.enqueue(async () => {
-            if (!item.fileData) {
-              return;
-            }
-
             try {
+              if (!item.fileData) {
+                throw new Error('找不到待上传的本地文件，请重新选择');
+              }
+              const originalType = getFileExt(item.fileData.name);
+              if (originalType === 'md' || originalType === 'markdown') {
+                const content = await item.fileData.text();
+                if (!content.trim()) {
+                  throw new Error('Markdown 文件内容为空');
+                }
+                const title = getFileBaseName(item.fileData.name);
+                setData(prev =>
+                  prev.map(prevItem =>
+                    prevItem.uuid === item.uuid
+                      ? {
+                          ...prevItem,
+                          title,
+                          file_name: item.fileData?.name,
+                          file_type: originalType,
+                          content,
+                          import_kind: 'markdown',
+                          summary: '将直接生成可编辑的 Markdown 文档',
+                          status: 'parsed',
+                          progress: undefined,
+                        }
+                      : prevItem,
+                  ),
+                );
+                return;
+              }
+
               // 上传文件并监听进度
               const formData = new FormData();
               formData.append('file', item.fileData);
+              formData.append('kb_id', kb_id);
               const resp = await uploadAttachment(formData, {
                 onUploadProgress: progressEvent => {
                   const percentCompleted = progressEvent.progress;
@@ -481,20 +566,6 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               uploadedInfo?.filename || uploadedItem.fileData.name;
             const title = getFileBaseName(fileName);
             const fileType = uploadedInfo?.fileType || getFileExt(fileName);
-            const isMarkdown = fileType === 'md' || fileType === 'markdown';
-            const content = isMarkdown
-              ? await uploadedItem.fileData.text()
-              : undefined;
-            const baseItem: ListDataItem = {
-              ...uploadedItem,
-              id: uploadedInfo?.key,
-              file_key: uploadedInfo?.key,
-              title,
-              file_name: fileName,
-              file_type: fileType,
-              content,
-            };
-
             setData(prev =>
               prev.map(prevItem =>
                 prevItem.uuid === uuid
@@ -503,17 +574,8 @@ const BatchActionBar = (props: BatchActionBarProps) => {
                       title: prevItem.title || title,
                       file_name: prevItem.file_name || fileName,
                       file_type: prevItem.file_type || fileType,
-                      import_kind: isMarkdown
-                        ? fileImportMode === 'content-with-attachment'
-                          ? 'document-with-attachment'
-                          : 'blank-document-with-attachment'
-                        : 'blank-document-with-attachment',
-                      summary: isMarkdown
-                        ? fileImportMode === 'content-with-attachment'
-                          ? '将生成 Markdown 文档，并附带原始附件'
-                          : '将生成空白文档，并附带原始附件'
-                        : '将生成空白文档，并附带原始附件',
-                      content,
+                      import_kind: 'file-document',
+                      summary: '文件已上传，将直接作为只读文档预览',
                       status: 'parsed',
                       progress: undefined,
                     }
@@ -524,15 +586,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
         );
       }
     },
-    [
-      fileImportMode,
-      getFileBaseName,
-      getFileExt,
-      handleParse,
-      isFileImportType,
-      queue,
-      setData,
-    ],
+    [getFileBaseName, getFileExt, queue, setData],
   );
 
   const handleToggleSelectAll = useCallback(() => {
@@ -555,59 +609,24 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     return checked.length > 0 && checked.length < data.length;
   }, [data.length, checked.length]);
 
-  // 当数据清空时，重置已上传记录
-  useEffect(() => {
-    if (data.length === 0) {
-      uploadedUuidsRef.current.clear();
-    }
-  }, [data.length]);
-
-  useEffect(() => {
-    if (!isFileImportType || data.length === 0) {
-      return;
-    }
-    setData(prev =>
-      prev.map(item => {
-        if (!item.file || item.status === 'upload-error') {
-          return item;
-        }
-        const markdown = isMarkdownFile(item);
-        return {
-          ...item,
-          import_kind: markdown
-            ? fileImportMode === 'content-with-attachment'
-              ? 'document-with-attachment'
-              : 'blank-document-with-attachment'
-            : 'blank-document-with-attachment',
-          summary: markdown
-            ? fileImportMode === 'content-with-attachment'
-              ? '将生成 Markdown 文档，并附带原始附件'
-              : '将生成空白文档，并附带原始附件'
-            : '将生成空白文档，并附带原始附件',
-        };
-      }),
-    );
-  }, [data.length, fileImportMode, isFileImportType, isMarkdownFile, setData]);
-
   // 监听新文件，自动触发上传
   useEffect(() => {
     if (data.length > 0) {
-      // 筛选出状态为 'common' 且未处理过的文件
-      const unUploadData = data.filter(
-        item =>
-          item.status === 'common' && !uploadedUuidsRef.current.has(item.uuid),
-      );
+      const unUploadData = data.filter(item => item.status === 'common');
 
       if (unUploadData.length > 0) {
-        // 标记这些文件为已处理，避免重复上传
-        unUploadData.forEach(item => {
-          uploadedUuidsRef.current.add(item.uuid);
-        });
-
         handleUploadFile(unUploadData);
       }
     }
   }, [data, handleUploadFile]);
+
+  // 文件上传完成后自动创建文档，不再要求用户手动点击“批量导入”。
+  useEffect(() => {
+    if (!isFileImportType) return;
+    if (data.some(item => item.status === 'importing')) return;
+    if (!data.some(item => item.status === 'parsed')) return;
+    void handleBatchImport();
+  }, [data, handleBatchImport, isFileImportType]);
 
   return (
     <Stack
@@ -623,8 +642,8 @@ const BatchActionBar = (props: BatchActionBarProps) => {
         zIndex: 1,
       }}
     >
-      {isFileImportType && hasMarkdownFiles && (
-        <Stack
+      {isFileImportType && (hasMarkdownFiles || hasNonMarkdownFiles) && (
+        <Box
           sx={{
             px: 1.5,
             py: 1,
@@ -633,32 +652,10 @@ const BatchActionBar = (props: BatchActionBarProps) => {
             color: 'text.secondary',
             bgcolor: alpha(theme.palette.info.main, 0.08),
           }}
-          gap={1}
         >
-          <Box>Markdown 文件导入方式</Box>
-          <RadioGroup
-            value={fileImportMode}
-            onChange={event =>
-              setFileImportMode(event.target.value as FileImportMode)
-            }
-          >
-            <FormControlLabel
-              value='content-with-attachment'
-              control={<Radio size='small' />}
-              label='生成 Markdown 文档，并附带原始附件'
-            />
-            <FormControlLabel
-              value='blank-with-attachment'
-              control={<Radio size='small' />}
-              label='生成空白文档，并附带原始附件'
-            />
-          </RadioGroup>
-          {hasNonMarkdownFiles && (
-            <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
-              非 Markdown 文件将固定导入为“空白文档 + 原始附件”。
-            </Box>
-          )}
-        </Stack>
+          文件上传后会直接创建对应文档：Markdown
+          文件保留为可编辑文档，其他格式作为只读文件文档预览，不再创建空白文档。
+        </Box>
       )}
       <Stack
         direction='row'
@@ -740,6 +737,20 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               {isFileImportType ? '处理失败' : '解析失败'}：{parseErrorCount}
             </Box>
           )}
+          {uploadErrorCount > 0 && (
+            <Box
+              sx={{
+                fontSize: 12,
+                color: 'error.main',
+                bgcolor: alpha(theme.palette.error.main, 0.1),
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+              }}
+            >
+              上传失败：{uploadErrorCount}
+            </Box>
+          )}
           {importErrorCount > 0 && (
             <Box
               sx={{
@@ -777,23 +788,35 @@ const BatchActionBar = (props: BatchActionBarProps) => {
           )}
         </Stack>
         <Stack direction='row' gap={2} alignItems='center'>
+          {!isFileImportType && (
+            <Button
+              size='small'
+              color='primary'
+              disabled={
+                (isFileImportType
+                  ? uploadErrorCount === 0
+                  : parseErrorCount === 0) || loading
+              }
+              sx={{ minWidth: 0, p: 0, color: 'primary.main' }}
+              onClick={handleBatchParse}
+            >
+              {isFileImportType ? '批量重试' : '批量解析'}
+            </Button>
+          )}
           <Button
             size='small'
             color='primary'
-            disabled={parseErrorCount === 0 || loading}
-            sx={{ minWidth: 0, p: 0, color: 'primary.main' }}
-            onClick={handleBatchParse}
-          >
-            {isFileImportType ? '批量重试' : '批量解析'}
-          </Button>
-          <Button
-            size='small'
-            color='primary'
-            disabled={!(parsedCount > 0 || importErrorCount > 0) || loading}
+            disabled={
+              isFileImportType ||
+              !(parsedCount > 0 || importErrorCount > 0) ||
+              loading
+            }
             onClick={handleBatchImport}
             sx={{ minWidth: 0, p: 0, color: 'primary.main' }}
           >
-            批量导入
+            {parsedCount === 0 && importErrorCount > 0
+              ? '重试导入'
+              : '批量导入'}
           </Button>
         </Stack>
       </Stack>

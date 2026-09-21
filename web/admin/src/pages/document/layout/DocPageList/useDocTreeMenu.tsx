@@ -4,13 +4,8 @@ import {
   TreeMenuOptions,
 } from '@/components/Drag/DragTree/TreeMenu';
 import { ConstsCrawlerSource } from '@/request/types';
-import { ConstsNodeRagInfoStatus } from '@/request/types';
 import { useCallback } from 'react';
 import type { DocTreeMenuHandlers } from './types';
-
-const IMPORT_SOURCES: { key: ConstsCrawlerSource; label: string }[] = [
-  { key: ConstsCrawlerSource.CrawlerSourceFile, label: '通过离线文件导入' },
-];
 
 export function useDocTreeMenu(
   handlers: DocTreeMenuHandlers,
@@ -18,9 +13,9 @@ export function useDocTreeMenu(
 ): (opra: TreeMenuOptions) => TreeMenuItem[] {
   const {
     handleUrl,
+    handleBatchImport,
     handleDelete,
     handlePublish,
-    handleRestudy,
     handleProperties,
     handleFrontDoc,
   } = handlers;
@@ -51,13 +46,19 @@ export function useDocTreeMenu(
           },
           {
             label: '导入文档',
-            key: 'next-line',
-            children: IMPORT_SOURCES.map(({ key: k, label }) => ({
-              label,
-              key: k,
-              onClick: () => handleUrl(item, k),
-            })),
+            key: ConstsCrawlerSource.CrawlerSourceFile,
+            onClick: () =>
+              handleUrl(item, ConstsCrawlerSource.CrawlerSourceFile),
           },
+          ...(handleBatchImport
+            ? [
+                {
+                  label: '批量导入 ZIP',
+                  key: 'batch-import-zip',
+                  onClick: () => handleBatchImport(item),
+                },
+              ]
+            : []),
           {
             label: '目录权限',
             key: 'properties',
@@ -73,16 +74,6 @@ export function useDocTreeMenu(
               label: item.status === 1 ? '发布更新' : '发布文档',
               key: 'update_publish',
               onClick: () => handlePublish(item),
-            });
-          }
-          if (item.status !== 0) {
-            menuItems.push({
-              label:
-                item.rag_status === ConstsNodeRagInfoStatus.NodeRagStatusPending
-                  ? '学习文档'
-                  : '重新学习',
-              key: 'restudy',
-              onClick: () => handleRestudy(item),
             });
           }
           menuItems.push({
@@ -114,9 +105,9 @@ export function useDocTreeMenu(
     },
     [
       handleUrl,
+      handleBatchImport,
       handleDelete,
       handlePublish,
-      handleRestudy,
       handleProperties,
       handleFrontDoc,
       readOnly,

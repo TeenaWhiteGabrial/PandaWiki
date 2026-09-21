@@ -24,8 +24,9 @@ import {
 } from '@panda-wiki/icons';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
-import { WrapContext } from '..';
+import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useEditorContext } from '..';
 import DocAddByCustomText from '../../component/DocAddByCustomText';
 import DocDelete from '../../component/DocDelete';
 
@@ -37,6 +38,8 @@ interface HeaderProps {
   handleExport: (type: string) => void;
   handleConvertContentType?: (type: 'html' | 'md') => void;
   readOnlyUser?: boolean;
+  embedded?: boolean;
+  embeddedActions?: ReactNode;
 }
 
 const Header = ({
@@ -47,6 +50,8 @@ const Header = ({
   handleExport,
   handleConvertContentType,
   readOnlyUser = false,
+  embedded = false,
+  embeddedActions,
 }: HeaderProps) => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -61,7 +66,7 @@ const Header = ({
     setCatalogOpen,
     refreshCatalog,
     catalogData,
-  } = useOutletContext<WrapContext>();
+  } = useEditorContext()!;
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [delOpen, setDelOpen] = useState(false);
@@ -170,75 +175,93 @@ const Header = ({
         justifyContent={'space-between'}
         sx={{ height: '40px' }}
       >
-        {!catalogOpen && (
-          <Stack
-            alignItems='center'
-            justifyContent='space-between'
-            onClick={() => setCatalogOpen(true)}
-            sx={{
-              cursor: 'pointer',
-              color: 'text.tertiary',
-              ':hover': {
-                color: 'text.primary',
-              },
-            }}
-          >
-            <IconMuluzhankai
+        <Stack
+          direction='row'
+          alignItems='center'
+          gap={1}
+          sx={{ width: 0, flex: 1, minWidth: 0 }}
+        >
+          {!embedded && !catalogOpen ? (
+            <Stack
+              alignItems='center'
+              justifyContent='space-between'
+              onClick={() => setCatalogOpen(true)}
               sx={{
-                fontSize: 24,
+                cursor: 'pointer',
+                color: 'text.tertiary',
+                ':hover': {
+                  color: 'text.primary',
+                },
               }}
-            />
-          </Stack>
-        )}
-        {detail.meta?.content_type === 'md' && (
-          <Box
-            component={'span'}
-            sx={{
-              fontSize: 10,
-              color: 'white',
-              background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-              px: 1,
-              flexShrink: 0,
-              fontWeight: '500',
-              borderRadius: '4px',
-              height: '20px',
-              lineHeight: '20px',
-              display: 'inline-block',
-            }}
-          >
-            MD
-          </Box>
-        )}
-        <Stack sx={{ width: 0, flex: 1 }}>
-          {detail?.name ? (
-            <Ellipsis sx={{ fontSize: 14, fontWeight: 'bold' }}>
-              <Box
-                component='span'
-                sx={{ cursor: 'pointer' }}
-                // onClick={() => setRenameOpen(true)}
-              >
-                {detail.name}
-              </Box>
-            </Ellipsis>
-          ) : (
-            <Skeleton variant='text' width={300} height={24} />
+            >
+              <IconMuluzhankai sx={{ fontSize: 24 }} />
+            </Stack>
+          ) : null}
+          {detail.meta?.content_type === 'md' && (
+            <Box
+              component={'span'}
+              sx={{
+                fontSize: 10,
+                color: 'white',
+                background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+                px: 1,
+                flexShrink: 0,
+                fontWeight: '500',
+                borderRadius: '4px',
+                height: '20px',
+                lineHeight: '20px',
+                display: 'inline-block',
+              }}
+            >
+              MD
+            </Box>
           )}
-          <Stack
-            direction={'row'}
-            alignItems={'center'}
-            gap={0.5}
-            sx={{ fontSize: 12, color: 'text.tertiary' }}
-          >
-            <IconBaocun sx={{ fontSize: 12 }} />
-            {showSaveTip ? (
-              '已保存'
-            ) : detail.updated_at || nodeDetail?.updated_at ? (
-              dayjs(detail.updated_at || nodeDetail?.updated_at).format(
-                'YYYY-MM-DD HH:mm:ss',
-              )
-            ) : (
-              <Skeleton variant='text' width={100} height={24} />
-            )}
+          <Stack sx={{ width: 0, flex: 1, minWidth: 0 }}>
+            <Stack
+              direction='row'
+              alignItems='center'
+              gap={0.5}
+              sx={{ minWidth: 0 }}
+            >
+              {embedded && embeddedActions}
+              {detail?.name ? (
+                <Ellipsis
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 14,
+                    fontWeight: 'bold',
+                  }}
+                >
+                  <Box
+                    component='span'
+                    sx={{ cursor: 'pointer' }}
+                    // onClick={() => setRenameOpen(true)}
+                  >
+                    {detail.name}
+                  </Box>
+                </Ellipsis>
+              ) : (
+                <Skeleton variant='text' width={300} height={24} />
+              )}
+            </Stack>
+            <Stack
+              direction={'row'}
+              alignItems={'center'}
+              gap={0.5}
+              sx={{ fontSize: 12, color: 'text.tertiary' }}
+            >
+              <IconBaocun sx={{ fontSize: 12 }} />
+              {showSaveTip ? (
+                '已保存'
+              ) : detail.updated_at || nodeDetail?.updated_at ? (
+                dayjs(detail.updated_at || nodeDetail?.updated_at).format(
+                  'YYYY-MM-DD HH:mm:ss',
+                )
+              ) : (
+                <Skeleton variant='text' width={100} height={24} />
+              )}
+            </Stack>
           </Stack>
         </Stack>
         <Stack direction={'row'} gap={1}>

@@ -108,7 +108,7 @@ const MCPAccess = () => {
           </Typography>
           <Typography color='text.secondary' fontSize={13}>
             {readOnlyMCP
-              ? '当前账号只能创建只读 MCP Token，可阅读知识库内容，不能上传、发布或学习文档。'
+              ? '当前账号只能创建只读 MCP Token，可阅读知识库内容，不能上传或发布文档。'
               : '当前 MCP Token 可用于文档管理。'}
           </Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>

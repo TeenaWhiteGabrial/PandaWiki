@@ -4,7 +4,14 @@ import { putApiV1UserResetPassword } from '@/request/User';
 import { V1UserListItemResp } from '@/request/types';
 import { copyText, generatePassword } from '@/utils';
 import { CheckCircle } from '@mui/icons-material';
-import { Box, IconButton, Stack, TextField } from '@mui/material';
+import {
+  Box,
+  IconButton,
+  InputAdornment,
+  Stack,
+  TextField,
+} from '@mui/material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { IconShuaxin } from '@panda-wiki/icons';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -19,6 +26,8 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
   const [updateOpen, setUpdateOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const {
     control,
@@ -29,6 +38,7 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
   } = useForm({
     defaultValues: {
       password: '',
+      confirmPassword: '',
     },
   });
 
@@ -36,6 +46,8 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
     setResetOpen(false);
     setUpdateOpen(false);
     setPassword('');
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     reset();
     setLoading(false);
     refresh();
@@ -45,7 +57,7 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
     copyText(`用户名: ${user.account}\n密码: ${password}`, close);
   };
 
-  const onSumbit = (data: { password: string }) => {
+  const onSumbit = (data: { password: string; confirmPassword: string }) => {
     setLoading(true);
     putApiV1UserResetPassword({ id: user.id!, new_password: data.password })
       .then(() => {
@@ -149,8 +161,22 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
                 autoFocus
                 size='small'
                 placeholder='输入密码'
+                type={showPassword ? 'text' : 'password'}
                 error={!!errors.password}
                 helperText={errors.password?.message}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position='end'>
+                      <IconButton
+                        size='small'
+                        onClick={() => setShowPassword(value => !value)}
+                        edge='end'
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
             )}
           />
@@ -163,6 +189,45 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
             <IconShuaxin sx={{ fontSize: 16 }} />
           </IconButton>
         </Stack>
+        <Box sx={{ fontSize: 14, lineHeight: '32px', mt: 2, mb: 1 }}>
+          确认密码{' '}
+          <Box component={'span'} sx={{ color: 'red' }}>
+            *
+          </Box>
+        </Box>
+        <Controller
+          control={control}
+          name='confirmPassword'
+          rules={{
+            required: '请再次输入密码',
+            validate: (value, values) =>
+              value === values.password || '两次输入的密码不一致',
+          }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              fullWidth
+              size='small'
+              placeholder='再次输入密码'
+              type={showConfirmPassword ? 'text' : 'password'}
+              error={!!errors.confirmPassword}
+              helperText={errors.confirmPassword?.message}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position='end'>
+                    <IconButton
+                      size='small'
+                      onClick={() => setShowConfirmPassword(value => !value)}
+                      edge='end'
+                    >
+                      {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+          )}
+        />
       </Modal>
     </>
   );

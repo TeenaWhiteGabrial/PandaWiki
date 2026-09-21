@@ -160,6 +160,25 @@ const ListRenderItem = ({
             拉取文档
           </Button>
         )}
+        {data.file && data.status === 'upload-error' && (
+          <Button
+            size='small'
+            color='primary'
+            sx={{ p: 0, minWidth: 0 }}
+            onClick={event => {
+              event.stopPropagation();
+              setData(prev =>
+                prev.map(item =>
+                  item.uuid === data.uuid
+                    ? { ...item, status: 'common', summary: '', progress: 0 }
+                    : item,
+                ),
+              );
+            }}
+          >
+            重试
+          </Button>
+        )}
         {data.progress && data.progress > 0 && data.progress < 100 ? (
           <Stack direction='row' alignItems='center' gap={1}>
             <CircularProgress
@@ -302,7 +321,9 @@ const ListRenderItem = ({
                           : data.import_kind ===
                               'blank-document-with-attachment'
                             ? '空白文档 + 附件'
-                            : '附件'
+                            : data.import_kind === 'file-document'
+                              ? '文件文档'
+                              : '附件'
                     }
                     sx={{
                       height: 20,

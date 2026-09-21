@@ -5,6 +5,8 @@ interface FilePreviewProps {
   detail: V1NodeDetailResp;
 }
 
+const DIRECT_PREVIEW_TYPES = ['pdf', 'md', 'markdown', 'html', 'htm'];
+
 const FilePreview = ({ detail }: FilePreviewProps) => {
   const fileKey = detail.meta?.file_key;
   const previewKey = detail.meta?.preview_key;
@@ -12,7 +14,7 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
   const fileName = detail.meta?.file_name || detail.name || '原始文件';
   const fileUrl = fileKey ? `/static-file/${fileKey}` : '';
   const previewUrl = previewKey ? `/static-file/${previewKey}` : '';
-  const canPreview = !!previewUrl || fileType === 'pdf';
+  const canPreview = DIRECT_PREVIEW_TYPES.includes(fileType);
 
   return (
     <Stack
@@ -54,7 +56,9 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
       {canPreview ? (
         <Box
           component='iframe'
-          src={previewUrl || fileUrl}
+          src={fileType === 'pdf' && previewUrl ? previewUrl : fileUrl}
+          title={fileName}
+          sandbox={fileType === 'html' || fileType === 'htm' ? '' : undefined}
           sx={{
             width: '100%',
             flexGrow: 1,
@@ -80,7 +84,7 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
         >
           <Typography variant='body1'>当前文件暂不支持站内预览</Typography>
           <Typography variant='body2' color='text.secondary'>
-            可先下载原文件查看，或为 Office 文件生成 PDF 预览
+            当前阶段支持 Markdown、富文本、PDF 和 HTML 预览，可下载原文件查看。
           </Typography>
         </Stack>
       )}

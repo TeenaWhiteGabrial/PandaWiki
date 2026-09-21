@@ -76,5 +76,4 @@ type UpdateUserEnterpriseAccessReq struct {
 	UserID            string   `json:"user_id" validate:"required"`
 	PermissionLevelID string   `json:"permission_level_id"`
 	DepartmentIDs     []string `json:"department_ids"`
-	PrimaryDepartment string   `json:"primary_department"`
 }

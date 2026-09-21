@@ -4,23 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
-	"github.com/chaitin/panda-wiki/repo/mq"
 	"github.com/chaitin/panda-wiki/repo/pg"
 )
 
 type ContributeUsecase struct {
-	repo     *pg.ContributeRepository
-	nodeRepo *pg.NodeRepository
-	userRepo *pg.UserRepository
-	appRepo  *pg.AppRepository
-	kbRepo   *pg.KnowledgeBaseRepository
-	ragRepo  *mq.RAGRepository
-	logger   *log.Logger
+	repo      *pg.ContributeRepository
+	nodeRepo  *pg.NodeRepository
+	userRepo  *pg.UserRepository
+	appRepo   *pg.AppRepository
+	kbUsecase *KnowledgeBaseUsecase
+	logger    *log.Logger
 }
 
 func NewContributeUsecase(
@@ -28,18 +25,16 @@ func NewContributeUsecase(
 	nodeRepo *pg.NodeRepository,
 	userRepo *pg.UserRepository,
 	appRepo *pg.AppRepository,
-	kbRepo *pg.KnowledgeBaseRepository,
-	ragRepo *mq.RAGRepository,
+	kbUsecase *KnowledgeBaseUsecase,
 	logger *log.Logger,
 ) *ContributeUsecase {
 	return &ContributeUsecase{
-		repo:     repo,
-		nodeRepo: nodeRepo,
-		userRepo: userRepo,
-		appRepo:  appRepo,
-		kbRepo:   kbRepo,
-		ragRepo:  ragRepo,
-		logger:   logger.WithModule("usecase.contribute"),
+		repo:      repo,
+		nodeRepo:  nodeRepo,
+		userRepo:  userRepo,
+		appRepo:   appRepo,
+		kbUsecase: kbUsecase,
+		logger:    logger.WithModule("usecase.contribute"),
 	}
 }
 
@@ -251,72 +246,17 @@ func (u *ContributeUsecase) Audit(ctx context.Context, req *domain.ContributeAud
 		}
 	}
 
-	releaseIDs, err := u.nodeRepo.CreateNodeReleases(ctx, req.KbID, auditUserID, []string{contribute.NodeId})
-	if err != nil {
-		return err
-	}
-	if len(releaseIDs) > 0 {
-		if err := u.publishAndRestudy(ctx, req.KbID, auditUserID, []string{contribute.NodeId}, releaseIDs); err != nil {
-			return err
-		}
+	if _, err := u.kbUsecase.CreateKBRelease(ctx, &domain.CreateKBReleaseReq{
+		KBID:    req.KbID,
+		Tag:     "文档贡献自动发布",
+		Message: "系统自动发布已审核通过的文档贡献",
+		NodeIDs: []string{contribute.NodeId},
+	}, auditUserID); err != nil {
+		return fmt.Errorf("贡献文档发布失败: %w", err)
 	}
 
 	if err := u.repo.UpdateAuditResult(ctx, req.ID, req.KbID, auditUserID, contribute.NodeId, req.Status); err != nil {
 		return err
-	}
-	return nil
-}
-
-func (u *ContributeUsecase) publishAndRestudy(ctx context.Context, kbID, userID string, nodeIDs, releaseIDs []string) error {
-	release := &domain.KBRelease{
-		KBID:        kbID,
-		Tag:         "文档贡献自动发布",
-		Message:     "系统自动发布已审核通过的文档贡献",
-		PublisherId: userID,
-	}
-	if err := u.kbRepo.CreateKBRelease(ctx, release); err != nil {
-		return err
-	}
-
-	nodeReleases, err := u.nodeRepo.GetLatestNodeReleaseByNodeIDs(ctx, kbID, nodeIDs)
-	if err != nil {
-		return err
-	}
-	if len(nodeReleases) == 0 {
-		return nil
-	}
-
-	for _, nodeRelease := range nodeReleases {
-		node, getNodeErr := u.nodeRepo.GetNodeByID(ctx, nodeRelease.NodeID)
-		if getNodeErr != nil {
-			return getNodeErr
-		}
-
-		ragStatus := consts.NodeRagStatusRunning
-		if node.RagInfo.Status == consts.NodeRagStatusSucceeded ||
-			node.RagInfo.Status == consts.NodeRagStatusFailed ||
-			node.RagInfo.Status == consts.NodeRagStatusReindexing ||
-			node.RagInfo.Status == consts.NodeRagStatusRunning {
-			ragStatus = consts.NodeRagStatusReindexing
-		}
-
-		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, domain.RagInfo{
-			Status:   ragStatus,
-			Message:  "",
-			SyncedAt: time.Now(),
-		}); err != nil {
-			return err
-		}
-
-		if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, []*domain.NodeReleaseVectorRequest{
-			{
-				KBID:          nodeRelease.KBID,
-				NodeReleaseID: nodeRelease.ID,
-				Action:        "upsert",
-			},
-		}); err != nil {
-			return err
-		}
 	}
 	return nil
 }

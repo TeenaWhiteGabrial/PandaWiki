@@ -34,6 +34,7 @@ export interface DragTreeProps {
   virtualizedHeight?: number | string;
   /** 使用外部 DndContext 时由父级传入，用于注册树的拖拽回调（如从树拖到目录） */
   registerDragHandlers?: (handlers: TreeDragHandlers | null) => void;
+  onItemClick?: (item: ITreeItem) => void;
 }
 
 // 定义上下文类型
@@ -41,6 +42,7 @@ export interface AppContextType {
   data: ITreeItem[];
   scrollToItem?: (itemId: string) => void;
   updateData?: (data: TreeItems<ITreeItem>) => void;
+  onItemClick?: (item: ITreeItem) => void;
 }
 
 // 使用正确的类型创建上下文

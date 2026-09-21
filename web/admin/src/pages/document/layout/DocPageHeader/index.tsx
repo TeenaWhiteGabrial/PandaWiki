@@ -8,14 +8,12 @@ import DocSearch from './DocSearch';
 
 interface DocPageHeaderProps {
   onPublishClick: () => void;
-  onRagClick: () => void;
   /** 变更时触发重新拉取统计 */
   refreshTrigger?: number;
 }
 
 const DocPageHeader = ({
   onPublishClick,
-  onRagClick,
   refreshTrigger,
 }: DocPageHeaderProps) => {
   const { kb_id, isRefreshDocList, user, kbDetail } = useAppSelector(
@@ -113,31 +111,6 @@ const DocPageHeader = ({
                 </ButtonBase>
               </>
             )}
-          {!readOnlyUser && stats.unstudied_count > 0 && (
-            <>
-              <Box
-                sx={{
-                  color: 'error.main',
-                  fontSize: 12,
-                  fontWeight: 'normal',
-                  ml: 2,
-                }}
-              >
-                {stats.unstudied_count} 个文档未学习，
-              </Box>
-              <ButtonBase
-                disableRipple
-                sx={{
-                  fontSize: 12,
-                  fontWeight: 400,
-                  color: 'primary.main',
-                }}
-                onClick={onRagClick}
-              >
-                去学习
-              </ButtonBase>
-            </>
-          )}
         </Stack>
         <DocSearch />
       </Stack>

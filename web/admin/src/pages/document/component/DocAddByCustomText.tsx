@@ -83,6 +83,7 @@ const DocAddByCustomText = ({
     for (const file of attachments) {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('kb_id', id);
       const uploaded = await uploadAttachment(formData);
       const fileType = getFileExt(uploaded.filename || file.name);
       const previewKey =

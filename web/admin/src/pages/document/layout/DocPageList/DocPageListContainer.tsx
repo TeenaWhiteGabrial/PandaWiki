@@ -1,10 +1,6 @@
 import { ITreeItem } from '@/api';
 import { type DragTreeHandle } from '@/components/Drag/DragTree';
-import { postApiV1NodeRestudy } from '@/request/Node';
-import {
-  ConstsNodeRagInfoStatus,
-  DomainNodeListItemResp,
-} from '@/request/types';
+import { DomainNodeListItemResp } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { collapseAllFolders, convertToTree } from '@/utils/drag';
@@ -29,7 +25,6 @@ const DocPageListContainer = ({
   wikiUrl,
   loading = false,
   onPublishOpen,
-  onRagOpen,
   registerTreeDragHandlers,
 }: DocPageListContainerProps) => {
   const { kb_id, user, kbDetail } = useAppSelector(state => state.config);
@@ -83,30 +78,6 @@ const DocPageListContainer = ({
     [onPublishOpen],
   );
 
-  const handleRestudy = useCallback(
-    (item: ITreeItem) => {
-      const ragStatus = item.rag_status;
-      const needModal =
-        ragStatus &&
-        [
-          ConstsNodeRagInfoStatus.NodeRagStatusFailed,
-          ConstsNodeRagInfoStatus.NodeRagStatusPending,
-        ].includes(ragStatus);
-      if (needModal) {
-        onRagOpen([item.id]);
-      } else {
-        postApiV1NodeRestudy({
-          kb_id,
-          node_ids: [item.id],
-        }).then(() => {
-          message.success('正在学习');
-          refresh();
-        });
-      }
-    },
-    [kb_id, refresh, onRagOpen],
-  );
-
   const handleProperties = useCallback(
     (item: ITreeItem) => {
       setPropertiesOpen(true);
@@ -133,7 +104,6 @@ const DocPageListContainer = ({
       handleUrl,
       handleDelete,
       handlePublish,
-      handleRestudy,
       handleProperties,
       handleFrontDoc,
     },

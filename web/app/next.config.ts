@@ -30,27 +30,24 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    const rewritesPath = [];
+    const rewritesPath = [
+      {
+        source: '/static-file/:path*',
+        destination: `${process.env.STATIC_FILE_TARGET}/static-file/:path*`,
+        basePath: false as const,
+      },
+      {
+        source: '/:basePath/static-file/:path*',
+        destination: `${process.env.STATIC_FILE_TARGET}/static-file/:path*`,
+        basePath: false as const,
+      },
+    ];
     if (process.env.NODE_ENV === 'development') {
-      rewritesPath.push(
-        ...[
-          {
-            source: '/static-file/:path*',
-            destination: `${process.env.STATIC_FILE_TARGET}/static-file/:path*`,
-            basePath: false as const,
-          },
-          {
-            source: '/:basePath/static-file/:path*',
-            destination: `${process.env.STATIC_FILE_TARGET}/static-file/:path*`,
-            basePath: false as const,
-          },
-          {
-            source: '/share/v1/:path*',
-            destination: `${process.env.TARGET}/share/v1/:path*`,
-            basePath: false as const,
-          },
-        ],
-      );
+      rewritesPath.push({
+        source: '/share/v1/:path*',
+        destination: `${process.env.TARGET}/share/v1/:path*`,
+        basePath: false as const,
+      });
     }
     return rewritesPath;
   },

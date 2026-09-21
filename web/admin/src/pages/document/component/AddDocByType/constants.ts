@@ -62,12 +62,16 @@ export const TYPE_CONFIG: Record<
     label: string;
     okText?: string;
     accept?: string;
+    acceptDisplay?: string;
     usage?: string;
   }
 > = {
   [ConstsCrawlerSource.CrawlerSourceFile]: {
-    label: '通过离线文件导入',
+    label: '导入文档',
     okText: '导入文件',
+    accept:
+      '.md,.markdown,.txt,.html,.htm,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx',
+    acceptDisplay: 'Markdown、TXT、HTML、PDF、Word、Excel、PPT',
     usage: INTERNAL_USAGE,
   },
   [ConstsCrawlerSource.CrawlerSourceUrl]: {

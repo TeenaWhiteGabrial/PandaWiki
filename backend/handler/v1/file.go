@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/chaitin/panda-wiki/config"
+	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
@@ -24,15 +25,17 @@ type FileHandler struct {
 	auth        middleware.AuthMiddleware
 	config      *config.Config
 	fileUsecase *usecase.FileUsecase
+	batchImport *usecase.BatchImportUsecase
 }
 
-func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *log.Logger, auth middleware.AuthMiddleware, minioClient *s3.MinioClient, config *config.Config, fileUsecase *usecase.FileUsecase) *FileHandler {
+func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *log.Logger, auth middleware.AuthMiddleware, minioClient *s3.MinioClient, config *config.Config, fileUsecase *usecase.FileUsecase, batchImport *usecase.BatchImportUsecase) *FileHandler {
 	h := &FileHandler{
 		BaseHandler: baseHandler,
 		logger:      logger.WithModule("handler.v1.file"),
 		auth:        auth,
 		config:      config,
 		fileUsecase: fileUsecase,
+		batchImport: batchImport,
 	}
 	group := echo.Group("/api/v1/file")
 	group.POST("/upload", h.Upload, h.auth.Authorize)
@@ -40,8 +43,33 @@ func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *l
 	group.POST("/upload/image", h.UploadImage, h.auth.Authorize)
 	group.POST("/upload/url", h.UploadByUrl, h.auth.Authorize)
 	group.POST("/preview/generate", h.GeneratePreview, h.auth.Authorize)
+	group.POST("/import/zip", h.ImportZip, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.POST("/upload/anydoc", h.UploadAnydoc)
 	return h
+}
+
+// ImportZip imports a ZIP archive while preserving its relative directory
+// structure in both the knowledge base tree and object storage.
+func (h *FileHandler) ImportZip(c echo.Context) error {
+	file, err := c.FormFile("file")
+	if err != nil {
+		return h.NewResponseWithError(c, "failed to get zip file", err)
+	}
+	kbID := c.FormValue("kb_id")
+	navID := c.FormValue("nav_id")
+	parentID := c.FormValue("parent_id")
+	if kbID == "" || navID == "" {
+		return h.NewResponseWithError(c, "kb_id and nav_id are required", nil)
+	}
+	authInfo := domain.GetAuthInfoFromCtx(c.Request().Context())
+	if authInfo == nil {
+		return h.NewResponseWithError(c, "authInfo not found in context", nil)
+	}
+	result, err := h.batchImport.ImportZip(c.Request().Context(), kbID, navID, parentID, authInfo.UserId, file)
+	if err != nil {
+		return h.NewResponseWithError(c, "batch import failed", err)
+	}
+	return h.NewResponseWithData(c, result)
 }
 
 func (h *FileHandler) UploadAttachment(c echo.Context) error {

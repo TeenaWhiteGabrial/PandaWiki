@@ -16,8 +16,16 @@ import {
 import { convertToTree } from '@/utils/drag';
 import { message } from '@/components/ui';
 import { Box, Drawer, Stack, useMediaQuery } from '@mui/material';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Outlet, useOutletContext } from 'react-router-dom';
 import Catalog from './Catalog';
 
 export interface WrapContext {
@@ -43,6 +51,16 @@ export interface WrapContext {
   >;
   saveCurrentDocRef: React.MutableRefObject<(() => Promise<void>) | null>;
 }
+
+// The editor is used both under the legacy editor route and inside the
+// document workbench. Keep one context contract for both entry points.
+export const EditorContext = createContext<WrapContext | null>(null);
+
+export const useEditorContext = () => {
+  const embeddedContext = useContext(EditorContext);
+  const routeContext = useOutletContext<WrapContext | null>();
+  return embeddedContext || routeContext;
+};
 
 const DocEditor = () => {
   const catalogWidth = 292;
