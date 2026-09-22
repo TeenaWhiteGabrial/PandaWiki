@@ -255,15 +255,14 @@ run_restart() {
 
 run_upgrade() {
   echo "==> 无损升级应用服务（不删除数据库、缓存和向量数据）"
-  # Stateful services are only ensured to be running. Existing containers and
-  # volumes are reused; only API/consumer/admin/app are rebuilt.
+  # Docker Compose V1.29.2 cannot recreate some containers whose images were
+  # built with newer Docker metadata because ContainerConfig is missing.
+  # Remove containers first; named volumes are kept, so database, vector,
+  # cache, and RagLite data are not deleted.
+  compose rm -sf "${SERVICES_BASE[@]}" api consumer admin app >/dev/null 2>&1 || true
   compose up -d "${SERVICES_BASE[@]}"
   run_frontend_builds
   verify_frontend_artifacts
-  # Docker Compose V1.29.2 cannot recreate some images built by newer Docker
-  # versions because their image config no longer contains ContainerConfig.
-  # Remove only stateless application containers before recreating them. Named
-  # data volumes and all stateful services remain untouched.
   compose rm -sf api consumer admin app >/dev/null 2>&1 || true
   compose up -d --build "${SERVICES_BACKEND[@]}"
   compose up -d --build --no-deps "${SERVICES_FRONTEND[@]}"
