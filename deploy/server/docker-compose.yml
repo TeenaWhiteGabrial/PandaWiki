@@ -202,6 +202,8 @@ services:
       SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
       NODE_OPTIONS: --max-old-space-size=4096
       CI: 'true'
+      COREPACK_NPM_REGISTRY: ${COREPACK_NPM_REGISTRY:-https://registry.npmmirror.com}
+      NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
     command: >
       sh -lc "
       corepack enable &&
@@ -225,6 +227,8 @@ services:
       DEV_KB_ID: ''
       NODE_OPTIONS: --max-old-space-size=4096
       CI: 'true'
+      COREPACK_NPM_REGISTRY: ${COREPACK_NPM_REGISTRY:-https://registry.npmmirror.com}
+      NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
     command: >
       sh -lc "
       corepack enable &&
