@@ -260,6 +260,11 @@ run_upgrade() {
   compose up -d "${SERVICES_BASE[@]}"
   run_frontend_builds
   verify_frontend_artifacts
+  # Docker Compose V1.29.2 cannot recreate some images built by newer Docker
+  # versions because their image config no longer contains ContainerConfig.
+  # Remove only stateless application containers before recreating them. Named
+  # data volumes and all stateful services remain untouched.
+  compose rm -sf api consumer admin app >/dev/null 2>&1 || true
   compose up -d --build "${SERVICES_BACKEND[@]}"
   compose up -d --build --no-deps "${SERVICES_FRONTEND[@]}"
   compose ps
