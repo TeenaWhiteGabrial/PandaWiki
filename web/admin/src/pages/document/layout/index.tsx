@@ -23,11 +23,14 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { Stack } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import DocPageHeader from './DocPageHeader';
 import DocPageNavs from './DocPageNavs';
 import DocPagePreview from './DocPagePreview';
+import DocPageFileManager from './DocPageFileManager';
+import type { DocTreeMenuFn } from './DocPageList/types';
+import ZipUploadTaskPanel from '../component/ZipUploadTaskPanel';
 
 const Content = () => {
   const { kb_id, isRefreshDocList, kbDetail } = useAppSelector(
@@ -42,6 +45,7 @@ const Content = () => {
   const search = searchParams.get('search') || '';
 
   const [publishOpen, setPublishOpen] = useState(false);
+  const [uploadTaskOpen, setUploadTaskOpen] = useState(false);
   const [publishIds, setPublishIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<
     GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
@@ -57,6 +61,23 @@ const Content = () => {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(
     null,
   );
+  const [currentFolderId, setCurrentFolderId] = useState('');
+  const [leftViewMode, setLeftViewMode] = useState<'tree' | 'explorer'>(() => {
+    if (typeof window === 'undefined') return 'tree';
+    const saved = localStorage.getItem('panda-wiki-document-view-mode');
+    return saved === 'explorer' ? 'explorer' : 'tree';
+  });
+  const handleViewModeChange = useCallback((mode: 'tree' | 'explorer') => {
+    setLeftViewMode(mode);
+    localStorage.setItem('panda-wiki-document-view-mode', mode);
+  }, []);
+  const [explorerMenu, setExplorerMenu] = useState<DocTreeMenuFn | null>(null);
+  const handleDocumentMenuReady = useCallback(
+    (menu: DocTreeMenuFn) => setExplorerMenu(() => menu),
+    [],
+  );
+  const minLeftWidth = Math.round(window.innerWidth * 0.3);
+  const leftWidth = Math.max(navWidth, minLeftWidth);
 
   const getData = useCallback(() => {
     if (!kb_id) {
@@ -100,6 +121,38 @@ const Content = () => {
     getData();
     setRefreshTrigger(t => t + 1);
   }, [getData]);
+
+  const handleExplorerResizeStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startWidth = navWidth;
+      const handleMove = (moveEvent: PointerEvent) => {
+        setNavWidth(
+          Math.min(
+            Math.round(window.innerWidth * 0.65),
+            Math.max(minLeftWidth, startWidth + moveEvent.clientX - startX),
+          ),
+        );
+      };
+      const handleUp = () => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleUp);
+      };
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+    },
+    [minLeftWidth, navWidth],
+  );
+
+  const handlePublishOpen = useCallback(
+    (ids?: string[]) => {
+      if (readOnlyUser) return;
+      setPublishIds(ids ?? []);
+      setPublishOpen(true);
+    },
+    [readOnlyUser],
+  );
 
   const [wikiUrl, setWikiUrl] = useState<string>('');
   const treeDragHandlersRef = useRef<TreeDragHandlers | null>(null);
@@ -227,6 +280,10 @@ const Content = () => {
   }, [search, kb_id]);
 
   useEffect(() => {
+    setCurrentFolderId('');
+  }, [nav_id]);
+
+  useEffect(() => {
     if (isRefreshDocList) {
       refresh();
       dispatch(setIsRefreshDocList(false));
@@ -250,8 +307,16 @@ const Content = () => {
             setPublishOpen(true);
           }}
           refreshTrigger={refreshTrigger}
+          viewMode={leftViewMode}
+          onViewModeChange={handleViewModeChange}
+          onUploadTaskClick={() => setUploadTaskOpen(true)}
         />
       )}
+      <ZipUploadTaskPanel
+        open={uploadTaskOpen}
+        onClose={() => setUploadTaskOpen(false)}
+        kbId={kb_id}
+      />
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -263,30 +328,107 @@ const Content = () => {
       >
         <Stack direction={'row'} sx={{ mt: fullscreen ? 0 : 2, width: '100%' }}>
           {!fullscreen && (
-            <DocPageNavs
-              navList={navList}
-              groups={groups}
-              onNavListChange={setNavList}
-              onNavDeleted={navId => {
-                setGroups(prev => prev.filter(g => g.nav_id !== navId));
+            <Box
+              aria-hidden={leftViewMode !== 'tree'}
+              sx={
+                leftViewMode === 'tree'
+                  ? undefined
+                  : {
+                      position: 'absolute',
+                      left: -10000,
+                      top: -10000,
+                      width: 1,
+                      height: 1,
+                      overflow: 'hidden',
+                      pointerEvents: 'none',
+                      opacity: 0,
+                    }
+              }
+            >
+              <DocPageNavs
+                navList={navList}
+                groups={groups}
+                onNavListChange={setNavList}
+                onNavDeleted={navId => {
+                  setGroups(prev => prev.filter(g => g.nav_id !== navId));
+                }}
+                refresh={refresh}
+                isSearching={!!search}
+                loading={loading && !hasLoadedOnce}
+                width={leftWidth}
+                onWidthChange={setNavWidth}
+                onDocumentSelect={item => {
+                  setSelectedDocumentId(item.id);
+                  setPreviewCollapsed(false);
+                }}
+                onFolderSelect={item => {
+                  setCurrentFolderId(item.id || '');
+                  setPreviewCollapsed(true);
+                }}
+                fill={previewCollapsed}
+                wikiUrl={wikiUrl}
+                onPublishOpen={handlePublishOpen}
+                readOnlyUser={readOnlyUser}
+                // 菜单本身是函数，必须包装一层，避免被 React 当作 state updater 执行。
+                onDocumentMenuReady={handleDocumentMenuReady}
+              />
+            </Box>
+          )}
+          {!fullscreen && leftViewMode === 'explorer' && (
+            <Box
+              sx={{
+                position: 'relative',
+                flex: previewCollapsed ? '1 1 auto' : `0 0 ${leftWidth}px`,
+                width: previewCollapsed ? '100%' : leftWidth,
+                height: 'calc(100vh - 183px)',
+                mr: 2,
+                minWidth: 0,
               }}
-              refresh={refresh}
-              isSearching={!!search}
-              loading={loading && !hasLoadedOnce}
-              width={navWidth}
-              onWidthChange={setNavWidth}
-              onDocumentSelect={item => {
-                setSelectedDocumentId(item.id);
-                setPreviewCollapsed(false);
-              }}
-              fill={previewCollapsed}
-              wikiUrl={wikiUrl}
-              onPublishOpen={ids => {
-                if (readOnlyUser) return;
-                setPublishIds(ids ?? []);
-                setPublishOpen(true);
-              }}
-            />
+            >
+              <DocPageFileManager
+                groups={groups}
+                navId={nav_id}
+                folderId={currentFolderId}
+                onFolderChange={folderId => {
+                  setCurrentFolderId(folderId);
+                  setPreviewCollapsed(true);
+                }}
+                onDocumentSelect={item => {
+                  setSelectedDocumentId(item.id || null);
+                  setPreviewCollapsed(false);
+                }}
+                refresh={refresh}
+                readOnlyUser={readOnlyUser}
+                menu={explorerMenu || undefined}
+                fill
+              />
+              {!previewCollapsed && (
+                <Box
+                  onPointerDown={handleExplorerResizeStart}
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    right: -6,
+                    bottom: 0,
+                    width: 8,
+                    cursor: 'col-resize',
+                    zIndex: 3,
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      left: 3,
+                      top: '50%',
+                      width: 2,
+                      height: 40,
+                      borderRadius: 2,
+                      bgcolor: 'divider',
+                      transform: 'translateY(-50%)',
+                    },
+                    '&:hover:after': { bgcolor: 'primary.main' },
+                  }}
+                />
+              )}
+            </Box>
           )}
           <DocPagePreview
             documentId={selectedDocumentId}

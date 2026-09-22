@@ -20,6 +20,14 @@ import {
   PostApiV1FileUploadPayload,
 } from "./types";
 
+export const getApiV1FileDownloadUrl = (query: { key: string }) =>
+  httpRequest<{ url: string }>({
+    path: `/api/v1/file/download/url?key=${encodeURIComponent(query.key)}`,
+    method: "GET",
+    secure: true,
+    format: "json",
+  });
+
 /**
  * @description Upload File
  *

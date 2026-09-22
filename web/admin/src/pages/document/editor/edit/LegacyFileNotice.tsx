@@ -1,4 +1,5 @@
 import { V1NodeDetailResp } from '@/request/types';
+import { getStaticFileUrl } from '@/utils/staticFileUrl';
 import { Box, Button, Stack, Typography } from '@mui/material';
 
 interface LegacyFileNoticeProps {
@@ -7,7 +8,7 @@ interface LegacyFileNoticeProps {
 
 const LegacyFileNotice = ({ detail }: LegacyFileNoticeProps) => {
   const fileKey = detail.meta?.file_key;
-  const fileUrl = fileKey ? `/static-file/${fileKey}` : '';
+  const fileUrl = getStaticFileUrl(fileKey);
 
   return (
     <Stack

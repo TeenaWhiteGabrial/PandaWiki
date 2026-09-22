@@ -32,6 +32,8 @@ var ProviderSet = wire.NewSet(
 	NewCreationUsecase,
 	NewFileUsecase,
 	NewBatchImportUsecase,
+	NewFolderDownloadUsecase,
+	NewZipUploadUsecase,
 	NewSitemapUsecase,
 	NewStatUseCase,
 	NewCommentUsecase,

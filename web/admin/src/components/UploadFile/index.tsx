@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import CustomImage from '../CustomImage';
 import { IconShangchuan, IconIcon_tool_close } from '@panda-wiki/icons';
 import { getBasePath } from '@/utils/getBasePath';
+import { getStaticFileUrl } from '@/utils/staticFileUrl';
 
 interface UploadFileProps {
   type: 'url' | 'base64';
@@ -111,7 +112,7 @@ const UploadFile = ({
         onChange(
           storage === 'image-oss' && res.url
             ? res.url
-            : '/static-file/' + res.key,
+            : getStaticFileUrl(res.key),
         );
         setUploadProgress(null);
         setIsUploading(false);

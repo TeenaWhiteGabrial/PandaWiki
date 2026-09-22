@@ -1,8 +1,11 @@
 import { uploadFile } from '@/api';
 import Emoji from '@/components/Emoji';
+import DocumentTypeIcon from '@/components/DocumentTypeIcon';
 import { postApiV1CreationTabComplete, putApiV1NodeDetail } from '@/request';
+import { getApiV1FileDownloadUrl } from '@/request/File';
 import { V1NodeDetailResp } from '@/request/types';
 import { completeIncompleteLinks } from '@/utils';
+import { getStaticFileUrl } from '@/utils/staticFileUrl';
 import {
   EditorMarkdown,
   MarkdownEditorRef,
@@ -331,7 +334,7 @@ const RichTextWrap = ({
       },
       abortSignal,
     });
-    return Promise.resolve('/static-file/' + key);
+    return Promise.resolve(getStaticFileUrl(key));
   };
 
   const handleTocUpdate = (toc: TocList) => {
@@ -487,12 +490,44 @@ const RichTextWrap = ({
     ],
   );
 
-  const exportFile = (value: string, type: string) => {
-    if (!value) return;
-    const completed = completeIncompleteLinks(value);
+  const downloadFile = async (format?: 'html' | 'json') => {
+    const fileKey = nodeDetail?.meta?.file_key;
+    const originalName =
+      nodeDetail?.meta?.file_name || nodeDetail?.name || 'document';
+    const anchor = document.createElement('a');
+
+    if (fileKey) {
+      const { url } = await getApiV1FileDownloadUrl({ key: fileKey });
+      anchor.href = url;
+      anchor.download = originalName;
+      anchor.click();
+      message.success('文件下载已开始');
+      return;
+    }
+
+    const type = isMarkdown ? 'md' : format === 'json' ? 'json' : 'html';
+    const rawContent = isMarkdown
+      ? nodeDetail?.content || ''
+      : editorRef.getHTML() || '';
+    if (!rawContent) return;
+
+    const completed = completeIncompleteLinks(rawContent);
     let content = completed;
-    let mimeType = `text/${type}`;
-    if (type === 'html') {
+    let mimeType = 'text/markdown;charset=utf-8';
+    if (type === 'json') {
+      const payload = {
+        version: 1,
+        name: nodeDetail?.name || defaultDetail.name || 'document',
+        content_type: 'html',
+        content: completed,
+        editor_content:
+          editorRef.getJSON() || nodeDetail?.editor_content || null,
+        editor_format: 'prose_mirror',
+        editor_version: 1,
+      };
+      content = JSON.stringify(payload, null, 2);
+      mimeType = 'application/json;charset=utf-8';
+    } else if (type === 'html') {
       mimeType = 'text/html;charset=utf-8';
       const safeTitle = (nodeDetail?.name || '')
         .replace(/&/g, '&amp;')
@@ -500,17 +535,15 @@ const RichTextWrap = ({
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
       content = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<title>${safeTitle}</title>\n</head>\n<body>\n${completed}\n</body>\n</html>`;
-    } else if (type === 'md') {
-      mimeType = 'text/markdown;charset=utf-8';
     }
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${nodeDetail?.name}.${type}`;
-    a.click();
+    anchor.href = url;
+    const baseName = originalName.replace(/\.[a-z0-9]+$/i, '');
+    anchor.download = `${baseName}.${type}`;
+    anchor.click();
     URL.revokeObjectURL(url);
-    message.success('导出成功');
+    message.success('文件下载已开始');
   };
 
   const getEditorContent = useCallback(() => {
@@ -652,28 +685,10 @@ const RichTextWrap = ({
         gap={1}
         sx={{ mb: 2, position: 'relative' }}
       >
-        <Emoji
-          type={2}
-          sx={{ flexShrink: 0, width: 36, height: 36 }}
-          iconSx={{ fontSize: 28 }}
-          value={nodeDetail?.meta?.emoji}
-          onChange={value => {
-            if (readOnlyUser) return;
-            putApiV1NodeDetail({
-              id: defaultDetail.id!,
-              kb_id: defaultDetail.kb_id!,
-              nav_id: defaultDetail.nav_id || '',
-              emoji: value,
-            }).then(() => {
-              updateDetail({
-                meta: {
-                  ...nodeDetail?.meta,
-                  emoji: value,
-                },
-              });
-              setTimeout(() => checkIfEdited(), 0);
-            });
-          }}
+        <DocumentTypeIcon
+          contentType={defaultDetail.meta?.content_type}
+          fileName={defaultDetail.name}
+          sx={{ flexShrink: 0, fontSize: 32 }}
         />
         <TextField
           sx={{ flex: 1 }}
@@ -1030,18 +1045,7 @@ const RichTextWrap = ({
             if (readOnlyUser) return;
             await saveContent();
           }}
-          handleExport={type => {
-            if (type === 'html') {
-              exportFile(editorRef.getHTML() || '', type);
-            } else if (type === 'md') {
-              exportFile(
-                isMarkdown
-                  ? nodeDetail?.content || ''
-                  : editorRef.getMarkdown() || '',
-                type,
-              );
-            }
-          }}
+          handleExport={downloadFile}
           handleConvertContentType={handleConvertContentType}
         />
         {!readOnlyUser && !isMarkdown && (

@@ -65,7 +65,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
   const isMarkdownFile = useCallback(
     (item: ListDataItem) => {
       const ext = getFileExt(item.file_name || item.title || item.file_type);
-      return ext === 'md' || ext === 'markdown';
+      return ext === 'md' || ext === 'markdown' || ext === 'txt';
     },
     [getFileExt],
   );
@@ -459,10 +459,14 @@ const BatchActionBar = (props: BatchActionBarProps) => {
                 throw new Error('找不到待上传的本地文件，请重新选择');
               }
               const originalType = getFileExt(item.fileData.name);
-              if (originalType === 'md' || originalType === 'markdown') {
+              if (
+                originalType === 'md' ||
+                originalType === 'markdown' ||
+                originalType === 'txt'
+              ) {
                 const content = await item.fileData.text();
                 if (!content.trim()) {
-                  throw new Error('Markdown 文件内容为空');
+                  throw new Error('文本文件内容为空');
                 }
                 const title = getFileBaseName(item.fileData.name);
                 setData(prev =>
@@ -475,7 +479,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
                           file_type: originalType,
                           content,
                           import_kind: 'markdown',
-                          summary: '将直接生成可编辑的 Markdown 文档',
+                          summary: '将直接生成可编辑的文本文档',
                           status: 'parsed',
                           progress: undefined,
                         }

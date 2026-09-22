@@ -14,6 +14,7 @@ export function useDocTreeMenu(
   const {
     handleUrl,
     handleBatchImport,
+    handleFolderDownload,
     handleDelete,
     handlePublish,
     handleProperties,
@@ -56,6 +57,15 @@ export function useDocTreeMenu(
                   label: '批量导入 ZIP',
                   key: 'batch-import-zip',
                   onClick: () => handleBatchImport(item),
+                },
+              ]
+            : []),
+          ...(handleFolderDownload
+            ? [
+                {
+                  label: '下载文件夹',
+                  key: 'download-folder',
+                  onClick: () => handleFolderDownload(item),
                 },
               ]
             : []),

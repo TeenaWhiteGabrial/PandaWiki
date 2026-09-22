@@ -522,6 +522,20 @@ func (r *NodeRepository) GetNodeReleaseByID(ctx context.Context, id string) (*do
 	return nodeRelease, nil
 }
 
+func (r *NodeRepository) UpdateNodeReleaseMeta(ctx context.Context, id string, meta domain.NodeMeta) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.NodeRelease{}).
+		Where("id = ?", id).
+		Updates(map[string]any{"meta": meta}).Error
+}
+
+func (r *NodeRepository) UpdateNodeReleaseContent(ctx context.Context, id, content string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.NodeRelease{}).
+		Where("id = ?", id).
+		Update("content", content).Error
+}
+
 func (r *NodeRepository) GetLatestNodeReleaseByNodeID(ctx context.Context, nodeID string) (*domain.NodeRelease, error) {
 	var nodeRelease *domain.NodeRelease
 	if err := r.db.WithContext(ctx).

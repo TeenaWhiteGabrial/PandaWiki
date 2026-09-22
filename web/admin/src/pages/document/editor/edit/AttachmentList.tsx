@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import { IconShanchu, IconWenjian } from '@panda-wiki/icons';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { getStaticFileUrl } from '@/utils/staticFileUrl';
 
 interface AttachmentListProps {
   detail: V1NodeDetailResp;
@@ -39,13 +40,13 @@ const AttachmentList = ({
   const getPreviewUrl = useCallback((attachment: DomainNodeAttachmentMeta) => {
     const fileType = (attachment.file_type || '').toLowerCase();
     if (fileType === 'pdf' && attachment.file_key) {
-      return `/static-file/${attachment.file_key}`;
+      return getStaticFileUrl(attachment.file_key);
     }
     if (
       ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(fileType) &&
       attachment.preview_key
     ) {
-      return `/static-file/${attachment.preview_key}`;
+      return getStaticFileUrl(attachment.preview_key);
     }
     return '';
   }, []);
@@ -216,7 +217,7 @@ const AttachmentList = ({
       ) : (
         attachments.map((attachment, index) => {
           const fileUrl = attachment.file_key
-            ? `/static-file/${attachment.file_key}`
+            ? getStaticFileUrl(attachment.file_key)
             : '';
           const previewUrl = getPreviewUrl(attachment);
           const removable =

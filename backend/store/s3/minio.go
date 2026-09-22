@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"path"
 	"strings"
@@ -113,6 +114,67 @@ func (c *MinioClient) PutObject(ctx context.Context, _ string, object string, re
 	return info, err
 }
 
+// PresignedPutURL returns a short-lived URL that allows the browser to upload
+// an object directly to the configured S3-compatible storage.
+func (c *MinioClient) PresignedPutURL(ctx context.Context, object string, expires time.Duration) (string, error) {
+	result, err := c.client.PresignedPutObject(ctx, c.bucket, c.physicalObject(object), expires)
+	if err != nil {
+		return "", err
+	}
+	return result.String(), nil
+}
+
+// PresignedUploadPartURL returns a URL for one S3 multipart part. The browser
+// uploads bytes directly to object storage; the API only signs the request.
+func (c *MinioClient) PresignedUploadPartURL(ctx context.Context, object, uploadID string, partNumber int, expires time.Duration) (string, error) {
+	params := url.Values{}
+	params.Set("uploadId", uploadID)
+	params.Set("partNumber", fmt.Sprintf("%d", partNumber))
+	result, err := c.client.PresignHeader(ctx, http.MethodPut, c.bucket, c.physicalObject(object), expires, params, nil)
+	if err != nil {
+		return "", err
+	}
+	return result.String(), nil
+}
+
+// UploadMultipartPart streams one multipart part through the API to object
+// storage. This is used as a same-origin fallback for browsers whose OSS CORS
+// policy does not allow direct PUT requests.
+func (c *MinioClient) UploadMultipartPart(ctx context.Context, object, uploadID string, partNumber int, reader io.Reader, size int64) (minio.ObjectPart, error) {
+	core := minio.Core{Client: c.client}
+	return core.PutObjectPart(ctx, c.bucket, c.physicalObject(object), uploadID, partNumber, reader, size, minio.PutObjectPartOptions{})
+}
+
+// MultipartUpload starts an S3 multipart upload and returns its opaque ID.
+func (c *MinioClient) MultipartUpload(ctx context.Context, object string) (string, error) {
+	core := minio.Core{Client: c.client}
+	return core.NewMultipartUpload(ctx, c.bucket, c.physicalObject(object), minio.PutObjectOptions{})
+}
+
+func (c *MinioClient) CompleteMultipartUpload(ctx context.Context, object, uploadID string, parts []minio.CompletePart) error {
+	core := minio.Core{Client: c.client}
+	_, err := core.CompleteMultipartUpload(ctx, c.bucket, c.physicalObject(object), uploadID, parts, minio.PutObjectOptions{})
+	return err
+}
+
+func (c *MinioClient) AbortMultipartUpload(ctx context.Context, object, uploadID string) error {
+	core := minio.Core{Client: c.client}
+	return core.AbortMultipartUpload(ctx, c.bucket, c.physicalObject(object), uploadID)
+}
+
+func (c *MinioClient) ListMultipartParts(ctx context.Context, object, uploadID string) ([]minio.ObjectPart, error) {
+	core := minio.Core{Client: c.client}
+	result, err := core.ListObjectParts(ctx, c.bucket, c.physicalObject(object), uploadID, 0, 10000)
+	if err != nil {
+		return nil, err
+	}
+	return result.ObjectParts, nil
+}
+
+func (c *MinioClient) StatObject(ctx context.Context, object string) (minio.ObjectInfo, error) {
+	return c.client.StatObject(ctx, c.bucket, c.physicalObject(object), minio.StatObjectOptions{})
+}
+
 func (c *MinioClient) GetObject(ctx context.Context, _ string, object string, opts minio.GetObjectOptions) (*minio.Object, error) {
 	return c.client.GetObject(ctx, c.bucket, c.physicalObject(object), opts)
 }
@@ -123,6 +185,10 @@ func (c *MinioClient) SignURL(ctx context.Context, _ string, object string, expi
 		return "", err
 	}
 	return result.String(), nil
+}
+
+func (c *MinioClient) RemoveObject(ctx context.Context, object string) error {
+	return c.client.RemoveObject(ctx, c.bucket, c.physicalObject(object), minio.RemoveObjectOptions{})
 }
 
 func (c *MinioClient) PublicURL(object string) string {

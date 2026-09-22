@@ -21,13 +21,14 @@ export interface DocPageListContainerProps {
   registerTreeDragHandlers?: (handlers: TreeDragHandlers | null) => void;
 }
 
+export type DocTreeMenuFn = (opra: TreeMenuOptions) => TreeMenuItem[];
+
 export interface DocTreeMenuHandlers {
   handleUrl: (item: ITreeItem, key: ConstsCrawlerSource) => void;
   handleBatchImport?: (item: ITreeItem) => void;
+  handleFolderDownload?: (item: ITreeItem) => void;
   handleDelete: (item: ITreeItem) => void;
   handlePublish: (item: ITreeItem) => void;
   handleProperties: (item: ITreeItem) => void;
   handleFrontDoc: (id: string) => void;
 }
-
-export type DocTreeMenuFn = (opra: TreeMenuOptions) => TreeMenuItem[];

@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
@@ -357,6 +358,44 @@ func (u *FileUsecase) UploadFileFromReader(
 	}
 
 	return s3Filename, nil
+}
+
+func (u *FileUsecase) PresignObjectUpload(ctx context.Context, key string, expires time.Duration) (string, error) {
+	return u.s3Client.PresignedPutURL(ctx, key, expires)
+}
+
+func (u *FileUsecase) StatObject(ctx context.Context, key string) (minio.ObjectInfo, error) {
+	return u.s3Client.StatObject(ctx, key)
+}
+
+// DownloadObjectToTemp is used only during publication. The source remains in
+// OSS during upload and is staged locally temporarily while archive.NewReader
+// walks its central directory.
+func (u *FileUsecase) DownloadObjectToTemp(ctx context.Context, key string) (*os.File, int64, error) {
+	object, err := u.s3Client.GetObject(ctx, domain.Bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, 0, err
+	}
+	defer object.Close()
+	info, err := object.Stat()
+	if err != nil {
+		return nil, 0, err
+	}
+	tmp, err := os.CreateTemp("", "pandawiki-zip-*")
+	if err != nil {
+		return nil, 0, err
+	}
+	if _, err = io.Copy(tmp, object); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return nil, 0, err
+	}
+	if _, err = tmp.Seek(0, io.SeekStart); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return nil, 0, err
+	}
+	return tmp, info.Size, nil
 }
 
 func (u *FileUsecase) AnyDocUploadFile(ctx context.Context, file *multipart.FileHeader, path string) (string, error) {

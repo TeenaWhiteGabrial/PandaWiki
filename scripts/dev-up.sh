@@ -11,7 +11,6 @@ DEPENDENCY_SERVICES=(
   postgres
   redis
   nats
-  minio
   qdrant
   crawler
   raglite
@@ -22,7 +21,6 @@ DEPENDENCY_PORTS=(
   15432
   16379
   4222
-  9000
   6333
   8080
   5050
@@ -35,6 +33,48 @@ mkdir -p \
   "${ROOT_DIR}/.cache/go-build" \
   "${ROOT_DIR}/.cache/gomod" \
   "${SSL_DIR}"
+
+load_external_oss_env() {
+  local env_file="${ROOT_DIR}/.env"
+  local key value
+  local required_keys=(OSS_ENDPOINT OSS_ACCESS_KEY OSS_SECRET_KEY OSS_BUCKET_NAME OSS_DOWNLOAD_URL OSS_REGION)
+
+  if [[ ! -f "${env_file}" ]]; then
+    echo "缺少根目录 OSS 配置：${env_file}"
+    exit 1
+  fi
+
+  for key in "${required_keys[@]}"; do
+    value="$(grep -E "^${key}=" "${env_file}" | tail -n 1 | cut -d= -f2- || true)"
+    if [[ -z "${value}" ]] || [[ "${value}" == CHANGE_ME_* ]]; then
+      echo "根目录 .env 缺少或未正确配置：${key}"
+      exit 1
+    fi
+    export "${key}=${value}"
+  done
+
+  case "${OSS_ENDPOINT}" in
+    https://*)
+      export OSS_USE_SSL=true
+      export OSS_S3_ENDPOINT="${OSS_ENDPOINT#https://}"
+      ;;
+    http://*)
+      export OSS_USE_SSL=false
+      export OSS_S3_ENDPOINT="${OSS_ENDPOINT#http://}"
+      ;;
+    *)
+      export OSS_USE_SSL=false
+      export OSS_S3_ENDPOINT="${OSS_ENDPOINT}"
+      ;;
+  esac
+  OSS_S3_ENDPOINT="${OSS_S3_ENDPOINT%/}"
+  export OSS_S3_ENDPOINT
+  # 前端下载、预览链接也直接指向外部 OSS，避免浏览器地址仍显示为本地
+  # Vite/Next 静态文件代理地址。该变量只包含公开下载域名，不包含密钥。
+  export STATIC_FILE_TARGET="${OSS_DOWNLOAD_URL}"
+}
+
+load_external_oss_env
 
 GO_BIN="/opt/homebrew/opt/go@1.24/bin/go"
 if [[ ! -x "${GO_BIN}" ]]; then
@@ -170,7 +210,13 @@ start_if_not_running() {
   fi
 
   echo "启动 ${name}..."
-  nohup "$@" >"${log_file}" 2>&1 &
+  # pnpm 的工作区命令会再派生 Vite/Next 子进程；使用独立会话避免
+  # 启动脚本退出时子进程收到 SIGHUP，导致日志显示 ready 但端口立即消失。
+  if command -v setsid >/dev/null 2>&1; then
+    nohup setsid "$@" >"${log_file}" 2>&1 &
+  else
+    nohup "$@" >"${log_file}" 2>&1 &
+  fi
   echo $! >"${pid_file}"
   sleep 2
 
@@ -254,17 +300,20 @@ start_if_not_running \
   PG_DSN="host=127.0.0.1 user=panda-wiki password=panda-wiki-secret dbname=panda-wiki port=15432 sslmode=disable TimeZone=Asia/Shanghai" \
   MQ_NATS_SERVER="nats://127.0.0.1:4222" \
   REDIS_ADDR="127.0.0.1:16379" \
-  S3_ENDPOINT="127.0.0.1:9000" \
-  S3_ACCESS_KEY="s3panda-wiki" \
-  S3_SECRET_KEY="panda-wiki-secret" \
+  OSS_ENDPOINT="${OSS_ENDPOINT}" \
+  OSS_ACCESS_KEY="${OSS_ACCESS_KEY}" \
+  OSS_SECRET_KEY="${OSS_SECRET_KEY}" \
+  OSS_BUCKET_NAME="${OSS_BUCKET_NAME}" \
+  OSS_DOWNLOAD_URL="${OSS_DOWNLOAD_URL}" \
+  OSS_REGION="${OSS_REGION}" \
   RAG_CT_RAG_BASE_URL="http://127.0.0.1:5050" \
   SENTRY_ENABLED="false" \
   CADDY_API="" \
-  FILE_BASE_URL="http://127.0.0.1:8000/static-file" \
+  FILE_BASE_URL="${OSS_DOWNLOAD_URL}/static-file" \
   ANYDOC_BASE_URL="http://127.0.0.1:8080" \
   ANYDOC_CRAWLER_BASE_URL="http://127.0.0.1:8080" \
   ANYDOC_API_UPLOADER_URL="http://host.docker.internal:8000/api/v1/file/upload/anydoc" \
-  ANYDOC_STATIC_FILE_BASE_URL="http://host.docker.internal:9000/static-file" \
+  ANYDOC_STATIC_FILE_BASE_URL="${OSS_DOWNLOAD_URL}/static-file" \
   PANDA_WIKI_MACHINE_ID_FILE="${LOCAL_DATA_DIR}/.machine_id" \
   PANDA_WIKI_SSL_DIR="${SSL_DIR}" \
   "${GO_BIN}" run ../../cmd/api/main.go ../../cmd/api/wire_gen.go
@@ -290,12 +339,15 @@ start_if_not_running \
   PANDA_WIKI_CONFIG_FILE="${PANDA_WIKI_CONFIG_FILE:-${ROOT_DIR}/backend/config.yml}" \
   MQ_NATS_SERVER="nats://127.0.0.1:4222" \
   REDIS_ADDR="127.0.0.1:16379" \
-  S3_ENDPOINT="127.0.0.1:9000" \
-  S3_ACCESS_KEY="s3panda-wiki" \
-  S3_SECRET_KEY="panda-wiki-secret" \
+  OSS_ENDPOINT="${OSS_ENDPOINT}" \
+  OSS_ACCESS_KEY="${OSS_ACCESS_KEY}" \
+  OSS_SECRET_KEY="${OSS_SECRET_KEY}" \
+  OSS_BUCKET_NAME="${OSS_BUCKET_NAME}" \
+  OSS_DOWNLOAD_URL="${OSS_DOWNLOAD_URL}" \
+  OSS_REGION="${OSS_REGION}" \
   RAG_CT_RAG_BASE_URL="http://127.0.0.1:5050" \
   SENTRY_ENABLED="false" \
-  FILE_BASE_URL="http://127.0.0.1:8000/static-file" \
+  FILE_BASE_URL="${OSS_DOWNLOAD_URL}/static-file" \
   ANYDOC_BASE_URL="http://127.0.0.1:8080" \
   PANDA_WIKI_MACHINE_ID_FILE="${LOCAL_DATA_DIR}/.machine_id" \
   PANDA_WIKI_SSL_DIR="${SSL_DIR}" \

@@ -190,6 +190,7 @@ const DocPageListContent = ({
         {/* 右侧：多功能按钮（添加文档 + 批量操作） */}
         <Stack direction={'row'} alignItems={'center'} gap={2}>
           <AddDocBtn
+            parentName='根目录'
             refresh={refresh}
             createLocal={createLocal}
             scrollTo={scrollTo}

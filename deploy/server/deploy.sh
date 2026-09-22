@@ -101,6 +101,7 @@ usage() {
 
 可选 mode：
   deploy     删除旧容器和旧镜像后重建部署（默认）
+  upgrade    保留数据库、缓存和向量服务，只更新应用镜像
   restart    仅重启服务，不清理现有容器
   fresh-db   清空 PostgreSQL 数据后重建部署
   status     查看当前容器状态
@@ -252,6 +253,18 @@ run_restart() {
   compose ps
 }
 
+run_upgrade() {
+  echo "==> 无损升级应用服务（不删除数据库、缓存和向量数据）"
+  # Stateful services are only ensured to be running. Existing containers and
+  # volumes are reused; only API/consumer/admin/app are rebuilt.
+  compose up -d "${SERVICES_BASE[@]}"
+  run_frontend_builds
+  verify_frontend_artifacts
+  compose up -d --build "${SERVICES_BACKEND[@]}"
+  compose up -d --build --no-deps "${SERVICES_FRONTEND[@]}"
+  compose ps
+}
+
 run_frontend_builds() {
   echo "==> 构建前端产物"
   compose rm -f admin-build app-build >/dev/null 2>&1 || true
@@ -345,6 +358,11 @@ main() {
     restart)
       check_required_envs
       run_restart
+      print_summary
+      ;;
+    upgrade)
+      check_required_envs
+      run_upgrade
       print_summary
       ;;
     fresh-db)

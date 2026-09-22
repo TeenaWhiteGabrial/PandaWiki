@@ -66,25 +66,6 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
-    container_name: panda-wiki-minio
-    labels: *pandawiki-log-labels
-    environment:
-      MINIO_ROOT_USER: s3panda-wiki
-      MINIO_ROOT_PASSWORD: panda-wiki-secret
-    command: server /data --console-address ":9001"
-    ports:
-      - '9000:9000'
-      - '9001:9001'
-    volumes:
-      - panda_wiki_minio:/data
-    healthcheck:
-      test: ['CMD-SHELL', 'curl -f http://127.0.0.1:9000/minio/health/live || exit 1']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   qdrant:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/qdrant:v1.14.1
     container_name: panda-wiki-qdrant
@@ -106,16 +87,15 @@ services:
       GLOG_GLOBAL_LEVEL: info
       NAMESPACE: anydoc
       MQ_NATS_URL: nats://panda-wiki-nats:4222
-      OSS_MINIO_ACCESS_KEY: s3panda-wiki
-      OSS_MINIO_SECRET_KEY: panda-wiki-secret
-      OSS_MINIO_ENDPOINT: panda-wiki-minio:9000
+      OSS_MINIO_ACCESS_KEY: ${OSS_ACCESS_KEY}
+      OSS_MINIO_SECRET_KEY: ${OSS_SECRET_KEY}
+      OSS_MINIO_ENDPOINT: ${OSS_S3_ENDPOINT}
+      OSS_MINIO_USE_SSL: ${OSS_USE_SSL}
     ports:
       - '8080:8080'
     depends_on:
       nats:
         condition: service_started
-      minio:
-        condition: service_healthy
 
   raglite:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/raglite:v2.17.0
@@ -129,9 +109,11 @@ services:
       DATABASE_POSTGRESQL_PASSWORD: panda-wiki-secret
       DATABASE_QDRANT_HOST: panda-wiki-qdrant
       DATABASE_QDRANT_API_KEY: panda-wiki-qdrant-key
-      STORAGE_MINIO_ENDPOINT: panda-wiki-minio:9000
-      STORAGE_MINIO_ACCESS_KEY_ID: s3panda-wiki
-      STORAGE_MINIO_SECRET_ACCESS_KEY: panda-wiki-secret
+      STORAGE_MINIO_ENDPOINT: ${OSS_S3_ENDPOINT}
+      STORAGE_MINIO_ACCESS_KEY_ID: ${OSS_ACCESS_KEY}
+      STORAGE_MINIO_SECRET_ACCESS_KEY: ${OSS_SECRET_KEY}
+      STORAGE_MINIO_USE_SSL: ${OSS_USE_SSL}
+      STORAGE_MINIO_BUCKET_NAME: ${OSS_BUCKET_NAME}
       NATS_URL: nats://panda-wiki-nats:4222
       EMBEDDER_RPM: 800
       LLM_RPM: 50
@@ -141,8 +123,6 @@ services:
       - panda_wiki_raglite:/data
     depends_on:
       postgres:
-        condition: service_healthy
-      minio:
         condition: service_healthy
       qdrant:
         condition: service_started
@@ -183,7 +163,6 @@ volumes:
   panda_wiki_postgres:
   panda_wiki_redis:
   panda_wiki_nats:
-  panda_wiki_minio:
   panda_wiki_qdrant:
   panda_wiki_raglite:
   panda_wiki_loki:

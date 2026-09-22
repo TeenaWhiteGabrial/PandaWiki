@@ -1,5 +1,7 @@
 import { V1NodeDetailResp } from '@/request/types';
+import { resolveStaticFileUrl } from '@/utils/staticFileUrl';
 import { Box, Button, Stack, Typography } from '@mui/material';
+import { useEffect, useState } from 'react';
 
 interface FilePreviewProps {
   detail: V1NodeDetailResp;
@@ -12,9 +14,32 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
   const previewKey = detail.meta?.preview_key;
   const fileType = (detail.meta?.file_type || '').toLowerCase();
   const fileName = detail.meta?.file_name || detail.name || '原始文件';
-  const fileUrl = fileKey ? `/static-file/${fileKey}` : '';
-  const previewUrl = previewKey ? `/static-file/${previewKey}` : '';
+  const [fileUrl, setFileUrl] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
   const canPreview = DIRECT_PREVIEW_TYPES.includes(fileType);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      resolveStaticFileUrl(fileKey),
+      resolveStaticFileUrl(previewKey),
+    ])
+      .then(([resolvedFileUrl, resolvedPreviewUrl]) => {
+        if (!cancelled) {
+          setFileUrl(resolvedFileUrl);
+          setPreviewUrl(resolvedPreviewUrl);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFileUrl('');
+          setPreviewUrl('');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileKey, previewKey]);
 
   return (
     <Stack

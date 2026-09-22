@@ -35,7 +35,7 @@ interface HeaderProps {
   detail: V1NodeDetailResp;
   updateDetail: (detail: V1NodeDetailResp) => void;
   handleSave: () => void;
-  handleExport: (type: string) => void;
+  handleExport: (format?: 'html' | 'json') => void;
   handleConvertContentType?: (type: 'html' | 'md') => void;
   readOnlyUser?: boolean;
   embedded?: boolean;
@@ -351,64 +351,28 @@ const Header = ({
             />
           )}
           <Cascader
-            list={[
-              {
-                key: 'html',
-                label: (
-                  <Stack
-                    direction={'row'}
-                    alignItems={'center'}
-                    gap={1}
-                    sx={{
-                      fontSize: 14,
-                      px: 2,
-                      lineHeight: '40px',
-                      height: 40,
-                      width: 140,
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      ':hover': {
-                        bgcolor: addOpacityToColor(
-                          theme.palette.primary.main,
-                          0.1,
-                        ),
-                      },
-                    }}
-                  >
-                    导出 HTML
-                  </Stack>
-                ),
-                onClick: () => handleExport('html'),
-              },
-              {
-                key: 'md',
-                label: (
-                  <Stack
-                    direction={'row'}
-                    alignItems={'center'}
-                    gap={1}
-                    sx={{
-                      fontSize: 14,
-                      px: 2,
-                      lineHeight: '40px',
-                      height: 40,
-                      width: 140,
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      ':hover': {
-                        bgcolor: addOpacityToColor(
-                          theme.palette.primary.main,
-                          0.1,
-                        ),
-                      },
-                    }}
-                  >
-                    导出 Markdown
-                  </Stack>
-                ),
-                onClick: () => handleExport('md'),
-              },
-            ]}
+            list={
+              detail.meta?.content_type === 'html' && !isReadonlyFilePreview
+                ? [
+                    {
+                      key: 'html',
+                      label: '下载 HTML',
+                      onClick: () => handleExport('html'),
+                    },
+                    {
+                      key: 'json',
+                      label: '下载 JSON（可继续编辑）',
+                      onClick: () => handleExport('json'),
+                    },
+                  ]
+                : [
+                    {
+                      key: 'default',
+                      label: '下载文件',
+                      onClick: () => handleExport(),
+                    },
+                  ]
+            }
             context={
               <Button
                 size='small'
@@ -416,7 +380,7 @@ const Header = ({
                 disabled={!detail.name}
                 startIcon={<IconDaochu sx={{ fontSize: 14 }} />}
               >
-                导出
+                下载文件
               </Button>
             }
           />

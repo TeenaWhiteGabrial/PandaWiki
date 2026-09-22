@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -20,15 +21,17 @@ import (
 )
 
 type KnowledgeBaseUsecase struct {
-	repo     *pg.KnowledgeBaseRepository
-	nodeRepo *pg.NodeRepository
-	navRepo  *pg.NavRepository
-	ragRepo  *mq.RAGRepository
-	userRepo *pg.UserRepository
-	rag      rag.RAGService
-	kbCache  *cache.KBRepo
-	logger   *log.Logger
-	config   *config.Config
+	repo        *pg.KnowledgeBaseRepository
+	nodeRepo    *pg.NodeRepository
+	navRepo     *pg.NavRepository
+	ragRepo     *mq.RAGRepository
+	userRepo    *pg.UserRepository
+	rag         rag.RAGService
+	batchImport *BatchImportUsecase
+	kbCache     *cache.KBRepo
+	logger      *log.Logger
+	config      *config.Config
+	fileUsecase *FileUsecase
 }
 
 type learnedRelease struct {
@@ -49,6 +52,14 @@ func NewKnowledgeBaseUsecase(repo *pg.KnowledgeBaseRepository, nodeRepo *pg.Node
 		kbCache:  kbCache,
 	}
 	return u, nil
+}
+
+func (u *KnowledgeBaseUsecase) SetBatchImportUsecase(batchImport *BatchImportUsecase) {
+	u.batchImport = batchImport
+}
+
+func (u *KnowledgeBaseUsecase) SetFileUsecase(fileUsecase *FileUsecase) {
+	u.fileUsecase = fileUsecase
 }
 
 func (u *KnowledgeBaseUsecase) CreateKnowledgeBase(ctx context.Context, req *domain.CreateKnowledgeBaseReq) (string, error) {
@@ -233,10 +244,35 @@ func (u *KnowledgeBaseUsecase) CreateKBRelease(ctx context.Context, req *domain.
 	var learned []learnedRelease
 	var datasetID string
 	if len(req.NodeIDs) > 0 {
+		if u.batchImport == nil {
+			return "", fmt.Errorf("ZIP 导入服务未初始化")
+		}
+		nodes, nodesErr := u.nodeRepo.GetNodesByIDs(ctx, req.NodeIDs)
+		if nodesErr != nil {
+			return "", fmt.Errorf("读取发布文档失败: %w", nodesErr)
+		}
+		originalIDs := make([]string, 0, len(req.NodeIDs))
+		for _, id := range req.NodeIDs {
+			if node := nodes[id]; node == nil || !node.Meta.ArchivePending {
+				originalIDs = append(originalIDs, id)
+			}
+		}
+		archiveNodeIDs, expandErr := u.batchImport.ExpandArchives(ctx, req.KBID, req.NodeIDs, userId, true)
+		if expandErr != nil {
+			return "", fmt.Errorf("解析 ZIP 失败: %w", expandErr)
+		}
+		if len(archiveNodeIDs) > 0 {
+			req.NodeIDs = append(originalIDs, archiveNodeIDs...)
+		} else {
+			req.NodeIDs = originalIDs
+		}
 		// Snapshot first, but do not expose the drafts until learning succeeds.
 		releaseIDs, err = u.nodeRepo.CreatePendingNodeReleases(ctx, req.KBID, userId, req.NodeIDs)
 		if err != nil {
 			return "", fmt.Errorf("创建待发布版本失败: %w", err)
+		}
+		if err := u.snapshotReleasesToOSS(ctx, req.KBID, releaseIDs); err != nil {
+			return "", fmt.Errorf("创建版本 OSS 快照失败: %w", err)
 		}
 		learned, datasetID, err = u.learnPendingReleases(ctx, req.KBID, releaseIDs)
 		if err != nil {
@@ -263,6 +299,44 @@ func (u *KnowledgeBaseUsecase) CreateKBRelease(ctx context.Context, req *domain.
 	return release.ID, nil
 }
 
+func (u *KnowledgeBaseUsecase) snapshotReleasesToOSS(ctx context.Context, kbID string, releaseIDs []string) error {
+	if u.fileUsecase == nil {
+		return fmt.Errorf("文件存储服务未初始化")
+	}
+	for _, releaseID := range releaseIDs {
+		release, err := u.nodeRepo.GetNodeReleaseByID(ctx, releaseID)
+		if err != nil {
+			return err
+		}
+		payload := map[string]any{
+			"version":        1,
+			"release_id":     release.ID,
+			"node_id":        release.NodeID,
+			"name":           release.Name,
+			"content":        release.Content,
+			"editor_content": release.EditorContent,
+			"editor_blocks":  release.EditorBlocks,
+			"editor_format":  release.EditorFormat,
+			"editor_version": release.EditorVersion,
+			"content_type":   release.Meta.ContentType,
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		key := fmt.Sprintf("_versions/%s/%s/%s.json", kbID, release.NodeID, release.ID)
+		if _, err := u.fileUsecase.UploadBytesAtKey(ctx, key, release.Name+".json", data); err != nil {
+			return err
+		}
+		release.Meta.VersionKey = key
+		release.Meta.VersionFormat = "panda-wiki-v1"
+		if err := u.nodeRepo.UpdateNodeReleaseMeta(ctx, release.ID, release.Meta); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID string, releaseIDs []string) ([]learnedRelease, string, error) {
 	if len(releaseIDs) == 0 {
 		return nil, "", nil
@@ -279,6 +353,17 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		}
 		if release.Type == domain.NodeTypeFolder {
 			continue
+		}
+		if strings.TrimSpace(release.Content) == "" && release.Meta.FileKey != "" && u.batchImport != nil {
+			content, contentOK, contentMessage := u.batchImport.extractFileContent(ctx, kbID, release.Meta.FileKey, release.Name)
+			if !contentOK {
+				u.markLearningFailed(kbID, release.NodeID, contentMessage)
+				return learned, kb.DatasetID, fmt.Errorf("文档“%s”内容解析失败: %s", release.Name, contentMessage)
+			}
+			release.Content = content
+			if err := u.nodeRepo.UpdateNodeReleaseContent(ctx, release.ID, content); err != nil {
+				return learned, kb.DatasetID, fmt.Errorf("保存文档“%s”解析内容失败: %w", release.Name, err)
+			}
 		}
 		u.logger.Info("publication learning started", log.String("kb_id", kbID), log.String("node_release_id", release.ID), log.String("stage", "learning"))
 		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, release.NodeID, domain.RagInfo{Status: consts.NodeRagStatusRunning, SyncedAt: time.Now()}); err != nil {

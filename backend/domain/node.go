@@ -176,7 +176,12 @@ type NodeMeta struct {
 	FileType     string `json:"file_type,omitempty"`
 	PreviewKey   string `json:"preview_key,omitempty"`
 	FileReadonly bool   `json:"file_readonly,omitempty"`
-	Attachments  []NodeAttachmentMeta `json:"attachments,omitempty"`
+	// ArchivePending marks a ZIP source that is uploaded but intentionally not
+	// expanded until the user publishes it.
+	ArchivePending bool                 `json:"archive_pending,omitempty"`
+	VersionKey     string               `json:"version_key,omitempty"`
+	VersionFormat  string               `json:"version_format,omitempty"`
+	Attachments    []NodeAttachmentMeta `json:"attachments,omitempty"`
 }
 
 type NodeAttachmentMeta struct {
@@ -199,21 +204,21 @@ func (d *NodeMeta) Scan(value any) error {
 }
 
 type CreateNodeReq struct {
-	KBID          string   `json:"kb_id" validate:"required"`
-	NavId         string   `json:"nav_id" validate:"required"`
-	ParentID      string   `json:"parent_id"`
-	Type          NodeType `json:"type" validate:"required,oneof=1 2"`
-	Name          string   `json:"name" validate:"required"`
-	Content       string   `json:"content"`
-	EditorContent JSONB    `json:"editor_content"`
-	EditorBlocks  JSONB    `json:"editor_blocks"`
-	EditorFormat  string   `json:"editor_format"`
-	EditorVersion int      `json:"editor_version"`
+	KBID          string    `json:"kb_id" validate:"required"`
+	NavId         string    `json:"nav_id" validate:"required"`
+	ParentID      string    `json:"parent_id"`
+	Type          NodeType  `json:"type" validate:"required,oneof=1 2"`
+	Name          string    `json:"name" validate:"required"`
+	Content       string    `json:"content"`
+	EditorContent JSONB     `json:"editor_content"`
+	EditorBlocks  JSONB     `json:"editor_blocks"`
+	EditorFormat  string    `json:"editor_format"`
+	EditorVersion int       `json:"editor_version"`
 	Meta          *NodeMeta `json:"meta"`
-	Emoji         string   `json:"emoji"`
-	Summary       *string  `json:"summary"`
-	ContentType   *string  `json:"content_type"`
-	Position      *float64 `json:"position"`
+	Emoji         string    `json:"emoji"`
+	Summary       *string   `json:"summary"`
+	ContentType   *string   `json:"content_type"`
+	Position      *float64  `json:"position"`
 }
 
 type GetNodeListReq struct {
@@ -303,20 +308,20 @@ type NodeActionReq struct {
 }
 
 type UpdateNodeReq struct {
-	ID            string   `json:"id" validate:"required"`
-	KBID          string   `json:"kb_id" validate:"required"`
-	Name          *string  `json:"name"`
-	Content       *string  `json:"content"`
-	EditorContent *JSONB   `json:"editor_content"`
-	EditorBlocks  *JSONB   `json:"editor_blocks"`
-	EditorFormat  *string  `json:"editor_format"`
-	EditorVersion *int     `json:"editor_version"`
+	ID            string    `json:"id" validate:"required"`
+	KBID          string    `json:"kb_id" validate:"required"`
+	Name          *string   `json:"name"`
+	Content       *string   `json:"content"`
+	EditorContent *JSONB    `json:"editor_content"`
+	EditorBlocks  *JSONB    `json:"editor_blocks"`
+	EditorFormat  *string   `json:"editor_format"`
+	EditorVersion *int      `json:"editor_version"`
 	Meta          *NodeMeta `json:"meta"`
-	Emoji         *string  `json:"emoji"`
-	Summary       *string  `json:"summary"`
-	Position      *float64 `json:"position"`
-	ContentType   *string  `json:"content_type"`
-	NavId         *string  `json:"nav_id"`
+	Emoji         *string   `json:"emoji"`
+	Summary       *string   `json:"summary"`
+	Position      *float64  `json:"position"`
+	ContentType   *string   `json:"content_type"`
+	NavId         *string   `json:"nav_id"`
 }
 
 type ShareNodeListItemResp struct {

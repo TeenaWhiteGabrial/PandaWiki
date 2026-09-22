@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -20,8 +21,8 @@ import (
 )
 
 const (
-	batchImportMaxArchiveSize  = int64(512 * 1024 * 1024)
-	batchImportMaxExpandedSize = int64(2 * 1024 * 1024 * 1024)
+	batchImportMaxArchiveSize  = int64(20 * 1024 * 1024 * 1024)
+	batchImportMaxExpandedSize = int64(100 * 1024 * 1024 * 1024)
 	batchImportMaxFileSize     = int64(100 * 1024 * 1024)
 	batchImportMaxFiles        = 5000
 	batchImportExtractTimeout  = 30 * time.Second
@@ -50,6 +51,83 @@ type BatchImportResult struct {
 	Items    []BatchImportItem `json:"items"`
 }
 
+type ZipUploadTicket struct {
+	UploadURL string `json:"upload_url"`
+	FileKey   string `json:"file_key"`
+	ExpiresIn int64  `json:"expires_in"`
+}
+
+type ZipUploadCommit struct {
+	KBID     string
+	NavID    string
+	ParentID string
+	UserID   string
+	FileKey  string
+	Name     string
+	Size     int64
+}
+
+// ExpandArchives expands uploaded ZIP placeholder nodes at publication time.
+// The archive is downloaded to a temporary file only for this operation and is
+// removed immediately afterwards.
+func (u *BatchImportUsecase) ExpandArchives(ctx context.Context, kbID string, nodeIDs []string, userID string, parseContent bool) ([]string, error) {
+	nodes, err := u.nodeRepo.GetNodesByIDs(ctx, nodeIDs)
+	if err != nil {
+		return nil, fmt.Errorf("read archive nodes failed: %w", err)
+	}
+	created := make([]string, 0)
+	for _, nodeID := range nodeIDs {
+		node := nodes[nodeID]
+		if node == nil || !node.Meta.ArchivePending || node.Meta.FileKey == "" {
+			continue
+		}
+		tmp, _, err := u.fileUsecase.DownloadObjectToTemp(ctx, node.Meta.FileKey)
+		if err != nil {
+			return nil, fmt.Errorf("download archive %q failed: %w", node.Name, err)
+		}
+		func() {
+			defer func() {
+				tmp.Close()
+				_ = os.Remove(tmp.Name())
+			}()
+			boundary := "pandawiki-" + uuid.NewString()
+			prefix := fmt.Sprintf("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\nContent-Type: application/zip\r\n\r\n", boundary, path.Base(node.Name))
+			suffix := fmt.Sprintf("\r\n--%s--\r\n", boundary)
+			reader := multipart.NewReader(io.MultiReader(strings.NewReader(prefix), tmp, strings.NewReader(suffix)), boundary)
+			form, formErr := reader.ReadForm(32 << 20)
+			if formErr != nil {
+				err = fmt.Errorf("read archive upload failed: %w", formErr)
+				return
+			}
+			defer form.RemoveAll()
+			files := form.File["file"]
+			if len(files) != 1 {
+				err = fmt.Errorf("archive upload part is missing")
+				return
+			}
+			result, importErr := u.ImportZip(ctx, kbID, node.NavId, node.ParentID, userID, files[0], parseContent)
+			if importErr != nil {
+				err = importErr
+				return
+			}
+			if result.Failed > 0 || result.Imported == 0 {
+				err = fmt.Errorf("archive %q contains no importable files or has failures", node.Name)
+				return
+			}
+			for _, item := range result.Items {
+				if item.NodeID != "" {
+					created = append(created, item.NodeID)
+				}
+			}
+			_, err = u.nodeRepo.Delete(ctx, kbID, []string{node.ID})
+		}()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return created, nil
+}
+
 type BatchImportUsecase struct {
 	logger      *log.Logger
 	fileUsecase *FileUsecase
@@ -69,6 +147,56 @@ func NewBatchImportUsecase(
 		crawler:     crawler,
 		nodeRepo:    nodeRepo,
 	}
+}
+
+// PresignUpload creates a direct-to-OSS upload ticket. No ZIP bytes pass
+// through the API process, so the server's temporary directory is not used by
+// large uploads.
+func (u *BatchImportUsecase) PresignUpload(ctx context.Context, kbID, filename string, size int64) (*ZipUploadTicket, error) {
+	if kbID == "" || strings.ToLower(path.Ext(filename)) != ".zip" {
+		return nil, fmt.Errorf("only .zip archives are supported")
+	}
+	if size <= 0 {
+		return nil, fmt.Errorf("zip file is empty")
+	}
+	if size > 20*1024*1024*1024 {
+		return nil, fmt.Errorf("zip file exceeds 20 GB")
+	}
+	key := fmt.Sprintf("%s/imports/%s/%s.zip", kbID, uuid.NewString(), uuid.NewString())
+	url, err := u.fileUsecase.PresignObjectUpload(ctx, key, 30*time.Minute)
+	if err != nil {
+		return nil, fmt.Errorf("create upload ticket failed: %w", err)
+	}
+	return &ZipUploadTicket{UploadURL: url, FileKey: key, ExpiresIn: 1800}, nil
+}
+
+// CommitUpload only creates a pending archive node. Parsing is deliberately
+// deferred until publication.
+func (u *BatchImportUsecase) CommitUpload(ctx context.Context, req ZipUploadCommit) (string, error) {
+	if req.FileKey == "" || req.Name == "" || req.KBID == "" || req.NavID == "" {
+		return "", fmt.Errorf("invalid zip upload commit")
+	}
+	if !strings.HasPrefix(strings.TrimLeft(req.FileKey, "/"), req.KBID+"/imports/") || batchImportExt(req.FileKey) != ".zip" {
+		return "", fmt.Errorf("invalid zip object key")
+	}
+	info, err := u.fileUsecase.StatObject(ctx, req.FileKey)
+	if err != nil {
+		return "", fmt.Errorf("uploaded zip not found: %w", err)
+	}
+	if info.Size <= 0 || info.Size > batchImportMaxArchiveSize {
+		return "", fmt.Errorf("uploaded zip exceeds 20 GB")
+	}
+	if req.Size > 0 && info.Size != req.Size {
+		return "", fmt.Errorf("uploaded zip size mismatch")
+	}
+	return u.nodeRepo.Create(ctx, &domain.CreateNodeReq{
+		KBID: req.KBID, NavId: req.NavID, ParentID: req.ParentID,
+		Type: domain.NodeTypeDocument, Name: path.Base(req.Name),
+		Meta: &domain.NodeMeta{
+			ContentType: "file", FileKey: req.FileKey, FileName: path.Base(req.Name),
+			FileType: "zip", FileReadonly: true, ArchivePending: true,
+		},
+	}, req.UserID)
 }
 
 type batchImportFolder struct {
@@ -100,6 +228,7 @@ func (u *BatchImportUsecase) ImportZip(
 	ctx context.Context,
 	kbID, navID, parentID, userID string,
 	file *multipart.FileHeader,
+	parseContent bool,
 ) (*BatchImportResult, error) {
 	if file == nil || file.Size <= 0 {
 		return nil, fmt.Errorf("zip file is empty")
@@ -124,7 +253,9 @@ func (u *BatchImportUsecase) ImportZip(
 	}
 
 	result := &BatchImportResult{BatchID: uuid.NewString(), Items: make([]BatchImportItem, 0)}
-	rootPrefix := "imports/" + result.BatchID
+	// Keep extracted objects under the same KB namespace as the uploaded ZIP.
+	// The relative path after this prefix mirrors the archive directory tree.
+	rootPrefix := fmt.Sprintf("%s/imports/%s", kbID, result.BatchID)
 	folders := map[string]batchImportFolder{"": {id: parentID}}
 	seenFiles := map[string]struct{}{}
 	var expandedSize int64
@@ -229,29 +360,9 @@ func (u *BatchImportUsecase) ImportZip(
 		markdown := ""
 		contentOK := false
 		contentMessage := ""
-		extractCtx, cancelExtract := context.WithTimeout(ctx, batchImportExtractTimeout)
-		parseResp, parseErr := u.crawler.ParseUrl(extractCtx, &v1.CrawlerParseReq{
-			Key: fileKey, KbID: kbID, CrawlerSource: consts.CrawlerSourceFile, Filename: path.Base(relPath),
-		})
-		if parseErr != nil {
-			contentMessage = "内容解析失败：" + parseErr.Error()
-		} else if parseResp == nil || parseResp.Docs.Value.ID == "" {
-			contentMessage = "内容解析未返回文档"
-		} else {
-			exportResp, exportErr := u.crawler.ExportDoc(extractCtx, &v1.CrawlerExportReq{KbID: kbID, ID: parseResp.ID, DocID: parseResp.Docs.Value.ID})
-			if exportErr != nil {
-				contentMessage = "内容转换失败：" + exportErr.Error()
-			} else if exportResp.TaskId == "" {
-				contentMessage = "内容转换未生成任务"
-			} else if scrapeResp, scrapeErr := u.crawler.ScrapeGetResult(extractCtx, exportResp.TaskId); scrapeErr == nil && scrapeResp != nil {
-				markdown, contentOK = scrapeResp.Content, true
-			} else if scrapeErr != nil {
-				contentMessage = "内容提取失败：" + scrapeErr.Error()
-			} else {
-				contentMessage = "内容提取未返回结果"
-			}
+		if parseContent {
+			markdown, contentOK, contentMessage = u.extractFileContent(ctx, kbID, fileKey, path.Base(relPath))
 		}
-		cancelExtract()
 
 		nodeID, createErr := u.nodeRepo.Create(ctx, &domain.CreateNodeReq{
 			KBID: kbID, NavId: navID, ParentID: parentNodeID, Type: domain.NodeTypeDocument,
@@ -271,4 +382,33 @@ func (u *BatchImportUsecase) ImportZip(
 	}
 	result.Total = len(result.Items)
 	return result, nil
+}
+
+func (u *BatchImportUsecase) extractFileContent(ctx context.Context, kbID, fileKey, filename string) (string, bool, string) {
+	extractCtx, cancelExtract := context.WithTimeout(ctx, batchImportExtractTimeout)
+	defer cancelExtract()
+	parseResp, parseErr := u.crawler.ParseUrl(extractCtx, &v1.CrawlerParseReq{
+		Key: fileKey, KbID: kbID, CrawlerSource: consts.CrawlerSourceFile, Filename: filename,
+	})
+	if parseErr != nil {
+		return "", false, "内容解析失败：" + parseErr.Error()
+	}
+	if parseResp == nil || parseResp.Docs.Value.ID == "" {
+		return "", false, "内容解析未返回文档"
+	}
+	exportResp, exportErr := u.crawler.ExportDoc(extractCtx, &v1.CrawlerExportReq{KbID: kbID, ID: parseResp.ID, DocID: parseResp.Docs.Value.ID})
+	if exportErr != nil {
+		return "", false, "内容转换失败：" + exportErr.Error()
+	}
+	if exportResp.TaskId == "" {
+		return "", false, "内容转换未生成任务"
+	}
+	scrapeResp, scrapeErr := u.crawler.ScrapeGetResult(extractCtx, exportResp.TaskId)
+	if scrapeErr != nil {
+		return "", false, "内容提取失败：" + scrapeErr.Error()
+	}
+	if scrapeResp == nil {
+		return "", false, "内容提取未返回结果"
+	}
+	return scrapeResp.Content, true, ""
 }

@@ -7,11 +7,8 @@ import EmptyState from '@/components/EmptyState';
 import Loading from '@/components/Loading';
 import { useURLSearchParams } from '@/hooks';
 import { deleteApiV1NavDelete } from '@/request/Nav';
-import type {
-  ConstsCrawlerSource,
-  DomainNodeListItemResp,
-  V1NavListResp,
-} from '@/request/types';
+import { ConstsCrawlerSource } from '@/request/types';
+import type { DomainNodeListItemResp, V1NavListResp } from '@/request/types';
 import type { GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp } from '@/request/types';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setIsRefreshDocList, setNavId } from '@/store/slices/config';
@@ -24,8 +21,10 @@ import {
   Box,
   Button,
   IconButton,
+  LinearProgress,
   Stack,
   TextField,
+  Typography,
   useTheme,
 } from '@mui/material';
 import {
@@ -42,6 +41,11 @@ import DocListModals from '../DocPageList/DocListModals';
 import { useDocTreeMenu } from '../DocPageList/useDocTreeMenu';
 import { findItemInTree, removeDeep } from '../DocPageList/utils';
 import BatchZipImport from '../../component/BatchZipImport';
+import {
+  getApiV1FileFolderDownload,
+  postApiV1FileFolderDownload,
+} from '@/request/BatchImport';
+import type { FolderDownloadTask } from '@/request/BatchImport';
 
 const SortableNavItem = ({
   nav,
@@ -267,9 +271,12 @@ interface DocPageNavsProps {
   width?: number;
   onWidthChange?: (width: number) => void;
   onDocumentSelect?: (item: ITreeItem) => void;
+  onFolderSelect?: (item: ITreeItem) => void;
   fill?: boolean;
   wikiUrl?: string;
   onPublishOpen?: (ids?: string[]) => void;
+  readOnlyUser?: boolean;
+  onDocumentMenuReady?: (menu: ReturnType<typeof useDocTreeMenu>) => void;
 }
 
 const DocPageNavs = ({
@@ -283,9 +290,12 @@ const DocPageNavs = ({
   width = 300,
   onWidthChange,
   onDocumentSelect,
+  onFolderSelect,
   fill = false,
   wikiUrl = '',
   onPublishOpen,
+  readOnlyUser = false,
+  onDocumentMenuReady,
 }: DocPageNavsProps) => {
   const dispatch = useAppDispatch();
   const { kb_id } = useAppSelector(state => state.config);
@@ -311,6 +321,9 @@ const DocPageNavs = ({
     null,
   );
   const [batchImportOpen, setBatchImportOpen] = useState(false);
+  const [folderDownloadTask, setFolderDownloadTask] =
+    useState<FolderDownloadTask | null>(null);
+  const [folderDownloadOpen, setFolderDownloadOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [importKey, setImportKey] = useState<ConstsCrawlerSource | null>(null);
@@ -346,7 +359,9 @@ const DocPageNavs = ({
         kind: 'nav',
         nav_id: nav.id!,
         children,
-        collapsed: false,
+        // Entering the document workspace starts compact; users can expand
+        // any directory on demand.
+        collapsed: true,
       };
     });
   }, [groups, sortedNavs]);
@@ -457,11 +472,63 @@ const DocPageNavs = ({
   }, []);
 
   const navMenu = useCallback(
-    ({ item }: { item: ITreeItem }): TreeMenuItem[] => {
+    ({
+      item,
+      createItem,
+    }: Parameters<typeof documentMenu>[0]): TreeMenuItem[] => {
       if (item.kind !== 'nav') return [];
       const nav = sortedNavs.find(value => value.id === item.id);
       if (!nav) return [];
+
+      // 目录根节点和普通文件夹使用同一套内容操作：目录本身就是
+      // 该导航下的第一层文件夹，创建时 parent_id 保持为空即可。
+      const folderActions: TreeMenuItem[] = [
+        ...(!readOnlyUser
+          ? [
+              {
+                key: 'folder',
+                label: '创建文件夹',
+                onClick: () => createItem(1),
+              },
+              {
+                key: 'doc',
+                label: '创建文档',
+                children: [
+                  {
+                    label: '创建富文本',
+                    key: 'rich_text',
+                    onClick: () => createItem(2, 'html'),
+                  },
+                  {
+                    label: '创建 Markdown',
+                    key: 'md',
+                    onClick: () => createItem(2, 'md'),
+                  },
+                ],
+              },
+            ]
+          : []),
+        {
+          key: ConstsCrawlerSource.CrawlerSourceFile,
+          label: '导入文档',
+          onClick: () => handleUrl(item, ConstsCrawlerSource.CrawlerSourceFile),
+        },
+        ...(!readOnlyUser
+          ? [
+              {
+                key: 'batch-import-zip',
+                label: '批量导入 ZIP',
+                onClick: () => {
+                  setBatchImportParentId(null);
+                  setBatchImportOpen(true);
+                },
+              },
+            ]
+          : []),
+      ];
+
       return [
+        ...folderActions,
         { key: 'edit', label: '修改目录', onClick: () => handleEdit(nav) },
         {
           key: 'permission',
@@ -480,7 +547,7 @@ const DocPageNavs = ({
           : []),
       ];
     },
-    [handleDeleteClick, handleEdit, handlePermission, sortedNavs],
+    [handleDeleteClick, handleEdit, handlePermission, readOnlyUser, sortedNavs],
   );
 
   const getNodeData = useCallback(
@@ -530,20 +597,69 @@ const DocPageNavs = ({
     },
     [groups, wikiUrl],
   );
+  const handleFolderDownload = useCallback(
+    async (item: ITreeItem) => {
+      if (!kb_id || !item.id) return;
+      try {
+        const task = await postApiV1FileFolderDownload({
+          kb_id,
+          node_id: item.id,
+        });
+        setFolderDownloadTask(task);
+        setFolderDownloadOpen(true);
+        message.info('文件夹压缩任务已创建，可继续进行其他操作');
+        let attempts = 0;
+        const poll = async () => {
+          attempts += 1;
+          const result = await getApiV1FileFolderDownload(task.id);
+          setFolderDownloadTask(result.task);
+          if (result.task.status === 'completed' && result.download_url) {
+            window.open(result.download_url, '_blank');
+            message.success('文件夹压缩包已生成');
+            return;
+          }
+          if (
+            result.task.status === 'failed' ||
+            result.task.status === 'expired'
+          ) {
+            message.error(result.task.error_message || '文件夹下载任务失败');
+            return;
+          }
+          if (attempts < 720) window.setTimeout(poll, 5000);
+        };
+        window.setTimeout(poll, 1000);
+      } catch (error) {
+        message.error(
+          error instanceof Error ? error.message : '创建下载任务失败',
+        );
+      }
+    },
+    [kb_id],
+  );
+  const handleBatchImport = useCallback((item: ITreeItem) => {
+    setBatchImportParentId(item.id);
+    setBatchImportOpen(true);
+  }, []);
+  const handlePublish = useCallback(
+    (item: ITreeItem) => onPublishOpen?.([item.id]),
+    [onPublishOpen],
+  );
   const documentMenu = useDocTreeMenu(
     {
       handleUrl,
-      handleBatchImport: item => {
-        setBatchImportParentId(item.id);
-        setBatchImportOpen(true);
-      },
+      handleBatchImport,
+      handleFolderDownload,
       handleDelete,
-      handlePublish: item => onPublishOpen?.([item.id]),
+      handlePublish,
       handleProperties,
       handleFrontDoc,
     },
-    false,
+    readOnlyUser,
   );
+
+  useEffect(() => {
+    onDocumentMenuReady?.(documentMenu);
+  }, [documentMenu, onDocumentMenuReady]);
   const treeMenu = useCallback(
     (options: Parameters<typeof documentMenu>[0]) =>
       options.item.kind === 'nav' ? navMenu(options) : documentMenu(options),
@@ -558,6 +674,8 @@ const DocPageNavs = ({
       }
       if (item.kind !== 'nav' && item.type === 2) {
         onDocumentSelect?.(item);
+      } else if (item.kind !== 'nav' && item.type === 1) {
+        onFolderSelect?.(item);
       }
     },
     [handleSelect, onDocumentSelect, selectedId],
@@ -792,6 +910,44 @@ const DocPageNavs = ({
           refresh?.();
         }}
       />
+      <Modal
+        title='文件夹下载'
+        open={folderDownloadOpen && !!folderDownloadTask}
+        width={460}
+        footer={null}
+        onCancel={() => setFolderDownloadOpen(false)}
+      >
+        {folderDownloadTask && (
+          <Stack gap={1.5}>
+            <Box sx={{ color: 'text.secondary', fontSize: 14 }}>
+              {folderDownloadTask.status === 'completed'
+                ? '压缩包已生成，下载链接已在新窗口打开。'
+                : folderDownloadTask.status === 'failed'
+                  ? folderDownloadTask.error_message || '压缩任务失败'
+                  : '正在后台生成压缩包，可以关闭此窗口继续操作。'}
+            </Box>
+            {folderDownloadTask.status === 'waiting' ||
+            folderDownloadTask.status === 'processing' ? (
+              <>
+                <LinearProgress
+                  variant='determinate'
+                  value={
+                    folderDownloadTask.total_files > 0
+                      ? (folderDownloadTask.processed_files /
+                          folderDownloadTask.total_files) *
+                        100
+                      : 0
+                  }
+                />
+                <Typography variant='body2' color='text.secondary'>
+                  已处理 {folderDownloadTask.processed_files} /{' '}
+                  {folderDownloadTask.total_files} 个文件
+                </Typography>
+              </>
+            ) : null}
+          </Stack>
+        )}
+      </Modal>
       <Modal
         title={
           <Stack direction='row' alignItems='center' gap={1}>

@@ -21,6 +21,9 @@ interface InputContentProps {
   }) => void;
   scrollTo?: (id: string) => void;
   hidden?: boolean;
+  parentId?: string | null;
+  parentName?: string;
+  batchImport?: boolean;
 }
 
 const AddDocBtn = ({
@@ -31,6 +34,9 @@ const AddDocBtn = ({
   createLocal,
   scrollTo,
   hidden = false,
+  parentId = null,
+  parentName = '根目录',
+  batchImport = true,
 }: InputContentProps) => {
   if (hidden) return null;
 
@@ -69,11 +75,6 @@ const AddDocBtn = ({
           },
         ]
       : []),
-    {
-      key: 'batch-import-zip',
-      label: '批量导入 ZIP',
-      onClick: () => setBatchImportOpen(true),
-    },
   ];
 
   const close = () => {
@@ -82,7 +83,7 @@ const AddDocBtn = ({
   };
 
   return (
-    <Box>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <TreeMenu
         menu={menuItems}
         context={
@@ -93,17 +94,29 @@ const AddDocBtn = ({
           )
         }
       />
+      {batchImport && (
+        <Button
+          variant='outlined'
+          size='small'
+          disabled={disabled}
+          onClick={() => setBatchImportOpen(true)}
+        >
+          批量导入 ZIP
+        </Button>
+      )}
       {key && (
         <AddDocByType
           type={key}
           open={uploadOpen}
           refresh={refresh}
           onCancel={close}
-          parentId={null}
+          parentId={parentId}
         />
       )}
       <BatchZipImport
         open={batchImportOpen}
+        parentId={parentId}
+        parentName={parentName}
         onClose={() => setBatchImportOpen(false)}
         refresh={refresh}
       />

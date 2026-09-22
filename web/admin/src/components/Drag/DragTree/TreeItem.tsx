@@ -1,5 +1,6 @@
 import { ITreeItem } from '@/api';
 import Emoji from '@/components/Emoji';
+import DocumentTypeIcon from '@/components/DocumentTypeIcon';
 import {
   TreeItemComponentProps,
   TreeItemWrapper,
@@ -337,12 +338,20 @@ const TreeItem = React.forwardRef<
                   gap={2}
                   onClick={e => e.stopPropagation()}
                 >
-                  <Emoji
-                    type={item.type}
-                    collapsed={collapsed}
-                    value={emoji}
-                    onChange={setEmoji}
-                  />
+                  {item.type === 1 ? (
+                    <Emoji
+                      type={item.type}
+                      collapsed={collapsed}
+                      value={emoji}
+                      onChange={setEmoji}
+                    />
+                  ) : (
+                    <DocumentTypeIcon
+                      contentType={item.content_type}
+                      fileName={item.name}
+                      sx={{ fontSize: 22 }}
+                    />
+                  )}
                   <TextField
                     size='small'
                     value={value}
@@ -465,39 +474,47 @@ const TreeItem = React.forwardRef<
                     onClick={e => e.stopPropagation()}
                     sx={{ flexShrink: 0, cursor: 'pointer' }}
                   >
-                    <Emoji
-                      readOnly={readOnly}
-                      sx={{ width: 24, height: 24, fontSize: 14 }}
-                      type={item.type}
-                      collapsed={collapsed}
-                      value={item.emoji}
-                      onChange={async value => {
-                        if (readOnlyUser) return;
-                        try {
-                          await putApiV1NodeDetail({
-                            id: item.id,
-                            kb_id: id,
-                            nav_id:
-                              (item as { nav_id?: string }).nav_id ||
-                              nav_id ||
-                              '',
-                            emoji: value,
-                          });
-                          message.success('更新成功');
-                          const temp = [...data];
-                          updateTree(temp, item.id, {
-                            ...item,
-                            updated_at: dayjs().toString(),
-                            status: 1,
-                            emoji: value,
-                          });
-                          updateData?.(temp);
-                          refresh?.();
-                        } catch (error) {
-                          message.error('更新失败');
-                        }
-                      }}
-                    />
+                    {item.type === 1 ? (
+                      <Emoji
+                        readOnly={readOnly}
+                        sx={{ width: 24, height: 24, fontSize: 14 }}
+                        type={item.type}
+                        collapsed={collapsed}
+                        value={item.emoji}
+                        onChange={async value => {
+                          if (readOnlyUser) return;
+                          try {
+                            await putApiV1NodeDetail({
+                              id: item.id,
+                              kb_id: id,
+                              nav_id:
+                                (item as { nav_id?: string }).nav_id ||
+                                nav_id ||
+                                '',
+                              emoji: value,
+                            });
+                            message.success('更新成功');
+                            const temp = [...data];
+                            updateTree(temp, item.id, {
+                              ...item,
+                              updated_at: dayjs().toString(),
+                              status: 1,
+                              emoji: value,
+                            });
+                            updateData?.(temp);
+                            refresh?.();
+                          } catch (error) {
+                            message.error('更新失败');
+                          }
+                        }}
+                      />
+                    ) : (
+                      <DocumentTypeIcon
+                        contentType={item.content_type}
+                        fileName={item.name}
+                        sx={{ fontSize: 22 }}
+                      />
+                    )}
                   </Box>
                   {ui === 'select' ? (
                     <Ellipsis sx={{ width: 0, flex: 1, overflow: 'hidden' }}>

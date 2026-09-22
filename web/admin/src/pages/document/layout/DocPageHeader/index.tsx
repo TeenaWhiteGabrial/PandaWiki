@@ -2,7 +2,17 @@ import Card from '@/components/Card';
 import { getApiV1NodeStats } from '@/request/Node';
 import { useAppSelector } from '@/store';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
-import { Box, ButtonBase, Stack } from '@mui/material';
+import {
+  Box,
+  Button,
+  ButtonBase,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+} from '@mui/material';
+import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import { useCallback, useEffect, useState } from 'react';
 import DocSearch from './DocSearch';
 
@@ -10,11 +20,17 @@ interface DocPageHeaderProps {
   onPublishClick: () => void;
   /** 变更时触发重新拉取统计 */
   refreshTrigger?: number;
+  viewMode?: 'tree' | 'explorer';
+  onViewModeChange?: (mode: 'tree' | 'explorer') => void;
+  onUploadTaskClick?: () => void;
 }
 
 const DocPageHeader = ({
   onPublishClick,
   refreshTrigger,
+  viewMode = 'tree',
+  onViewModeChange,
+  onUploadTaskClick,
 }: DocPageHeaderProps) => {
   const { kb_id, isRefreshDocList, user, kbDetail } = useAppSelector(
     state => state.config,
@@ -112,7 +128,34 @@ const DocPageHeader = ({
               </>
             )}
         </Stack>
-        <DocSearch />
+        <Stack direction='row' alignItems='center' gap={1.5}>
+          {!readOnlyUser && (
+            <Button
+              size='small'
+              startIcon={<CloudUploadOutlinedIcon />}
+              onClick={onUploadTaskClick}
+            >
+              上传任务
+            </Button>
+          )}
+          <ToggleButtonGroup
+            size='small'
+            exclusive
+            value={viewMode}
+            onChange={(_, value: 'tree' | 'explorer' | null) => {
+              if (value) onViewModeChange?.(value);
+            }}
+            aria-label='左侧内容展示模式'
+          >
+            <ToggleButton value='tree' aria-label='目录树模式'>
+              <AccountTreeOutlinedIcon fontSize='small' />
+            </ToggleButton>
+            <ToggleButton value='explorer' aria-label='资源管理器模式'>
+              <ViewListOutlinedIcon fontSize='small' />
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <DocSearch />
+        </Stack>
       </Stack>
     </Card>
   );
