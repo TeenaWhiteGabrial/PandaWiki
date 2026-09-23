@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	v1 "github.com/chaitin/panda-wiki/api/share/v1"
+	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/usecase"
@@ -20,6 +21,7 @@ type ShareCommonHandler struct {
 	*handler.BaseHandler
 	logger      *log.Logger
 	fileUsecase *usecase.FileUsecase
+	nodeUsecase *usecase.NodeUsecase
 }
 
 func NewShareCommonHandler(
@@ -27,11 +29,13 @@ func NewShareCommonHandler(
 	baseHandler *handler.BaseHandler,
 	logger *log.Logger,
 	fileUsecase *usecase.FileUsecase,
+	nodeUsecase *usecase.NodeUsecase,
 ) *ShareCommonHandler {
 	h := &ShareCommonHandler{
 		BaseHandler: baseHandler,
 		logger:      logger,
 		fileUsecase: fileUsecase,
+		nodeUsecase: nodeUsecase,
 	}
 
 	share := e.Group("share/v1/common",
@@ -166,19 +170,55 @@ func (h *ShareCommonHandler) FileUploadByUrl(c echo.Context) error {
 //	@Summary	文件下载地址
 //	@Produce	json
 //	@Param		key	query		string	true	"file key"
+//	@Param		node_id	query	string	true	"node id"
 //	@Success	200	{object}	domain.Response{data=v1.ShareFileDownloadUrlResp}
 //	@Router		/share/v1/common/file/download/url [get]
 func (h *ShareCommonHandler) FileDownloadURL(c echo.Context) error {
 	key := strings.TrimSpace(c.QueryParam("key"))
 	key = strings.TrimSpace(strings.TrimPrefix(key, "/static-file/"))
 	key = strings.TrimLeft(key, "/")
+	if key == "" {
+		return h.NewResponseWithError(c, "file key is required", fmt.Errorf("file key is empty"))
+	}
 	kbID := strings.TrimSpace(c.Request().Header.Get("X-KB-ID"))
-	if kbID != "" && !strings.HasPrefix(key, kbID+"/") {
+	if kbID == "" {
+		return h.NewResponseWithError(c, "kb_id is required", nil)
+	}
+	if !strings.HasPrefix(key, kbID+"/") {
 		return h.NewResponseWithError(c, "file key is invalid", fmt.Errorf("file key does not belong to current knowledge base"))
+	}
+	nodeID := strings.TrimSpace(c.QueryParam("node_id"))
+	if nodeID == "" {
+		return h.NewResponseWithError(c, "node_id is required", fmt.Errorf("node_id is empty"))
+	}
+	if errCode := h.nodeUsecase.ValidateNodePerm(c.Request().Context(), kbID, nodeID, domain.GetShareUserID(c)); errCode != nil {
+		return h.NewResponseWithErrCode(c, *errCode)
+	}
+	node, err := h.nodeUsecase.GetNodeReleaseDetailByKBIDAndID(c.Request().Context(), kbID, nodeID, "raw")
+	if err != nil {
+		return h.NewResponseWithError(c, "failed to get node detail", err)
+	}
+	if !shareNodeOwnsFileKey(node.Meta, key) {
+		return h.NewResponseWithError(c, "file key is invalid", fmt.Errorf("file key does not belong to current node"))
 	}
 	url, err := h.fileUsecase.SignFileURL(c.Request().Context(), key, 30*time.Minute)
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to create file download url", err)
 	}
 	return h.NewResponseWithData(c, v1.ShareFileDownloadUrlResp{URL: url})
+}
+
+func shareNodeOwnsFileKey(meta domain.NodeMeta, key string) bool {
+	if key == "" {
+		return false
+	}
+	if meta.FileKey == key || meta.PreviewKey == key {
+		return true
+	}
+	for _, attachment := range meta.Attachments {
+		if attachment.FileKey == key || attachment.PreviewKey == key {
+			return true
+		}
+	}
+	return false
 }

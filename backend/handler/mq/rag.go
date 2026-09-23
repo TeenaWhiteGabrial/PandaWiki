@@ -3,7 +3,10 @@ package mq
 import (
 	"context"
 	"encoding/json"
+	"strings"
+	"time"
 
+	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/mq"
@@ -21,9 +24,10 @@ type RAGMQHandler struct {
 	kbRepo       *pg.KnowledgeBaseRepository
 	llmUsecase   *usecase.LLMUsecase
 	modelUsecase *usecase.ModelUsecase
+	batchImport  *usecase.BatchImportUsecase
 }
 
-func NewRAGMQHandler(consumer mq.MQConsumer, logger *log.Logger, rag rag.RAGService, nodeRepo *pg.NodeRepository, kbRepo *pg.KnowledgeBaseRepository, llmUsecase *usecase.LLMUsecase, modelUsecase *usecase.ModelUsecase) (*RAGMQHandler, error) {
+func NewRAGMQHandler(consumer mq.MQConsumer, logger *log.Logger, rag rag.RAGService, nodeRepo *pg.NodeRepository, kbRepo *pg.KnowledgeBaseRepository, llmUsecase *usecase.LLMUsecase, modelUsecase *usecase.ModelUsecase, batchImport *usecase.BatchImportUsecase) (*RAGMQHandler, error) {
 	h := &RAGMQHandler{
 		consumer:     consumer,
 		logger:       logger.WithModule("mq.rag"),
@@ -32,6 +36,7 @@ func NewRAGMQHandler(consumer mq.MQConsumer, logger *log.Logger, rag rag.RAGServ
 		kbRepo:       kbRepo,
 		llmUsecase:   llmUsecase,
 		modelUsecase: modelUsecase,
+		batchImport:  batchImport,
 	}
 	if err := consumer.RegisterHandler(domain.VectorTaskTopic, h.HandleNodeContentVectorRequest); err != nil {
 		return nil, err
@@ -75,6 +80,30 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 		if err != nil {
 			h.logger.Error("get kb failed", log.Error(err), log.String("kb_id", request.KBID))
 			return nil
+		}
+		if strings.TrimSpace(nodeRelease.Content) == "" && nodeRelease.Meta.FileKey != "" && h.batchImport != nil {
+			content, ok, message := h.batchImport.ExtractFileContent(ctx, nodeRelease.KBID, nodeRelease.Meta.FileKey, nodeRelease.Name)
+			if !ok {
+				_ = h.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, domain.RagInfo{
+					Status:   consts.NodeRagStatusFailed,
+					Message:  message,
+					SyncedAt: time.Now(),
+				})
+				h.logger.Error("extract node file content failed",
+					log.String("kb_id", nodeRelease.KBID),
+					log.String("node_id", nodeRelease.NodeID),
+					log.String("node_release_id", nodeRelease.ID),
+					log.String("file_key", nodeRelease.Meta.FileKey),
+					log.String("reason", message))
+				return nil
+			}
+			nodeRelease.Content = content
+			if err := h.nodeRepo.UpdateNodeReleaseContent(ctx, nodeRelease.ID, content); err != nil {
+				h.logger.Error("update node release extracted content failed",
+					log.String("node_release_id", nodeRelease.ID),
+					log.Error(err))
+				return nil
+			}
 		}
 
 		// upsert node content chunks

@@ -1105,8 +1105,16 @@ export interface DomainNodeAttachmentMeta {
 }
 
 export interface DomainNodePermissions {
+  allowed_department_ids?: string[];
+  allowed_user_ids?: string[];
   /** 可被问答 */
   answerable?: ConstsNodeAccessPerm;
+  denied_department_ids?: string[];
+  denied_user_ids?: string[];
+  inherit?: boolean;
+  min_permission_level_id?: string;
+  min_permission_level_rank?: number;
+  scope_type?: string;
   /** 导航内可见 */
   visible?: ConstsNodeAccessPerm;
   /** 可被访问 */
@@ -1853,6 +1861,7 @@ export type V1NodePermissionEditResp = Record<string, any>;
 export interface V1NodePermissionResp {
   /** 可被问答 */
   answerable_groups?: DomainNodeGroupDetail[];
+  effective_permissions?: DomainNodePermissions;
   id?: string;
   permissions?: DomainNodePermissions;
   /** 导航内可见 */

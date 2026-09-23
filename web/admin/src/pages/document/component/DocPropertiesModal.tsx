@@ -29,7 +29,7 @@ import {
 } from '@/utils/enterprise';
 import { filterEmptyFolders } from '@/utils/tree';
 import { Modal, message } from '@/components/ui';
-import { Select } from 'antd';
+import { Select, Switch } from 'antd';
 import { Box, Button, Stack, TextField, styled } from '@mui/material';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -44,6 +44,40 @@ interface DocPropertiesModalProps {
   isBatch?: boolean;
   data: DomainNodeListItemResp[];
 }
+
+type PermissionScopeType = 'public' | 'custom';
+
+type FormValues = {
+  name: string;
+  scope_type: PermissionScopeType;
+  inherit: boolean;
+  min_permission_level_id: string;
+  allowed_department_ids: string[];
+  allowed_user_ids: string[];
+  summary: string;
+};
+
+const normalizePermissionScopeType = (
+  scopeType?: string,
+): PermissionScopeType =>
+  scopeType === 'custom' || scopeType === 'department' ? 'custom' : 'public';
+
+const hasExplicitPermissionRule = (permissions?: {
+  scope_type?: string;
+  min_permission_level_id?: string;
+  min_permission_level_rank?: number;
+  allowed_department_ids?: string[];
+  allowed_user_ids?: string[];
+  denied_department_ids?: string[];
+  denied_user_ids?: string[];
+}) =>
+  !!permissions?.scope_type ||
+  !!permissions?.min_permission_level_id ||
+  !!permissions?.min_permission_level_rank ||
+  !!permissions?.allowed_department_ids?.length ||
+  !!permissions?.allowed_user_ids?.length ||
+  !!permissions?.denied_department_ids?.length ||
+  !!permissions?.denied_user_ids?.length;
 
 const StyledText = styled('div')(({ theme }) => ({
   color: theme.palette.text.secondary,
@@ -68,9 +102,8 @@ const DocPropertiesModal = ({
     { id: string; name: string; rank: number }[]
   >([]);
   const [users, setUsers] = useState<{ id: string; account: string }[]>([]);
-  const [navScopeType, setNavScopeType] = useState<'public' | 'department'>(
-    'public',
-  );
+  const [navScopeType, setNavScopeType] =
+    useState<PermissionScopeType>('public');
   const [parentPermissionSummary, setParentPermissionSummary] = useState<{
     departmentIds: string[];
     departmentNames: string[];
@@ -86,8 +119,9 @@ const DocPropertiesModal = ({
     handleSubmit,
     setValue,
     reset,
+    watch,
     formState: { errors },
-  } = useForm({
+  } = useForm<FormValues>({
     defaultValues: {
       name: '',
       scope_type: 'public',
@@ -99,7 +133,8 @@ const DocPropertiesModal = ({
     },
   });
 
-  const scopeType = navScopeType;
+  const inheritPermission = watch('inherit');
+  const scopeType = watch('scope_type');
   const departmentTree = useMemo(
     () => buildDepartmentTree(departments),
     [departments],
@@ -117,8 +152,7 @@ const DocPropertiesModal = ({
       )
     : permissionLevels;
   const availableDepartments =
-    scopeType === 'department' &&
-    parentPermissionSummary.departmentIds.length > 0
+    scopeType === 'custom' && parentPermissionSummary.departmentIds.length > 0
       ? flatDepartments.filter(item =>
           parentPermissionSummary.departmentIds.includes(item.id),
         )
@@ -165,25 +199,34 @@ const DocPropertiesModal = ({
 
   const onSubmit = handleSubmit(values => {
     setLoading(true);
+    const permissions = values.inherit
+      ? {
+          inherit: true,
+        }
+      : {
+          scope_type: values.scope_type,
+          inherit: false,
+          min_permission_level_id: values.min_permission_level_id || undefined,
+          allowed_department_ids:
+            values.scope_type === 'custom'
+              ? [
+                  ...new Set([
+                    ...getAncestorIds(
+                      values.allowed_department_ids || [],
+                      departments,
+                    ),
+                    ...(values.allowed_department_ids || []),
+                  ]),
+                ]
+              : [],
+          allowed_user_ids:
+            values.scope_type === 'custom' ? values.allowed_user_ids || [] : [],
+        };
     Promise.all([
       patchApiV1NodePermissionEdit({
         kb_id: kb_id!,
         ids: data.map(item => item.id!),
-        permissions: {
-          scope_type: navScopeType,
-          inherit: values.inherit,
-          min_permission_level_id: values.min_permission_level_id || undefined,
-          allowed_department_ids: [
-            ...new Set([
-              ...getAncestorIds(
-                values.allowed_department_ids || [],
-                departments,
-              ),
-              ...(values.allowed_department_ids || []),
-            ]),
-          ],
-          allowed_user_ids: values.allowed_user_ids || [],
-        },
+        permissions,
       } as never),
 
       !isBatch
@@ -239,17 +282,18 @@ const DocPropertiesModal = ({
               account: item.account || '',
             })),
           );
-          const parentPermissions = (parentNodePermissionResp?.permissions ||
-            navPermissionResp?.permissions ||
-            {}) as {
-            scope_type?: string;
-            allowed_department_ids?: string[];
-            min_permission_level_id?: string;
-          };
-          const scope =
-            parentPermissions?.scope_type === 'department'
-              ? 'department'
-              : 'public';
+          const parentPermissions =
+            (parentNodePermissionResp?.effective_permissions ||
+              parentNodePermissionResp?.permissions ||
+              navPermissionResp?.permissions ||
+              {}) as {
+              scope_type?: string;
+              allowed_department_ids?: string[];
+              min_permission_level_id?: string;
+            };
+          const scope = normalizePermissionScopeType(
+            parentPermissions?.scope_type,
+          );
           const parentDepartmentIDs =
             parentPermissions?.allowed_department_ids || [];
           setNavScopeType(scope);
@@ -274,13 +318,24 @@ const DocPropertiesModal = ({
         const permissions = res.permissions as
           | {
               inherit?: boolean;
+              scope_type?: string;
               min_permission_level_id?: string;
+              min_permission_level_rank?: number;
               allowed_department_ids?: string[];
               allowed_user_ids?: string[];
+              denied_department_ids?: string[];
+              denied_user_ids?: string[];
             }
           | undefined;
         if (permissions) {
-          setValue('inherit', true);
+          setValue(
+            'inherit',
+            permissions.inherit ?? !hasExplicitPermissionRule(permissions),
+          );
+          setValue(
+            'scope_type',
+            normalizePermissionScopeType(permissions.scope_type),
+          );
           setValue(
             'min_permission_level_id',
             permissions.min_permission_level_id || '',
@@ -389,35 +444,56 @@ const DocPropertiesModal = ({
             </FormItem>
           </>
         )}
-        <FormItem label='目录类型'>
+        <FormItem label='权限方式'>
           <Controller
-            name='scope_type'
+            name='inherit'
             control={control}
             render={({ field }) => (
-              <Select
-                value={field.value}
-                onChange={field.onChange}
-                style={{ width: '100%' }}
-                disabled
-                options={[
-                  { value: 'public', label: '公共目录' },
-                  { value: 'department', label: '部门目录' },
-                ]}
-              />
+              <Stack direction='row' alignItems='center' gap={1}>
+                <Switch
+                  checked={field.value}
+                  onChange={field.onChange}
+                  checkedChildren='继承'
+                  unCheckedChildren='单独'
+                />
+                <StyledText>
+                  {field.value ? '继承父级权限' : '单独设置当前节点权限'}
+                </StyledText>
+              </Stack>
             )}
           />
         </FormItem>
 
+        {!inheritPermission && (
+          <FormItem label='权限范围'>
+            <Controller
+              name='scope_type'
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onChange={field.onChange}
+                  style={{ width: '100%' }}
+                  options={[
+                    { value: 'public', label: '公开' },
+                    { value: 'custom', label: '自定义权限' },
+                  ]}
+                />
+              )}
+            />
+          </FormItem>
+        )}
+
         <FormItem label='父级规则'>
           <Stack gap={0.5}>
             <StyledText>
-              {scopeType === 'department'
-                ? `部门权限：${
+              {navScopeType === 'custom'
+                ? `自定义权限：${
                     parentPermissionSummary.departmentNames.length > 0
                       ? parentPermissionSummary.departmentNames.join(' / ')
                       : '未限制部门'
                   }`
-                : '公共权限：全员可见'}
+                : '公开：全员可见'}
             </StyledText>
             {!levelsDisabled && (
               <StyledText>
@@ -430,7 +506,7 @@ const DocPropertiesModal = ({
           </Stack>
         </FormItem>
 
-        {!levelsDisabled && (
+        {!inheritPermission && !levelsDisabled && (
           <FormItem label='最低权限等级'>
             <Controller
               name='min_permission_level_id'
@@ -453,7 +529,7 @@ const DocPropertiesModal = ({
           </FormItem>
         )}
 
-        {scopeType === 'department' && (
+        {!inheritPermission && scopeType === 'custom' && (
           <>
             <FormItem label='允许部门'>
               <Controller

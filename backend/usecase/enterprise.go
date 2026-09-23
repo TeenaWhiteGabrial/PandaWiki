@@ -169,7 +169,7 @@ func (u *EnterpriseUsecase) ResolveNodePermissions(ctx context.Context, node *do
 	}
 
 	perm := node.Permissions
-	if perm.Inherit == nil || !*perm.Inherit || node.ParentID == "" {
+	if !shouldInheritNodePermissions(perm, node.ParentID) {
 		return perm, nil
 	}
 
@@ -186,7 +186,7 @@ func (u *EnterpriseUsecase) ResolveNodePermissions(ctx context.Context, node *do
 			return perm, nil
 		}
 		perm = parentNode.Permissions
-		if perm.Inherit == nil || !*perm.Inherit || parentNode.ParentID == "" {
+		if !shouldInheritNodePermissions(perm, parentNode.ParentID) {
 			return perm, nil
 		}
 		parentID = parentNode.ParentID
@@ -197,7 +197,7 @@ func (u *EnterpriseUsecase) ResolveNodePermissions(ctx context.Context, node *do
 
 func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nodeID, parentID string, current domain.NodePermissions) (domain.NodePermissions, error) {
 	perm := current
-	if perm.Inherit == nil || !*perm.Inherit || parentID == "" {
+	if !shouldInheritNodePermissions(perm, parentID) {
 		return perm, nil
 	}
 
@@ -214,13 +214,33 @@ func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nod
 			return perm, nil
 		}
 		perm = parentNode.Permissions
-		if perm.Inherit == nil || !*perm.Inherit || parentNode.ParentID == "" {
+		if !shouldInheritNodePermissions(perm, parentNode.ParentID) {
 			return perm, nil
 		}
 		nextParentID = parentNode.ParentID
 	}
 
 	return perm, nil
+}
+
+func shouldInheritNodePermissions(perm domain.NodePermissions, parentID string) bool {
+	if parentID == "" {
+		return false
+	}
+	if perm.Inherit != nil {
+		return *perm.Inherit
+	}
+	return !hasExplicitNodePermissionRule(perm)
+}
+
+func hasExplicitNodePermissionRule(perm domain.NodePermissions) bool {
+	return perm.ScopeType != "" ||
+		perm.MinPermissionLevelID != "" ||
+		perm.MinPermissionLevelRank > 0 ||
+		len(perm.AllowedDepartmentIDs) > 0 ||
+		len(perm.AllowedUserIDs) > 0 ||
+		len(perm.DeniedDepartmentIDs) > 0 ||
+		len(perm.DeniedUserIDs) > 0
 }
 
 func (u *EnterpriseUsecase) MergeNodeAndNavPermissions(nodePerm, navPerm domain.NodePermissions) domain.NodePermissions {
@@ -322,34 +342,16 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 		}
 	}
 
-	scopeType := perm.ScopeType
-	if scopeType == "" {
-		scopeType = domain.NodePermissionScopePublic
+	if len(perm.AllowedUserIDs) == 0 && len(perm.AllowedDepartmentIDs) == 0 {
+		return true
 	}
-
-	switch scopeType {
-	case domain.NodePermissionScopeDepartment:
-		if access.PrincipalID != "" && slices.Contains(perm.AllowedUserIDs, access.PrincipalID) {
-			return true
-		}
-		for _, departmentID := range access.DepartmentIDs {
-			if slices.Contains(perm.AllowedDepartmentIDs, departmentID) {
-				return true
-			}
-		}
-		return false
-	default:
-		if len(perm.AllowedUserIDs) == 0 && len(perm.AllowedDepartmentIDs) == 0 {
-			return true
-		}
-		if access.PrincipalID != "" && slices.Contains(perm.AllowedUserIDs, access.PrincipalID) {
-			return true
-		}
-		for _, departmentID := range access.DepartmentIDs {
-			if slices.Contains(perm.AllowedDepartmentIDs, departmentID) {
-				return true
-			}
-		}
-		return false
+	if access.PrincipalID != "" && slices.Contains(perm.AllowedUserIDs, access.PrincipalID) {
+		return true
 	}
+	for _, departmentID := range access.DepartmentIDs {
+		if slices.Contains(perm.AllowedDepartmentIDs, departmentID) {
+			return true
+		}
+	}
+	return false
 }

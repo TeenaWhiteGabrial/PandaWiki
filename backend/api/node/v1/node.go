@@ -44,8 +44,9 @@ type NodePermissionReq struct {
 }
 
 type NodePermissionResp struct {
-	ID          string                 `json:"id"`
-	Permissions domain.NodePermissions `json:"permissions"`
+	ID                   string                 `json:"id"`
+	Permissions          domain.NodePermissions `json:"permissions"`
+	EffectivePermissions domain.NodePermissions `json:"effective_permissions"`
 }
 
 type NodePermissionEditReq struct {

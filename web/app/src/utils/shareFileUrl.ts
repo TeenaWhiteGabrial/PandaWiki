@@ -19,19 +19,23 @@ export const getStaticFileFallbackUrl = (key: string) => {
   return normalized ? `/static-file/${normalized}` : '';
 };
 
-export const resolveShareFileUrl = async (key: string) => {
+export const resolveShareFileUrl = async (key: string, nodeId: string) => {
   const normalized = normalizeFileKey(key);
   if (!normalized) return '';
 
-  const cached = signedUrlCache.get(normalized);
+  const cacheKey = `${nodeId}:${normalized}`;
+  const cached = signedUrlCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.url;
   }
 
-  const result = await getShareV1CommonFileDownloadUrl({ key: normalized });
+  const result = await getShareV1CommonFileDownloadUrl({
+    key: normalized,
+    node_id: nodeId,
+  });
   const url = result?.url || getStaticFileFallbackUrl(normalized);
   if (url) {
-    signedUrlCache.set(normalized, {
+    signedUrlCache.set(cacheKey, {
       url,
       expiresAt: Date.now() + cacheTTL,
     });
@@ -39,11 +43,15 @@ export const resolveShareFileUrl = async (key: string) => {
   return url;
 };
 
-export const openShareFile = async (key: string, target = '_blank') => {
+export const openShareFile = async (
+  key: string,
+  nodeId: string,
+  target = '_blank',
+) => {
   const popup =
     typeof window !== 'undefined' ? window.open('about:blank', target) : null;
   try {
-    const url = await resolveShareFileUrl(key);
+    const url = await resolveShareFileUrl(key, nodeId);
     if (url) {
       if (popup) popup.location.href = url;
       else window.open(url, target, 'noopener,noreferrer');

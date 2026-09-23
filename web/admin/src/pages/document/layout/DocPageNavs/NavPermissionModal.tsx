@@ -23,11 +23,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 type FormValues = {
-  scope_type: string;
+  scope_type: 'public' | 'custom';
   min_permission_level_id: string;
   allowed_department_ids: string[];
   allowed_user_ids: string[];
 };
+
+const normalizeScopeType = (scopeType?: string): FormValues['scope_type'] =>
+  scopeType === 'custom' || scopeType === 'department' ? 'custom' : 'public';
 
 interface NavPermissionModalProps {
   open: boolean;
@@ -97,7 +100,7 @@ const NavPermissionModal = ({
         })),
       );
       const permissions = permissionResp.permissions || {};
-      setValue('scope_type', permissions.scope_type || 'public');
+      setValue('scope_type', normalizeScopeType(permissions.scope_type));
       setValue(
         'min_permission_level_id',
         permissions.min_permission_level_id || '',
@@ -125,13 +128,17 @@ const NavPermissionModal = ({
       permissions: {
         scope_type: values.scope_type,
         min_permission_level_id: values.min_permission_level_id || undefined,
-        allowed_department_ids: [
-          ...new Set([
-            ...getAncestorIds(values.allowed_department_ids, departments),
-            ...values.allowed_department_ids,
-          ]),
-        ],
-        allowed_user_ids: values.allowed_user_ids,
+        allowed_department_ids:
+          values.scope_type === 'custom'
+            ? [
+                ...new Set([
+                  ...getAncestorIds(values.allowed_department_ids, departments),
+                  ...values.allowed_department_ids,
+                ]),
+              ]
+            : [],
+        allowed_user_ids:
+          values.scope_type === 'custom' ? values.allowed_user_ids : [],
       },
     })
       .then(() => {
@@ -151,7 +158,7 @@ const NavPermissionModal = ({
       onOk={submit}
     >
       <Form labelWidth={100} gap={3}>
-        <FormItem label='栏目类型'>
+        <FormItem label='权限范围'>
           <Controller
             name='scope_type'
             control={control}
@@ -161,8 +168,8 @@ const NavPermissionModal = ({
                 onChange={field.onChange}
                 style={{ width: '100%' }}
                 options={[
-                  { value: 'public', label: '公共栏目' },
-                  { value: 'department', label: '部门栏目' },
+                  { value: 'public', label: '公开' },
+                  { value: 'custom', label: '自定义权限' },
                 ]}
               />
             )}
@@ -190,7 +197,7 @@ const NavPermissionModal = ({
             />
           </FormItem>
         )}
-        {scopeType === 'department' && (
+        {scopeType === 'custom' && (
           <>
             <FormItem label='允许部门'>
               <Controller

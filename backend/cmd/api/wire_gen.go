@@ -209,7 +209,7 @@ func createApp() (*App, error) {
 	shareWechatHandler := share.NewShareWechatHandler(echo, baseHandler, logger, appUsecase, conversationUsecase, wechatServiceUsecase, wecomUsecase, wechatAppUsecase)
 	shareCaptchaHandler := share.NewShareCaptchaHandler(baseHandler, echo, logger, knowledgeBaseUsecase)
 	openapiV1Handler := share.NewOpenapiV1Handler(echo, baseHandler, logger, appUsecase)
-	shareCommonHandler := share.NewShareCommonHandler(echo, baseHandler, logger, fileUsecase)
+	shareCommonHandler := share.NewShareCommonHandler(echo, baseHandler, logger, fileUsecase, nodeUsecase)
 	shareHandler := &share.ShareHandler{
 		ShareNodeHandler:         shareNodeHandler,
 		ShareNavHandler:          shareNavHandler,

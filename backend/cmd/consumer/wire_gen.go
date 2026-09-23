@@ -66,8 +66,22 @@ func createApp() (*App, error) {
 	}
 	ragRepository := mq2.NewRAGRepository(mqProducer)
 	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
+	minioClient, err := s3.NewMinioClient(configConfig)
+	if err != nil {
+		return nil, err
+	}
+	imageOSSClient, err := s3.NewImageOSSClient(configConfig)
+	if err != nil {
+		return nil, err
+	}
+	fileUsecase := usecase.NewFileUsecase(logger, minioClient, imageOSSClient, configConfig, systemSettingRepo)
+	crawlerUsecase, err := usecase.NewCrawlerUsecase(logger, mqConsumer, cacheCache)
+	if err != nil {
+		return nil, err
+	}
+	batchImportUsecase := usecase.NewBatchImportUsecase(logger, fileUsecase, crawlerUsecase, nodeRepository)
 	modelUsecase := usecase.NewModelUsecase(modelRepository, nodeRepository, ragRepository, ragService, logger, configConfig, knowledgeBaseRepository, systemSettingRepo)
-	ragmqHandler, err := mq3.NewRAGMQHandler(mqConsumer, logger, ragService, nodeRepository, knowledgeBaseRepository, llmUsecase, modelUsecase)
+	ragmqHandler, err := mq3.NewRAGMQHandler(mqConsumer, logger, ragService, nodeRepository, knowledgeBaseRepository, llmUsecase, modelUsecase, batchImportUsecase)
 	if err != nil {
 		return nil, err
 	}
@@ -85,10 +99,6 @@ func createApp() (*App, error) {
 	geoRepo := cache2.NewGeoCache(cacheCache, db, logger)
 	userRepository := pg2.NewUserRepository(db, logger)
 	statUseCase := usecase.NewStatUseCase(statRepository, nodeRepository, conversationRepository, appRepository, ipAddressRepo, geoRepo, userRepository, knowledgeBaseRepository, logger)
-	minioClient, err := s3.NewMinioClient(configConfig)
-	if err != nil {
-		return nil, err
-	}
 	nodeUsecase := usecase.NewNodeUsecase(nodeRepository, navRepository, appRepository, ragRepository, userRepository, knowledgeBaseRepository, llmUsecase, ragService, logger, minioClient, modelRepository, authRepo, modelUsecase, enterpriseUsecase, systemSettingRepo, configConfig)
 	cronHandler, err := mq3.NewCronHandler(logger, statRepository, nodeRepository, statUseCase, nodeUsecase)
 	if err != nil {

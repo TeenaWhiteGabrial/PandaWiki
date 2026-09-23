@@ -1,11 +1,13 @@
-import { Modal } from '@/components/ui';
+import { Modal, message } from '@/components/ui';
 import { getRagStatusMeta } from '@/pages/document/utils/ragStatus';
+import { postApiV1NodeRestudy } from '@/request/Node';
 import {
   ConstsNodeRagInfoStatus,
   DomainNodeListItemResp,
   DomainNodeStatus,
   GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
 } from '@/request/types';
+import { useAppSelector } from '@/store';
 import {
   Box,
   Button,
@@ -27,7 +29,6 @@ interface LearningProgressPanelProps {
   groups: GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[];
   onClose: () => void;
   refresh: () => void;
-  onRestudyClick?: () => void;
 }
 
 type LearningDoc = DomainNodeListItemResp & {
@@ -49,11 +50,12 @@ const LearningProgressPanel = ({
   groups,
   onClose,
   refresh,
-  onRestudyClick,
 }: LearningProgressPanelProps) => {
+  const { kb_id } = useAppSelector(state => state.config);
   const [filter, setFilter] = useState<FilterKey>('attention');
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
 
   const docs = useMemo<LearningDoc[]>(() => {
     const result: LearningDoc[] = [];
@@ -157,6 +159,33 @@ const LearningProgressPanel = ({
   const totalPages = Math.max(1, Math.ceil(visibleDocs.length / pageSize));
   const pagedDocs = visibleDocs.slice((page - 1) * pageSize, page * pageSize);
   const shouldAutoRefresh = docs.some(item => isRunningStatus(item.statusKey));
+  const pendingDocs = docs.filter(
+    item =>
+      item.statusKey === 'NONE' ||
+      item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusPending ||
+      item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusFailed,
+  );
+
+  const submitRestudy = (items: LearningDoc[], emptyMessage: string) => {
+    if (!kb_id) return;
+    const ids = Array.from(
+      new Set(items.map(item => item.id).filter(Boolean) as string[]),
+    );
+    if (ids.length === 0) {
+      message.warning(emptyMessage);
+      return;
+    }
+    setSubmitting(true);
+    postApiV1NodeRestudy({
+      kb_id,
+      node_ids: ids,
+    })
+      .then(() => {
+        message.success(`已提交 ${ids.length} 个文档，后台正在学习/重建索引`);
+        refresh();
+      })
+      .finally(() => setSubmitting(false));
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -254,19 +283,27 @@ const LearningProgressPanel = ({
           <Button size='small' onClick={refresh}>
             刷新
           </Button>
-          {onRestudyClick && (
-            <Button
-              size='small'
-              color='primary'
-              variant='outlined'
-              onClick={() => {
-                onClose();
-                onRestudyClick();
-              }}
-            >
-              重建索引
-            </Button>
-          )}
+          <Button
+            size='small'
+            variant='outlined'
+            disabled={submitting || pendingDocs.length === 0}
+            onClick={() =>
+              submitRestudy(pendingDocs, '暂无需要学习的待处理文档')
+            }
+          >
+            学习待处理 {pendingDocs.length}
+          </Button>
+          <Button
+            size='small'
+            color='primary'
+            variant='contained'
+            disabled={submitting || visibleDocs.length === 0}
+            onClick={() =>
+              submitRestudy(visibleDocs, '当前筛选结果没有可重建的文档')
+            }
+          >
+            重建当前结果
+          </Button>
         </Stack>
 
         <Stack

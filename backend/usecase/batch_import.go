@@ -481,6 +481,10 @@ func (u *BatchImportUsecase) importZip(
 	return result, nil
 }
 
+func (u *BatchImportUsecase) ExtractFileContent(ctx context.Context, kbID, fileKey, filename string) (string, bool, string) {
+	return u.extractFileContent(ctx, kbID, fileKey, filename)
+}
+
 func (u *BatchImportUsecase) extractFileContent(ctx context.Context, kbID, fileKey, filename string) (string, bool, string) {
 	extractCtx, cancelExtract := context.WithTimeout(ctx, batchImportExtractTimeout)
 	defer cancelExtract()

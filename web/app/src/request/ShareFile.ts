@@ -83,6 +83,7 @@ export const postShareV1CommonFileUploadUrl = (
 export const getShareV1CommonFileDownloadUrl = (
   query: {
     key: string;
+    node_id: string;
   },
   params: RequestParams = {},
 ) =>

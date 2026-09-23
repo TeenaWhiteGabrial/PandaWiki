@@ -110,7 +110,7 @@ type NodePermissions struct {
 	Answerable             consts.NodeAccessPerm `json:"answerable"`           // 兼容旧字段，不再单独作为权限入口
 	Visitable              consts.NodeAccessPerm `json:"visitable"`            // 兼容旧字段，不再单独作为权限入口
 	Visible                consts.NodeAccessPerm `json:"visible"`              // 兼容旧字段，不再单独作为权限入口
-	ScopeType              string                `json:"scope_type,omitempty"` // public / department
+	ScopeType              string                `json:"scope_type,omitempty"` // public / custom / department(legacy)
 	Inherit                *bool                 `json:"inherit,omitempty"`    // 目录默认继承父级，可显式覆盖
 	MinPermissionLevelID   string                `json:"min_permission_level_id,omitempty"`
 	MinPermissionLevelRank int                   `json:"min_permission_level_rank,omitempty"`
@@ -122,6 +122,7 @@ type NodePermissions struct {
 
 const (
 	NodePermissionScopePublic     = "public"
+	NodePermissionScopeCustom     = "custom"
 	NodePermissionScopeDepartment = "department"
 )
 
@@ -131,7 +132,9 @@ func (s NodePermissions) HasEnterpriseRule() bool {
 		s.MinPermissionLevelID != "" ||
 		s.MinPermissionLevelRank > 0 ||
 		len(s.AllowedDepartmentIDs) > 0 ||
-		len(s.AllowedUserIDs) > 0
+		len(s.AllowedUserIDs) > 0 ||
+		len(s.DeniedDepartmentIDs) > 0 ||
+		len(s.DeniedUserIDs) > 0
 }
 
 func (s *NodePermissions) Scan(value any) error {

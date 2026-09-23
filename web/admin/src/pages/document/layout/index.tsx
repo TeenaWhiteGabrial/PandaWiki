@@ -356,7 +356,6 @@ const Content = () => {
         groups={groups}
         onClose={() => setLearningProgressOpen(false)}
         refresh={refresh}
-        onRestudyClick={() => setRestudyOpen(true)}
       />
       <DndContext
         sensors={sensors}

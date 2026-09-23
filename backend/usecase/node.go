@@ -632,12 +632,14 @@ func (u *NodeUsecase) GetNodePermissionsByID(ctx context.Context, id, kbID strin
 	if err != nil {
 		return nil, err
 	}
+	effectivePermissions := node.Permissions
 	if resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions); resolveErr == nil {
-		node.Permissions = resolvedPermissions
+		effectivePermissions = resolvedPermissions
 	}
 	resp := &v1.NodePermissionResp{
-		ID:          node.ID,
-		Permissions: node.Permissions,
+		ID:                   node.ID,
+		Permissions:          node.Permissions,
+		EffectivePermissions: effectivePermissions,
 	}
 	return resp, nil
 }
@@ -651,49 +653,6 @@ func (u *NodeUsecase) ValidateNodePermissionsEdit(req v1.NodePermissionEditReq, 
 
 func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermissionEditReq) error {
 	if req.Permissions != nil {
-		if len(req.IDs) == 1 {
-			node, err := u.nodeRepo.GetNodeByID(ctx, req.IDs[0])
-			if err != nil {
-				return err
-			}
-			if node.ParentID != "" {
-				parentPermissions, err := u.enterprise.ResolveParentNodePermissions(ctx, node)
-				if err != nil {
-					return err
-				}
-
-				if req.Permissions.ScopeType != "" && parentPermissions.ScopeType != "" && req.Permissions.ScopeType != parentPermissions.ScopeType {
-					return domain.ErrNodePermissionOutOfParentScope
-				}
-
-				if !config.PermissionLevelsDisabled() && parentPermissions.MinPermissionLevelID != "" && req.Permissions.MinPermissionLevelID != "" {
-					parentLevel, err := u.enterprise.repo.GetPermissionLevelByID(ctx, parentPermissions.MinPermissionLevelID)
-					if err != nil {
-						return err
-					}
-					currentLevel, err := u.enterprise.repo.GetPermissionLevelByID(ctx, req.Permissions.MinPermissionLevelID)
-					if err != nil {
-						return err
-					}
-					if currentLevel.Rank < parentLevel.Rank {
-						return domain.ErrNodePermissionOutOfParentScope
-					}
-				}
-
-				if len(parentPermissions.AllowedDepartmentIDs) > 0 && len(req.Permissions.AllowedDepartmentIDs) > 0 {
-					allowedDepartmentIDs, err := u.enterprise.ListDescendantDepartmentIDs(ctx, parentPermissions.AllowedDepartmentIDs)
-					if err != nil {
-						return err
-					}
-					for _, departmentID := range req.Permissions.AllowedDepartmentIDs {
-						if _, ok := allowedDepartmentIDs[departmentID]; !ok {
-							return domain.ErrNodePermissionOutOfParentScope
-						}
-					}
-				}
-			}
-		}
-
 		updateMap := map[string]interface{}{
 			"permissions": req.Permissions,
 		}
@@ -851,9 +810,6 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 			u.logger.Error("get node by id failed",
 				log.String("node_id", nodeRelease.NodeID),
 				log.Error(getNodeErr))
-			continue
-		}
-		if node.Meta.FileReadonly {
 			continue
 		}
 		var ragStatus consts.NodeRagInfoStatus

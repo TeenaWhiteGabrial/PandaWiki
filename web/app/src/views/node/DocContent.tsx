@@ -312,7 +312,10 @@ const DocContent = ({
             </Box>
           )}
 
-          <AttachmentList attachments={info?.meta?.attachments} />
+          <AttachmentList
+            attachments={info?.meta?.attachments}
+            nodeId={info?.id || ''}
+          />
 
           <Box
             className='editor-container'

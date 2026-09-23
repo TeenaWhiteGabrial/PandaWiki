@@ -55,11 +55,15 @@ const StyledTag = styled('div')<{ color: keyof Theme['palette'] }>(
 
 const SCOPE_TYPE_MAP = {
   public: {
-    label: '公共目录',
+    label: '公开',
     color: 'primary',
   },
+  custom: {
+    label: '自定义权限',
+    color: 'warning',
+  },
   department: {
-    label: '部门目录',
+    label: '自定义权限',
     color: 'warning',
   },
 } as const;

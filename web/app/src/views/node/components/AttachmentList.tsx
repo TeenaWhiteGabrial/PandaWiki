@@ -16,6 +16,7 @@ import { useMemo } from 'react';
 
 interface AttachmentListProps {
   attachments?: DomainNodeAttachmentMeta[];
+  nodeId: string;
 }
 
 const canPreviewInline = (attachment: DomainNodeAttachmentMeta) => {
@@ -27,7 +28,7 @@ const canPreviewInline = (attachment: DomainNodeAttachmentMeta) => {
   );
 };
 
-const AttachmentList = ({ attachments = [] }: AttachmentListProps) => {
+const AttachmentList = ({ attachments = [], nodeId }: AttachmentListProps) => {
   const normalizedAttachments = useMemo(() => {
     return attachments.filter(item => !!item?.file_key);
   }, [attachments]);
@@ -85,14 +86,14 @@ const AttachmentList = ({ attachments = [] }: AttachmentListProps) => {
                     {previewable && (
                       <Button
                         variant='outlined'
-                        onClick={() => openShareFile(previewKey)}
+                        onClick={() => openShareFile(previewKey, nodeId)}
                       >
                         预览
                       </Button>
                     )}
                     <Button
                       variant='contained'
-                      onClick={() => openShareFile(fileKey)}
+                      onClick={() => openShareFile(fileKey, nodeId)}
                     >
                       下载
                     </Button>
