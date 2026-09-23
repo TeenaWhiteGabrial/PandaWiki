@@ -13,6 +13,7 @@ import {
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
+import ManageSearchOutlinedIcon from '@mui/icons-material/ManageSearchOutlined';
 import { useCallback, useEffect, useState } from 'react';
 import DocSearch from './DocSearch';
 
@@ -24,6 +25,7 @@ interface DocPageHeaderProps {
   viewMode?: 'tree' | 'explorer';
   onViewModeChange?: (mode: 'tree' | 'explorer') => void;
   onUploadTaskClick?: () => void;
+  onLearningProgressClick?: () => void;
 }
 
 const DocPageHeader = ({
@@ -33,6 +35,7 @@ const DocPageHeader = ({
   viewMode = 'tree',
   onViewModeChange,
   onUploadTaskClick,
+  onLearningProgressClick,
 }: DocPageHeaderProps) => {
   const { kb_id, isRefreshDocList, user, kbDetail } = useAppSelector(
     state => state.config,
@@ -162,13 +165,22 @@ const DocPageHeader = ({
         </Stack>
         <Stack direction='row' alignItems='center' gap={1.5}>
           {!readOnlyUser && (
-            <Button
-              size='small'
-              startIcon={<CloudUploadOutlinedIcon />}
-              onClick={onUploadTaskClick}
-            >
-              上传任务
-            </Button>
+            <>
+              <Button
+                size='small'
+                startIcon={<CloudUploadOutlinedIcon />}
+                onClick={onUploadTaskClick}
+              >
+                上传任务
+              </Button>
+              <Button
+                size='small'
+                startIcon={<ManageSearchOutlinedIcon />}
+                onClick={onLearningProgressClick}
+              >
+                学习进度
+              </Button>
+            </>
           )}
           <ToggleButtonGroup
             size='small'

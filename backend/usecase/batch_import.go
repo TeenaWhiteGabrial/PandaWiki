@@ -322,6 +322,12 @@ func (u *BatchImportUsecase) importZip(
 		if entry.FileInfo().IsDir() || strings.HasSuffix(entry.Name, "/") {
 			continue
 		}
+		entryName, decodeErr := decodeBatchImportEntryName(entry)
+		if decodeErr == nil {
+			if relPath, pathErr := cleanBatchImportPath(entryName); pathErr == nil && isArchiveMetadataFile(relPath) {
+				continue
+			}
+		}
 		totalFiles++
 		totalBytes += int64(entry.UncompressedSize64)
 	}
@@ -329,6 +335,13 @@ func (u *BatchImportUsecase) importZip(
 	var processedBytes int64
 	if onProgress != nil {
 		onProgress(ArchiveProgress{TotalFiles: totalFiles, TotalBytes: totalBytes})
+	}
+	markProcessed := func(entry *zip.File) {
+		processedFiles++
+		processedBytes += int64(entry.UncompressedSize64)
+		if onProgress != nil {
+			onProgress(ArchiveProgress{TotalFiles: totalFiles, ProcessedFiles: processedFiles, TotalBytes: totalBytes, ProcessedBytes: processedBytes})
+		}
 	}
 	// Keep extracted objects under the same KB namespace as the uploaded ZIP.
 	// The relative path after this prefix mirrors the archive directory tree.
@@ -371,12 +384,14 @@ func (u *BatchImportUsecase) importZip(
 		if decodeErr != nil {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: entry.Name, Status: "failed", Message: decodeErr.Error()})
+			markProcessed(entry)
 			continue
 		}
 		relPath, pathErr := cleanBatchImportPath(entryName)
 		if pathErr != nil {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: entryName, Status: "failed", Message: pathErr.Error()})
+			markProcessed(entry)
 			continue
 		}
 		isDir := entry.FileInfo().IsDir() || strings.HasSuffix(entry.Name, "/")
@@ -389,20 +404,17 @@ func (u *BatchImportUsecase) importZip(
 		if isArchiveMetadataFile(relPath) {
 			continue
 		}
-		processedFiles++
-		processedBytes += int64(entry.UncompressedSize64)
-		if onProgress != nil {
-			onProgress(ArchiveProgress{TotalFiles: totalFiles, ProcessedFiles: processedFiles, TotalBytes: totalBytes, ProcessedBytes: processedBytes})
-		}
 		if _, exists := seenFiles[relPath]; exists {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: relPath, Status: "failed", Message: "duplicate path in archive"})
+			markProcessed(entry)
 			continue
 		}
 		seenFiles[relPath] = struct{}{}
 		if entry.UncompressedSize64 > uint64(batchImportMaxFileSize) || expandedSize+int64(entry.UncompressedSize64) > batchImportMaxExpandedSize {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: relPath, Status: "failed", Message: "expanded file size exceeds limit"})
+			markProcessed(entry)
 			continue
 		}
 		expandedSize += int64(entry.UncompressedSize64)
@@ -410,6 +422,7 @@ func (u *BatchImportUsecase) importZip(
 		if err != nil {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: relPath, Status: "failed", Message: err.Error()})
+			markProcessed(entry)
 			continue
 		}
 		content, readErr := io.ReadAll(io.LimitReader(contentReader, batchImportMaxFileSize+1))
@@ -417,6 +430,7 @@ func (u *BatchImportUsecase) importZip(
 		if readErr != nil || int64(len(content)) > batchImportMaxFileSize {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: relPath, Status: "failed", Message: "read file failed or file is too large"})
+			markProcessed(entry)
 			continue
 		}
 
@@ -432,6 +446,7 @@ func (u *BatchImportUsecase) importZip(
 		if _, err := u.fileUsecase.UploadBytesAtKey(ctx, fileKey, path.Base(relPath), content); err != nil {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: relPath, FileKey: fileKey, Status: "failed", Message: err.Error()})
+			markProcessed(entry)
 			continue
 		}
 
@@ -452,6 +467,7 @@ func (u *BatchImportUsecase) importZip(
 		if createErr != nil {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: relPath, FileKey: fileKey, Status: "failed", Message: createErr.Error()})
+			markProcessed(entry)
 			continue
 		}
 		result.Imported++
@@ -459,6 +475,7 @@ func (u *BatchImportUsecase) importZip(
 			contentMessage = "原文件已导入，但内容提取失败，暂不可参与问答"
 		}
 		result.Items = append(result.Items, BatchImportItem{Path: relPath, NodeID: nodeID, FileKey: fileKey, Status: "imported", ContentOK: contentOK, Message: contentMessage})
+		markProcessed(entry)
 	}
 	result.Total = len(result.Items)
 	return result, nil

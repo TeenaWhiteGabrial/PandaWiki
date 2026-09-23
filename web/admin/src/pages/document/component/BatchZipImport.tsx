@@ -1,14 +1,15 @@
 import {
   getApiV1FileUploadZipTasks,
-  postApiV1FileUploadZipPartComplete,
   postApiV1FileUploadZipTaskFail,
-  postApiV1FileUploadZipTaskRetry,
-  postApiV1FileUploadZipTaskComplete,
   postApiV1FileUploadZipTasks,
-  putApiV1FileUploadZipPart,
   type BatchImportResult,
 } from '@/request/BatchImport';
 import { useAppSelector } from '@/store';
+import {
+  ZIP_UPLOAD_STORAGE_PREFIX,
+  canResumeZipUpload,
+  uploadZipTaskParts,
+} from '../utils/zipUploadResume';
 import { message, Modal } from '@/components/ui';
 import {
   Alert,
@@ -71,8 +72,8 @@ const BatchZipImport = ({
       const tasks = await getApiV1FileUploadZipTasks(kb_id);
       const savedTaskId = Object.keys(localStorage)
         .map(key =>
-          key.startsWith('panda-wiki-zip-upload:')
-            ? key.slice('panda-wiki-zip-upload:'.length)
+          key.startsWith(ZIP_UPLOAD_STORAGE_PREFIX)
+            ? key.slice(ZIP_UPLOAD_STORAGE_PREFIX.length)
             : '',
         )
         .find(Boolean);
@@ -83,7 +84,7 @@ const BatchZipImport = ({
           item.size === file.size &&
           item.nav_id === targetNavId &&
           (item.parent_id || '') === (parentId || '') &&
-          item.status !== 'completed',
+          canResumeZipUpload(item),
       );
       if (!task)
         task = (tasks || []).find(
@@ -92,7 +93,7 @@ const BatchZipImport = ({
             item.size === file.size &&
             item.nav_id === targetNavId &&
             (item.parent_id || '') === (parentId || '') &&
-            item.status !== 'completed',
+            canResumeZipUpload(item),
         );
       if (!task) {
         task = await postApiV1FileUploadZipTasks({
@@ -102,62 +103,17 @@ const BatchZipImport = ({
           filename: file.name,
           size: file.size,
         });
-      } else if (task.status === 'failed') {
-        task = await postApiV1FileUploadZipTaskRetry(task.id);
       }
       activeTaskId = task.id;
       localStorage.setItem(
-        `panda-wiki-zip-upload:${task.id}`,
+        `${ZIP_UPLOAD_STORAGE_PREFIX}${task.id}`,
         JSON.stringify({ name: file.name, size: file.size }),
       );
-      const uploadedParts: Record<string, string> =
-        typeof task.uploaded_parts === 'string'
-          ? JSON.parse(task.uploaded_parts || '{}')
-          : task.uploaded_parts || {};
-      for (let part = 1; part <= task.total_parts; part += 1) {
-        const start = (part - 1) * task.part_size;
-        const end = Math.min(file.size, start + task.part_size);
-        if (uploadedParts[String(part)]) {
-          setProgress(Math.round((end * 100) / file.size));
-          continue;
-        }
-        let uploaded = false;
-        let lastError: unknown;
-        for (let attempt = 1; attempt <= 3 && !uploaded; attempt += 1) {
-          try {
-            const partResult = await putApiV1FileUploadZipPart(
-              task.id,
-              part,
-              file.slice(start, end),
-              (loaded, total) =>
-                setProgress(
-                  Math.round(
-                    ((start + (loaded / total) * (end - start)) * 100) /
-                      file.size,
-                  ),
-                ),
-            );
-            const etag = partResult.etag;
-            await postApiV1FileUploadZipPartComplete(task.id, part, {
-              etag,
-              size: end - start,
-            });
-            uploaded = true;
-          } catch (error) {
-            lastError = error;
-            if (attempt < 3)
-              await new Promise(resolve =>
-                window.setTimeout(resolve, attempt * 1000),
-              );
-          }
-        }
-        if (!uploaded)
-          throw lastError instanceof Error
-            ? lastError
-            : new Error(`第 ${part} 个分片上传失败`);
-      }
-      await postApiV1FileUploadZipTaskComplete(task.id);
-      localStorage.removeItem(`panda-wiki-zip-upload:${task.id}`);
+      await uploadZipTaskParts({
+        file,
+        task,
+        onProgress: nextProgress => setProgress(nextProgress),
+      });
       setProgress(100);
       refresh?.();
       message.info('ZIP 已上传，正在后台解压；请在异步任务中查看最终结果');

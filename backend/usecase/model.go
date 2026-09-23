@@ -71,22 +71,36 @@ func (u *ModelUsecase) normalizeModelModeSetting(config *domain.ModelModeSetting
 		return
 	}
 
+	if config.AutoProvider != nil {
+		provider := consts.NormalizeAutoModeProvider(string(config.AutoProvider.Provider))
+		config.AutoProvider.Provider = domain.ModelProvider(provider)
+		if config.AutoProvider.BaseURL == "" {
+			if baseURL := consts.GetAutoModeBaseURL(provider); baseURL != "" {
+				config.AutoProvider.BaseURL = baseURL
+			}
+		}
+	}
+
 	if config.AutoProvider == nil && len(config.AutoProviderConfigs) > 0 {
 		for _, item := range config.AutoProviderConfigs {
 			if item.ID != config.ActiveAutoProvider {
 				continue
 			}
+			provider := consts.NormalizeAutoModeProvider(item.Provider)
 			config.AutoProvider = &domain.AutoModeProviderSetting{
-				Provider: domain.ModelProvider(item.Provider),
+				Provider: domain.ModelProvider(provider),
 				BaseURL:  item.BaseURL,
 				APIKey:   item.APIKey,
 				Models: domain.AutoModeModelSelection{
-					Chat:       consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeChat)),
-					Embedding:  consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeEmbedding)),
-					Rerank:     consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeRerank)),
-					Analysis:   consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeAnalysis)),
-					AnalysisVL: consts.GetAutoModeDefaultModel(item.Provider, string(domain.ModelTypeAnalysisVL)),
+					Chat:       consts.GetAutoModeDefaultModel(provider, string(domain.ModelTypeChat)),
+					Embedding:  consts.GetAutoModeDefaultModel(provider, string(domain.ModelTypeEmbedding)),
+					Rerank:     consts.GetAutoModeDefaultModel(provider, string(domain.ModelTypeRerank)),
+					Analysis:   consts.GetAutoModeDefaultModel(provider, string(domain.ModelTypeAnalysis)),
+					AnalysisVL: consts.GetAutoModeDefaultModel(provider, string(domain.ModelTypeAnalysisVL)),
 				},
+			}
+			if config.AutoProvider.BaseURL == "" {
+				config.AutoProvider.BaseURL = consts.GetAutoModeBaseURL(provider)
 			}
 			break
 		}
@@ -123,6 +137,7 @@ func (u *ModelUsecase) normalizeModelModeSetting(config *domain.ModelModeSetting
 
 	for index := range config.AutoProviderConfigs {
 		item := &config.AutoProviderConfigs[index]
+		item.Provider = consts.NormalizeAutoModeProvider(item.Provider)
 		if item.ID == "" {
 			item.ID = uuid.New().String()
 		}
@@ -150,6 +165,8 @@ func (u *ModelUsecase) validateAutoProviderConfig(ctx context.Context, config *d
 	if config == nil {
 		return fmt.Errorf("auto provider config is required")
 	}
+	normalizedProvider := consts.NormalizeAutoModeProvider(string(config.Provider))
+	config.Provider = domain.ModelProvider(normalizedProvider)
 	if !consts.SupportsAutoModeProvider(string(config.Provider)) {
 		return fmt.Errorf("auto mode does not support provider %s", config.Provider)
 	}
@@ -173,7 +190,7 @@ func (u *ModelUsecase) validateAutoProviderConfig(ctx context.Context, config *d
 			checkType = domain.ModelTypeChat
 		}
 		check, err := u.modelkit.CheckModel(ctx, &modelkitDomain.CheckModelReq{
-			Provider: string(config.Provider),
+			Provider: normalizedProvider,
 			Model:    modelName,
 			BaseURL:  config.BaseURL,
 			APIKey:   config.APIKey,

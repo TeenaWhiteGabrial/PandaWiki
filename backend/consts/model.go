@@ -19,7 +19,17 @@ const (
 
 const AutoModeBaseURL = "https://model-square.app.baizhi.cloud/v1"
 
+func NormalizeAutoModeProvider(provider string) string {
+	switch provider {
+	case "Other":
+		return "CompatiblePlatform"
+	default:
+		return provider
+	}
+}
+
 func GetAutoModeDefaultModel(provider string, modelType string) string {
+	provider = NormalizeAutoModeProvider(provider)
 	switch provider {
 	case "BaiZhiCloud", "CompatiblePlatform":
 		switch modelType {
@@ -57,6 +67,7 @@ func GetAutoModeDefaultModel(provider string, modelType string) string {
 }
 
 func GetAutoModeBaseURL(provider string) string {
+	provider = NormalizeAutoModeProvider(provider)
 	switch provider {
 	case "BaiZhiCloud":
 		return AutoModeBaseURL
@@ -66,6 +77,7 @@ func GetAutoModeBaseURL(provider string) string {
 }
 
 func SupportsAutoModeProvider(provider string) bool {
+	provider = NormalizeAutoModeProvider(provider)
 	switch provider {
 	case "BaiZhiCloud",
 		"CompatiblePlatform",

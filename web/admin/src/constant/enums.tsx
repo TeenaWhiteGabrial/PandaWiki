@@ -824,6 +824,21 @@ export const ModelProvider = {
     modelDocumentUrl: '',
     defaultBaseUrl: '',
   },
+  CompatiblePlatform: {
+    label: 'CompatiblePlatform',
+    cn: 'OpenAI 兼容',
+    icon: IconAAIshezhi,
+    urlWrite: true,
+    secretRequired: true,
+    customHeader: false,
+    chat: true,
+    code: true,
+    embedding: true,
+    rerank: true,
+    analysis: true,
+    modelDocumentUrl: '',
+    defaultBaseUrl: '',
+  },
 };
 
 export const MAC_SYMBOLS = {

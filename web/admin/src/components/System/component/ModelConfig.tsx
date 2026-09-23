@@ -9,16 +9,7 @@ import {
 import { GithubComChaitinPandaWikiDomainModelListItem } from '@/request/types';
 import { addOpacityToColor } from '@/utils';
 import { message, Modal } from '@/components/ui';
-import {
-  Box,
-  Button,
-  Stack,
-  Switch,
-  Radio,
-  RadioGroup,
-  FormControlLabel,
-  useTheme,
-} from '@mui/material';
+import { Box, Button, Stack, Switch, useTheme } from '@mui/material';
 import LottieIcon from '../../LottieIcon';
 import {
   useState,
@@ -35,6 +26,10 @@ import {
   modelService,
 } from '@/services/modelService';
 import { GithubComChaitinPandaWikiDomainModelProvider } from '@/request/types';
+import {
+  normalizeModelProviderForApi,
+  normalizeModelProviderForDisplay,
+} from '@/utils/modelProvider';
 import AutoModelConfig, {
   AutoModelConfigRef,
   AutoModelConfigFormData,
@@ -88,10 +83,10 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
       showSaveBtn = true,
     } = props;
 
-    const [autoConfigMode, setAutoConfigMode] = useState(false);
+    const [autoConfigMode, setAutoConfigMode] = useState(true);
     const [hasAutoSwitched, setHasAutoSwitched] = useState(false);
-    const [tempMode, setTempMode] = useState<'auto' | 'manual'>('manual');
-    const [savedMode, setSavedMode] = useState<'auto' | 'manual'>('manual');
+    const [tempMode, setTempMode] = useState<'auto' | 'manual'>('auto');
+    const [savedMode, setSavedMode] = useState<'auto' | 'manual'>('auto');
     const [isSaving, setIsSaving] = useState(false);
     const [initialAutoProvider, setInitialAutoProvider] =
       useState<AutoModelConfigFormData | null>(null);
@@ -137,11 +132,9 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
         try {
           const setting = await getApiV1ModelModeSetting();
           if (setting) {
-            const isAuto = setting.mode === 'auto';
-            const mode = setting.mode as 'auto' | 'manual';
-            setAutoConfigMode(isAuto);
-            setTempMode(mode);
-            setSavedMode(mode);
+            setAutoConfigMode(true);
+            setTempMode('auto');
+            setSavedMode('auto');
 
             setInitialAutoProvider(
               (setting.auto_provider as AutoModelConfigFormData | null) || null,
@@ -267,11 +260,11 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
             models: AutoModelConfigFormData['models'];
           };
         } = {
-          mode: tempMode,
+          mode: 'auto',
         };
 
-        // 如果是自动模式，获取自动供应商配置
-        if (tempMode === 'auto' && autoConfigRef.current) {
+        // 当前管理端只开放自动模式，保存时始终读取自动供应商配置
+        if (autoConfigRef.current) {
           const formData = autoConfigRef.current.getFormData();
           if (formData) {
             if (
@@ -287,8 +280,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
               return;
             }
             requestData.auto_provider = {
-              provider:
-                formData.provider as GithubComChaitinPandaWikiDomainModelProvider,
+              provider: normalizeModelProviderForApi(formData.provider),
               base_url: formData.base_url,
               api_key: formData.api_key,
               models: formData.models,
@@ -297,24 +289,24 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
         }
 
         await postApiV1ModelSwitchMode(requestData);
-        setSavedMode(tempMode);
-        setAutoConfigMode(tempMode === 'auto');
+        setTempMode('auto');
+        setSavedMode('auto');
+        setAutoConfigMode(true);
         setHasConfigChanged(false); // 重置变更标记
 
         // 更新保存的初始值
-        if (tempMode === 'auto' && autoConfigRef.current) {
+        if (autoConfigRef.current) {
           const formData = autoConfigRef.current.getFormData();
           if (formData) {
-            setInitialAutoProvider(formData);
+            setInitialAutoProvider({
+              ...formData,
+              provider: normalizeModelProviderForDisplay(formData.provider),
+            });
           }
         }
 
         if (showSaveBtn && modelConfigList.length === 0) {
-          message.success(
-            tempMode === 'auto'
-              ? '已切换为自动配置模式'
-              : '已切换为手动配置模式',
-          );
+          message.success('已保存自动配置');
         }
         cacheModelData.current = {};
         await getModelList(); // 刷新模型列表
@@ -403,29 +395,16 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
               模型配置
             </Box>
             <Stack gap={1} direction='row' alignItems='center'>
-              <RadioGroup
-                row
-                value={tempMode}
-                onChange={e => {
-                  const newMode = e.target.value as 'auto' | 'manual';
-                  setTempMode(newMode);
-                  // 立即切换显示的组件
-                  setAutoConfigMode(newMode === 'auto');
-                  // 切换模式时重置变更标记
-                  setHasConfigChanged(false);
+              <Box
+                sx={{
+                  fontSize: 13,
+                  color: 'text.secondary',
+                  lineHeight: '24px',
                 }}
               >
-                <FormControlLabel
-                  value='auto'
-                  control={<Radio size='small' />}
-                  label='自动配置'
-                />
-                <FormControlLabel
-                  value='manual'
-                  control={<Radio size='small' />}
-                  label='手动配置'
-                />
-              </RadioGroup>
+                当前使用自动配置模式：统一配置供应商、Base URL 和 API
+                Key，并分别选择对话、向量、重排序和文档分析模型。
+              </Box>
               {showSaveBtn && (
                 <Box
                   sx={{
@@ -446,7 +425,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                   >
                     提示：
                   </Box>
-                  切换配置模式或修改向量模型会在后台重建问答索引
+                  修改向量模型会在后台重建问答索引
                 </Box>
               )}
             </Stack>

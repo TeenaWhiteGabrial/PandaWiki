@@ -10,6 +10,7 @@ import { postApiV1Node, putApiV1NodeDetail } from '@/request/Node';
 import { useAppSelector } from '@/store';
 import { AppContext, updateTree } from '@/utils/drag';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
+import { getRagStatusMeta } from '@/pages/document/utils/ragStatus';
 import {
   handleMultiSelect,
   handleParentControlledSelect,
@@ -26,6 +27,7 @@ import {
   Stack,
   TextField,
   Theme,
+  Tooltip,
   alpha,
   styled,
 } from '@mui/material';
@@ -235,6 +237,7 @@ const TreeItem = React.forwardRef<
     if (item.permissions) return item.permissions;
     return null;
   }, [item.permissions]);
+  const ragStatusMeta = useMemo(() => getRagStatusMeta(item), [item]);
 
   const enterprisePermissionTags = useMemo(() => {
     if (!permissions) return [];
@@ -592,6 +595,16 @@ const TreeItem = React.forwardRef<
                         )}
                         {item.status === 1 && (
                           <StyledTag color='error'>更新未发布</StyledTag>
+                        )}
+                        {ragStatusMeta && (
+                          <Tooltip
+                            title={ragStatusMeta.message || ''}
+                            disableHoverListener={!ragStatusMeta.message}
+                          >
+                            <StyledTag color={ragStatusMeta.tagColor}>
+                              {ragStatusMeta.label}
+                            </StyledTag>
+                          </Tooltip>
                         )}
                         {enterprisePermissionTags.map(tag => (
                           <StyledTag key={tag.label} color={tag.color}>

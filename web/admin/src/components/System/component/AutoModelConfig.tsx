@@ -1,6 +1,10 @@
 import { ModelProvider } from '@/constant/enums';
 import { postApiV1ModelProviderSupported } from '@/request/Model';
-import type { GithubComChaitinPandaWikiDomainModelProvider } from '@/request/types';
+import {
+  AUTO_MODE_PROVIDER_KEYS,
+  normalizeModelProviderForApi,
+  normalizeModelProviderForDisplay,
+} from '@/utils/modelProvider';
 import { Select } from 'antd';
 import {
   Box,
@@ -65,11 +69,14 @@ const AUTO_MODEL_TYPE_FIELDS: {
 ];
 
 const buildProviderOptionList = () => {
-  return Object.entries(ModelProvider).map(([key, value]) => ({
-    value: key,
-    label: value.cn || value.label || key,
-    defaultBaseUrl: value.defaultBaseUrl || '',
-  }));
+  return AUTO_MODE_PROVIDER_KEYS.map(key => {
+    const value = ModelProvider[key];
+    return {
+      value: key,
+      label: value.cn || value.label || key,
+      defaultBaseUrl: value.defaultBaseUrl || '',
+    };
+  });
 };
 
 const createDefaultValue = (): AutoModelConfigFormData => ({
@@ -85,12 +92,31 @@ const createDefaultValue = (): AutoModelConfigFormData => ({
   },
 });
 
+const normalizeFormData = (
+  value: AutoModelConfigFormData | null,
+): AutoModelConfigFormData => {
+  const next = value || createDefaultValue();
+  const provider = normalizeModelProviderForDisplay(next.provider);
+  return {
+    ...next,
+    provider,
+    base_url: next.base_url || ModelProvider[provider]?.defaultBaseUrl || '',
+    models: {
+      chat: next.models?.chat || '',
+      embedding: next.models?.embedding || '',
+      rerank: next.models?.rerank || '',
+      analysis: next.models?.analysis || '',
+      analysis_vl: next.models?.analysis_vl || '',
+    },
+  };
+};
+
 const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
   (props, ref) => {
     const { showTip = false, initialValue = null, onDataChange } = props;
     const providerOptions = useMemo(buildProviderOptionList, []);
     const [formData, setFormData] = useState<AutoModelConfigFormData>(
-      initialValue || createDefaultValue(),
+      normalizeFormData(initialValue),
     );
     const [modelOptions, setModelOptions] = useState<
       Record<ModelTypeKey, string[]>
@@ -109,7 +135,7 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
     const apiKey = formData.api_key;
 
     useEffect(() => {
-      setFormData(initialValue || createDefaultValue());
+      setFormData(normalizeFormData(initialValue));
     }, [initialValue]);
 
     useImperativeHandle(ref, () => ({
@@ -148,7 +174,7 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
       setLoadingType(modelType);
       try {
         const result = await postApiV1ModelProviderSupported({
-          provider: provider as GithubComChaitinPandaWikiDomainModelProvider,
+          provider: normalizeModelProviderForApi(provider),
           base_url: baseURL,
           api_key: apiKey,
           type: modelType,
@@ -267,8 +293,9 @@ const AutoModelConfig = forwardRef<AutoModelConfigRef, AutoModelConfigProps>(
                   updateField('provider', nextProvider);
                   updateField(
                     'base_url',
-                    ModelProvider[nextProvider as keyof typeof ModelProvider]
-                      ?.defaultBaseUrl || '',
+                    ModelProvider[
+                      normalizeModelProviderForDisplay(nextProvider)
+                    ]?.defaultBaseUrl || '',
                   );
                 }}
                 options={providerOptions.map(option => ({

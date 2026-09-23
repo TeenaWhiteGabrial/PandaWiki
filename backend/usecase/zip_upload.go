@@ -18,6 +18,7 @@ import (
 )
 
 const zipUploadPartSize int64 = 64 * 1024 * 1024
+const zipUploadInterruptedAfter = 30 * time.Minute
 
 type ZipUploadUsecase struct {
 	repo        *pg.ZipUploadRepository
@@ -64,12 +65,85 @@ func (u *ZipUploadUsecase) Get(ctx context.Context, id, userID string) (*domain.
 	if t.CreatedBy != userID {
 		return nil, fmt.Errorf("upload task access denied")
 	}
-	if t.Status != domain.ZipUploadCompleted {
-		if err := u.refreshParts(ctx, t); err != nil {
-			u.logger.Warn("refresh multipart parts failed", log.String("task_id", t.ID), log.Error(err))
+	u.refreshActiveUpload(ctx, t)
+	u.enrichTask(t)
+	return t, nil
+}
+
+func (u *ZipUploadUsecase) refreshActiveUpload(ctx context.Context, task *domain.ZipUploadTask) {
+	if task.Status != domain.ZipUploadWaiting &&
+		task.Status != domain.ZipUploadUploading &&
+		task.Status != domain.ZipUploadInterrupted {
+		u.enrichTask(task)
+		return
+	}
+	if err := u.refreshParts(ctx, task); err != nil {
+		u.logger.Warn("refresh multipart parts failed", log.String("task_id", task.ID), log.Error(err))
+		u.enrichTask(task)
+		if task.Status != domain.ZipUploadInterrupted && u.shouldMarkInterrupted(task, time.Now()) {
+			task.Status = domain.ZipUploadInterrupted
+			task.ErrorMessage = fmt.Sprintf("上传状态刷新失败且长时间无进展：%s。请重新选择同一个 ZIP 继续上传或取消任务", err.Error())
+			if updateErr := u.repo.Update(ctx, task); updateErr != nil {
+				u.logger.Warn("mark zip upload interrupted failed", log.String("task_id", task.ID), log.Error(updateErr))
+			}
+			u.enrichTask(task)
+		}
+		return
+	}
+	if task.Status != domain.ZipUploadInterrupted && u.shouldMarkInterrupted(task, time.Now()) {
+		task.Status = domain.ZipUploadInterrupted
+		task.ErrorMessage = fmt.Sprintf("上传长时间无进展，已上传 %d/%d 个分片，请重新选择同一个 ZIP 继续上传或取消任务", task.UploadedPartCount, task.TotalParts)
+		if err := u.repo.Update(ctx, task); err != nil {
+			u.logger.Warn("mark zip upload interrupted failed", log.String("task_id", task.ID), log.Error(err))
 		}
 	}
-	return t, nil
+	u.enrichTask(task)
+}
+
+func (u *ZipUploadUsecase) shouldMarkInterrupted(task *domain.ZipUploadTask, now time.Time) bool {
+	u.enrichTask(task)
+	if task.TotalParts <= 0 || task.UploadedPartCount >= task.TotalParts {
+		return false
+	}
+	if task.UpdatedAt.IsZero() {
+		return false
+	}
+	return now.Sub(task.UpdatedAt) >= zipUploadInterruptedAfter
+}
+
+func (u *ZipUploadUsecase) parseUploadedParts(task *domain.ZipUploadTask) map[string]string {
+	parts := map[string]string{}
+	_ = json.Unmarshal([]byte(task.UploadedParts), &parts)
+	if parts == nil {
+		parts = map[string]string{}
+	}
+	return parts
+}
+
+func (u *ZipUploadUsecase) enrichTask(task *domain.ZipUploadTask) {
+	parts := u.parseUploadedParts(task)
+	task.UploadedPartCount = len(parts)
+	task.MissingParts = task.MissingParts[:0]
+	for i := 1; i <= task.TotalParts; i++ {
+		if _, ok := parts[fmt.Sprintf("%d", i)]; !ok {
+			task.MissingParts = append(task.MissingParts, i)
+		}
+	}
+	if task.UpdatedAt.IsZero() {
+		task.StaleSeconds = 0
+	} else {
+		stale := time.Since(task.UpdatedAt)
+		if stale < 0 {
+			stale = 0
+		}
+		task.StaleSeconds = int64(stale.Seconds())
+	}
+	task.CanResume = (task.Status == domain.ZipUploadUploading ||
+		task.Status == domain.ZipUploadWaiting ||
+		task.Status == domain.ZipUploadInterrupted ||
+		task.Status == domain.ZipUploadFailed) &&
+		task.UploadedPartCount < task.TotalParts &&
+		task.TotalParts > 0
 }
 
 func (u *ZipUploadUsecase) refreshParts(ctx context.Context, task *domain.ZipUploadTask) error {
@@ -77,11 +151,7 @@ func (u *ZipUploadUsecase) refreshParts(ctx context.Context, task *domain.ZipUpl
 	if err != nil {
 		return err
 	}
-	known := map[string]string{}
-	_ = json.Unmarshal([]byte(task.UploadedParts), &known)
-	if known == nil {
-		known = map[string]string{}
-	}
+	known := u.parseUploadedParts(task)
 	var uploadedBytes int64
 	for _, part := range parts {
 		known[fmt.Sprintf("%d", part.PartNumber)] = part.ETag
@@ -92,8 +162,15 @@ func (u *ZipUploadUsecase) refreshParts(ctx context.Context, task *domain.ZipUpl
 	task.UploadedParts = string(b)
 	task.UploadedBytes = uploadedBytes
 	if changed {
-		return u.repo.Update(ctx, task)
+		if task.Status == domain.ZipUploadInterrupted {
+			task.Status = domain.ZipUploadUploading
+			task.ErrorMessage = ""
+		}
+		if err := u.repo.Update(ctx, task); err != nil {
+			return err
+		}
 	}
+	u.enrichTask(task)
 	return nil
 }
 func (u *ZipUploadUsecase) List(ctx context.Context, kbID, userID string) ([]*domain.ZipUploadTask, error) {
@@ -102,11 +179,7 @@ func (u *ZipUploadUsecase) List(ctx context.Context, kbID, userID string) ([]*do
 		return nil, err
 	}
 	for _, task := range tasks {
-		if task.Status != domain.ZipUploadCompleted {
-			if refreshErr := u.refreshParts(ctx, task); refreshErr != nil {
-				u.logger.Warn("refresh multipart parts failed", log.String("task_id", task.ID), log.Error(refreshErr))
-			}
-		}
+		u.refreshActiveUpload(ctx, task)
 	}
 	return tasks, nil
 }
@@ -115,6 +188,9 @@ func (u *ZipUploadUsecase) PresignPart(ctx context.Context, id, userID string, p
 	t, err := u.Get(ctx, id, userID)
 	if err != nil {
 		return "", err
+	}
+	if t.Status == domain.ZipUploadCanceled || t.Status == domain.ZipUploadCompleted || t.Status == domain.ZipUploadProcessing {
+		return "", fmt.Errorf("upload task is not resumable")
 	}
 	if part < 1 || part > t.TotalParts {
 		return "", fmt.Errorf("invalid upload part")
@@ -126,6 +202,9 @@ func (u *ZipUploadUsecase) UploadPart(ctx context.Context, id, userID string, pa
 	t, err := u.Get(ctx, id, userID)
 	if err != nil {
 		return "", 0, err
+	}
+	if t.Status == domain.ZipUploadCanceled || t.Status == domain.ZipUploadCompleted || t.Status == domain.ZipUploadProcessing {
+		return "", 0, fmt.Errorf("upload task is not resumable")
 	}
 	if part < 1 || part > t.TotalParts {
 		return "", 0, fmt.Errorf("invalid upload part")
@@ -152,14 +231,13 @@ func (u *ZipUploadUsecase) CompletePart(ctx context.Context, id, userID string, 
 	if err != nil {
 		return nil, err
 	}
+	if t.Status == domain.ZipUploadCanceled || t.Status == domain.ZipUploadCompleted || t.Status == domain.ZipUploadProcessing {
+		return nil, fmt.Errorf("upload task is not resumable")
+	}
 	if part < 1 || part > t.TotalParts || etag == "" {
 		return nil, fmt.Errorf("invalid uploaded part")
 	}
-	parts := map[string]string{}
-	_ = json.Unmarshal([]byte(t.UploadedParts), &parts)
-	if parts == nil {
-		parts = map[string]string{}
-	}
+	parts := u.parseUploadedParts(t)
 	key := fmt.Sprintf("%d", part)
 	if _, exists := parts[key]; !exists {
 		t.UploadedBytes += size
@@ -171,6 +249,7 @@ func (u *ZipUploadUsecase) CompletePart(ctx context.Context, id, userID string, 
 	if err := u.repo.Update(ctx, t); err != nil {
 		return nil, err
 	}
+	u.enrichTask(t)
 	return t, nil
 }
 
@@ -182,8 +261,10 @@ func (u *ZipUploadUsecase) Complete(ctx context.Context, id, userID string) (*do
 	if t.Status == domain.ZipUploadCompleted || t.Status == domain.ZipUploadProcessing {
 		return t, nil
 	}
-	parts := map[string]string{}
-	_ = json.Unmarshal([]byte(t.UploadedParts), &parts)
+	if t.Status == domain.ZipUploadCanceled {
+		return nil, fmt.Errorf("upload task has been canceled")
+	}
+	parts := u.parseUploadedParts(t)
 	if len(parts) != t.TotalParts {
 		return nil, fmt.Errorf("upload is incomplete: %d/%d parts", len(parts), t.TotalParts)
 	}
@@ -227,6 +308,7 @@ func (u *ZipUploadUsecase) Complete(ctx context.Context, id, userID string) (*do
 	if err := u.repo.Update(ctx, t); err != nil {
 		return nil, err
 	}
+	u.enrichTask(t)
 	return t, nil
 }
 
@@ -265,7 +347,7 @@ func (u *ZipUploadUsecase) Retry(ctx context.Context, id, userID string) (*domai
 	if err != nil {
 		return nil, err
 	}
-	if t.Status != domain.ZipUploadFailed {
+	if t.Status != domain.ZipUploadFailed && t.Status != domain.ZipUploadInterrupted {
 		return t, nil
 	}
 	t.Status = domain.ZipUploadUploading
@@ -274,6 +356,7 @@ func (u *ZipUploadUsecase) Retry(ctx context.Context, id, userID string) (*domai
 	if err := u.repo.Update(ctx, t); err != nil {
 		return nil, err
 	}
+	u.enrichTask(t)
 	return t, nil
 }
 
@@ -290,5 +373,32 @@ func (u *ZipUploadUsecase) Fail(ctx context.Context, id, userID, reason string) 
 	if err := u.repo.Update(ctx, t); err != nil {
 		return nil, err
 	}
+	u.enrichTask(t)
+	return t, nil
+}
+
+func (u *ZipUploadUsecase) Cancel(ctx context.Context, id, userID string) (*domain.ZipUploadTask, error) {
+	t, err := u.Get(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if t.Status == domain.ZipUploadCompleted || t.Status == domain.ZipUploadProcessing {
+		return nil, fmt.Errorf("processing or completed zip upload cannot be canceled")
+	}
+	if t.Status == domain.ZipUploadCanceled {
+		return t, nil
+	}
+	if t.UploadID != "" {
+		if err := u.objectStore.AbortMultipartUpload(ctx, t.FileKey, t.UploadID); err != nil {
+			u.logger.Warn("abort multipart upload failed", log.String("task_id", t.ID), log.Error(err))
+		}
+	}
+	t.Status = domain.ZipUploadCanceled
+	t.ErrorMessage = "任务已取消"
+	t.CanResume = false
+	if err := u.repo.Update(ctx, t); err != nil {
+		return nil, err
+	}
+	u.enrichTask(t)
 	return t, nil
 }

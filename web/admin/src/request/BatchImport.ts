@@ -85,6 +85,8 @@ export interface FolderDownloadTask {
   retry_count: number;
   error_message?: string;
   expires_at?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ZipUploadTask {
@@ -97,16 +99,29 @@ export interface ZipUploadTask {
   part_size: number;
   total_parts: number;
   uploaded_bytes: number;
-  status: 'waiting' | 'uploading' | 'processing' | 'completed' | 'failed';
+  status:
+    | 'waiting'
+    | 'uploading'
+    | 'interrupted'
+    | 'processing'
+    | 'completed'
+    | 'failed'
+    | 'canceled';
   retry_count: number;
   error_message?: string;
   node_id?: string;
   file_key?: string;
   uploaded_parts?: Record<string, string> | string;
+  uploaded_part_count?: number;
+  missing_parts?: number[];
+  stale_seconds?: number;
+  can_resume?: boolean;
   total_files?: number;
   processed_files?: number;
   total_bytes?: number;
   processed_bytes?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export const postApiV1FileUploadZipTasks = (body: { kb_id: string; nav_id: string; parent_id?: string; filename: string; size: number }) =>
@@ -135,6 +150,8 @@ export const postApiV1FileUploadZipTaskComplete = (id: string) =>
   httpRequest<ZipUploadTask>({ path: `/api/v1/file/upload/zip/tasks/${id}/complete`, method: 'POST', secure: true, type: ContentType.Json, format: 'json' });
 export const postApiV1FileUploadZipTaskRetry = (id: string) =>
   httpRequest<ZipUploadTask>({ path: `/api/v1/file/upload/zip/tasks/${id}/retry`, method: 'POST', secure: true, type: ContentType.Json, format: 'json' });
+export const postApiV1FileUploadZipTaskCancel = (id: string) =>
+  httpRequest<ZipUploadTask>({ path: `/api/v1/file/upload/zip/tasks/${id}/cancel`, method: 'POST', secure: true, type: ContentType.Json, format: 'json' });
 export const postApiV1FileUploadZipTaskFail = (id: string, error: string) =>
   httpRequest<ZipUploadTask>({ path: `/api/v1/file/upload/zip/tasks/${id}/fail`, method: 'POST', body: { error }, secure: true, type: ContentType.Json, format: 'json' });
 

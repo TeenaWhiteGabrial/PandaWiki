@@ -142,6 +142,13 @@ export function findItemInTree(
         summary: item.summary,
         type: item.type,
         status: item.status,
+        rag_info:
+          item.rag_status || item.rag_message
+            ? {
+                status: item.rag_status,
+                message: item.rag_message,
+              }
+            : undefined,
         permissions: item.permissions,
         updated_at: item.updated_at,
       } as DomainNodeListItemResp;

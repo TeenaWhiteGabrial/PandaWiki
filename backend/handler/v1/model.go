@@ -164,8 +164,9 @@ func (h *ModelHandler) CheckModel(c echo.Context) error {
 		modelType = domain.ModelTypeChat
 	default:
 	}
+	provider := consts.NormalizeAutoModeProvider(string(req.Provider))
 	model, err := h.modelkit.CheckModel(ctx, &modelkitDomain.CheckModelReq{
-		Provider:   string(req.Provider),
+		Provider:   provider,
 		Model:      req.Model,
 		BaseURL:    req.BaseURL,
 		APIKey:     req.APIKey,
@@ -200,6 +201,7 @@ func (h *ModelHandler) GetProviderSupportedModelList(c echo.Context) error {
 	}
 	ctx := c.Request().Context()
 
+	req.Provider = consts.NormalizeAutoModeProvider(req.Provider)
 	models, err := h.modelkit.ModelList(ctx, &modelkitDomain.ModelListReq{
 		Provider:  req.Provider,
 		BaseURL:   req.BaseURL,
@@ -256,10 +258,10 @@ func (h *ModelHandler) GetModelModeSetting(c echo.Context) error {
 	ctx := c.Request().Context()
 	setting, err := h.usecase.GetModelModeSetting(ctx)
 	if err != nil {
-		// 如果获取失败，返回默认值（手动模式）
+		// 如果获取失败，返回默认值（自动模式）
 		h.logger.Warn("failed to get model mode setting, return default", log.Error(err))
 		defaultSetting := domain.ModelModeSetting{
-			Mode:                consts.ModelSettingModeManual,
+			Mode:                consts.ModelSettingModeAuto,
 			AutoProviderConfigs: []domain.AutoProviderSettingItem{},
 			ActiveAutoProvider:  "",
 			AutoProvider:        nil,

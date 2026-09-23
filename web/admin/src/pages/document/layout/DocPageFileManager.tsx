@@ -37,6 +37,7 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DocumentTypeIcon from '@/components/DocumentTypeIcon';
+import { getRagStatusMeta } from '@/pages/document/utils/ragStatus';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
@@ -479,7 +480,7 @@ const DocPageFileManager = ({
                 </Button>
               </>
             )}
-            <Box sx={{ width: 88, textAlign: 'right' }}>状态</Box>
+            <Box sx={{ width: 168, textAlign: 'right' }}>状态</Box>
           </Stack>
         </Stack>
         <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
@@ -502,6 +503,8 @@ const DocPageFileManager = ({
                   name: item.name || '',
                   type: isFolder ? 1 : 2,
                   parentId: item.parent_id,
+                  rag_status: item.rag_info?.status,
+                  rag_message: item.rag_info?.message,
                   kind: item.explorerKind ? 'nav' : undefined,
                 };
                 const actionMenu: TreeMenuItem[] = item.explorerKind
@@ -679,6 +682,22 @@ const DocPageFileManager = ({
                   !item.explorerKind && !readOnlyUser
                     ? withMoveAction(actionMenu, item)
                     : actionMenu;
+                const ragStatusMeta = getRagStatusMeta(item);
+                const publishStatusMeta =
+                  item.status === 2
+                    ? {
+                        label: '已发布',
+                        color: 'success' as const,
+                      }
+                    : item.status === 1
+                      ? {
+                          label: '更新未发布',
+                          color: 'warning' as const,
+                        }
+                      : {
+                          label: '未发布',
+                          color: 'default' as const,
+                        };
                 return (
                   <Stack
                     key={item.id}
@@ -827,12 +846,32 @@ const DocPageFileManager = ({
                       </Box>
                     )}
                     {!isFolder && (
-                      <Chip
-                        size='small'
-                        variant='outlined'
-                        label={item.status === 2 ? '已发布' : '未发布'}
-                        color={item.status === 2 ? 'success' : 'default'}
-                      />
+                      <Stack
+                        direction='row'
+                        alignItems='center'
+                        gap={0.75}
+                        sx={{ flexShrink: 0 }}
+                      >
+                        <Chip
+                          size='small'
+                          variant='outlined'
+                          label={publishStatusMeta.label}
+                          color={publishStatusMeta.color}
+                        />
+                        {ragStatusMeta && (
+                          <Tooltip
+                            title={ragStatusMeta.message || ''}
+                            disableHoverListener={!ragStatusMeta.message}
+                          >
+                            <Chip
+                              size='small'
+                              variant='outlined'
+                              label={ragStatusMeta.label}
+                              color={ragStatusMeta.color}
+                            />
+                          </Tooltip>
+                        )}
+                      </Stack>
                     )}
                   </Stack>
                 );

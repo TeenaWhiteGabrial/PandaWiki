@@ -62,6 +62,7 @@ func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *l
 	group.POST("/upload/zip/tasks/:id/parts/:part/complete", h.CompleteZipUploadPart, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.POST("/upload/zip/tasks/:id/complete", h.CompleteZipUpload, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.POST("/upload/zip/tasks/:id/retry", h.RetryZipUpload, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
+	group.POST("/upload/zip/tasks/:id/cancel", h.CancelZipUpload, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.POST("/upload/zip/tasks/:id/fail", h.FailZipUpload, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.POST("/import/zip/commit", h.CommitZipUpload, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.POST("/import/zip", h.ImportZip, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
@@ -270,6 +271,19 @@ func (h *FileHandler) RetryZipUpload(c echo.Context) error {
 	}
 	return h.NewResponseWithData(c, t)
 }
+
+func (h *FileHandler) CancelZipUpload(c echo.Context) error {
+	a, err := h.zipUser(c)
+	if err != nil {
+		return h.NewResponseWithError(c, err.Error(), err)
+	}
+	t, err := h.zipUpload.Cancel(c.Request().Context(), c.Param("id"), a.UserId)
+	if err != nil {
+		return h.NewResponseWithError(c, "cancel zip upload failed", err)
+	}
+	return h.NewResponseWithData(c, t)
+}
+
 func (h *FileHandler) FailZipUpload(c echo.Context) error {
 	a, err := h.zipUser(c)
 	if err != nil {

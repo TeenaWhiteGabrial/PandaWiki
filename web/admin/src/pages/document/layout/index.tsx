@@ -12,6 +12,7 @@ import { setIsRefreshDocList, setNavId } from '@/store/slices/config';
 import type { TreeDragHandlers } from '@/utils/drag';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { message } from '@/components/ui';
+import { hasPollingRagTask } from '@/pages/document/utils/ragStatus';
 import {
   DndContext,
   DragEndEvent,
@@ -32,6 +33,7 @@ import DocPagePreview from './DocPagePreview';
 import DocPageFileManager from './DocPageFileManager';
 import type { DocTreeMenuFn } from './DocPageList/types';
 import ZipUploadTaskPanel from '../component/ZipUploadTaskPanel';
+import LearningProgressPanel from '../component/LearningProgressPanel';
 
 const Content = () => {
   const { kb_id, isRefreshDocList, kbDetail } = useAppSelector(
@@ -48,6 +50,7 @@ const Content = () => {
   const [publishOpen, setPublishOpen] = useState(false);
   const [restudyOpen, setRestudyOpen] = useState(false);
   const [uploadTaskOpen, setUploadTaskOpen] = useState(false);
+  const [learningProgressOpen, setLearningProgressOpen] = useState(false);
   const [publishIds, setPublishIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<
     GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
@@ -91,6 +94,7 @@ const Content = () => {
     height: 'calc(100vh - 183px)',
     minWidth: 0,
   };
+  const shouldPollRagStatus = hasPollingRagTask(groups);
 
   const getData = useCallback(() => {
     if (!kb_id) {
@@ -310,6 +314,14 @@ const Content = () => {
   }, [isRefreshDocList, refresh, dispatch]);
 
   useEffect(() => {
+    if (!kb_id || !shouldPollRagStatus) return;
+    const timer = window.setInterval(() => {
+      getData();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [getData, kb_id, shouldPollRagStatus]);
+
+  useEffect(() => {
     document.body.classList.toggle('document-workbench-fullscreen', fullscreen);
     return () => {
       document.body.classList.remove('document-workbench-fullscreen');
@@ -329,6 +341,7 @@ const Content = () => {
           viewMode={leftViewMode}
           onViewModeChange={handleViewModeChange}
           onUploadTaskClick={() => setUploadTaskOpen(true)}
+          onLearningProgressClick={() => setLearningProgressOpen(true)}
           onRestudyClick={() => setRestudyOpen(true)}
         />
       )}
@@ -336,6 +349,14 @@ const Content = () => {
         open={uploadTaskOpen}
         onClose={() => setUploadTaskOpen(false)}
         kbId={kb_id}
+        onTaskSettled={refresh}
+      />
+      <LearningProgressPanel
+        open={learningProgressOpen}
+        groups={groups}
+        onClose={() => setLearningProgressOpen(false)}
+        refresh={refresh}
+        onRestudyClick={() => setRestudyOpen(true)}
       />
       <DndContext
         sensors={sensors}

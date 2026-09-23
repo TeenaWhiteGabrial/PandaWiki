@@ -40,7 +40,12 @@ import NavEditModal from './NavEditModal';
 import NavPermissionModal from './NavPermissionModal';
 import DocListModals from '../DocPageList/DocListModals';
 import { useDocTreeMenu } from '../DocPageList/useDocTreeMenu';
-import { findItemInTree, removeDeep } from '../DocPageList/utils';
+import {
+  collectOpenFolderIds,
+  findItemInTree,
+  removeDeep,
+  reopenFolders,
+} from '../DocPageList/utils';
 import BatchZipImport from '../../component/BatchZipImport';
 import {
   getApiV1FileFolderDownload,
@@ -371,7 +376,12 @@ const DocPageNavs = ({
   const [treeData, setTreeData] = useState<ITreeItem[]>(unifiedTree);
 
   useEffect(() => {
-    setTreeData(unifiedTree);
+    setTreeData(prev => {
+      if (prev.length === 0) return unifiedTree;
+      const openIds = collectOpenFolderIds(prev);
+      if (openIds.size === 0) return unifiedTree;
+      return reopenFolders(unifiedTree, openIds);
+    });
   }, [unifiedTree]);
 
   useEffect(() => {
