@@ -310,6 +310,30 @@ cleanup_rollback_backups() {
   done
 }
 
+wait_for_services() {
+  local service container state attempt
+
+  for attempt in $(seq 1 12); do
+    for service in "$@"; do
+      container="$(project_name)-${service}"
+      if ! docker inspect "${container}" >/dev/null 2>&1; then
+        echo "服务容器未创建：${container}"
+        return 1
+      fi
+      state="$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null || true)"
+      case "${state}" in
+        running)
+          ;;
+        restarting|exited|dead)
+          echo "服务未正常运行：${container}（状态：${state}）"
+          return 1
+          ;;
+      esac
+    done
+    sleep 2
+  done
+}
+
 rollback_upgrade() {
   local index service backup_ref image_ref
 
@@ -382,21 +406,24 @@ upgrade_services() {
 
   if [[ "${target}" == "admin" || "${target}" == "app" ]]; then
     compose rm -sf "${services[@]}" >/dev/null 2>&1 || true
-    if ! compose up -d --build --no-deps "${services[@]}"; then
+    if ! compose up -d --build --no-deps "${services[@]}" ||
+      ! wait_for_services "${services[@]}"; then
       rollback_upgrade
       cleanup_rollback_backups
       return 1
     fi
   elif [[ "${target}" == "backend" ]]; then
     compose rm -sf "${services[@]}" >/dev/null 2>&1 || true
-    if ! compose up -d --build --no-deps "${services[@]}"; then
+    if ! compose up -d --build --no-deps "${services[@]}" ||
+      ! wait_for_services "${services[@]}"; then
       rollback_upgrade
       cleanup_rollback_backups
       return 1
     fi
   elif [[ "${target}" == "base" ]]; then
     compose rm -sf "${services[@]}" >/dev/null 2>&1 || true
-    if ! compose up -d "${services[@]}"; then
+    if ! compose up -d "${services[@]}" ||
+      ! wait_for_services "${services[@]}"; then
       rollback_upgrade
       cleanup_rollback_backups
       return 1
@@ -409,7 +436,8 @@ upgrade_services() {
       ! verify_frontend_artifacts ||
       ! compose rm -sf api consumer admin app >/dev/null 2>&1 ||
       ! compose up -d --build --no-deps api consumer ||
-      ! compose up -d --build --no-deps admin app; then
+      ! compose up -d --build --no-deps admin app ||
+      ! wait_for_services "${services[@]}"; then
       rollback_upgrade
       cleanup_rollback_backups
       return 1
