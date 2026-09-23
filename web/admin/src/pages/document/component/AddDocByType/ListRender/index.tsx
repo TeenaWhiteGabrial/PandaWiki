@@ -13,6 +13,7 @@ interface ListRenderProps {
   checked: string[];
   setChecked: React.Dispatch<React.SetStateAction<string[]>>;
   parent_id: string | null;
+  nav_id?: string | null;
   loading: boolean;
   type: ConstsCrawlerSource;
   isSupportSelect: boolean;
@@ -33,6 +34,7 @@ const ListRender = ({
   type,
   isSupportSelect,
   parent_id,
+  nav_id,
   queue,
 }: ListRenderProps) => {
   // 将树形数据展平为线性列表（只包含展开的节点）
@@ -182,6 +184,7 @@ const ListRender = ({
         type={type}
         isSupportSelect={isSupportSelect}
         parent_id={parent_id}
+        nav_id={nav_id}
         queue={queue}
       />
       <Box sx={{ flex: 1, overflow: 'hidden' }}>

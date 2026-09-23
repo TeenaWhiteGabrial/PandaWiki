@@ -10,8 +10,10 @@ import (
 	"path"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/encoding/simplifiedchinese"
 
 	v1 "github.com/chaitin/panda-wiki/api/crawler/v1"
 	"github.com/chaitin/panda-wiki/consts"
@@ -210,6 +212,20 @@ type batchImportFolder struct {
 	id string
 }
 
+func decodeBatchImportEntryName(entry *zip.File) (string, error) {
+	if entry == nil {
+		return "", fmt.Errorf("empty archive entry")
+	}
+	if utf8.ValidString(entry.Name) {
+		return entry.Name, nil
+	}
+	name, err := simplifiedchinese.GB18030.NewDecoder().String(entry.Name)
+	if err != nil {
+		return "", fmt.Errorf("decode archive path failed: %w", err)
+	}
+	return name, nil
+}
+
 func cleanBatchImportPath(raw string) (string, error) {
 	raw = strings.ReplaceAll(raw, "\\", "/")
 	raw = strings.TrimSpace(raw)
@@ -351,10 +367,16 @@ func (u *BatchImportUsecase) importZip(
 	}
 
 	for _, entry := range zipReader.File {
-		relPath, pathErr := cleanBatchImportPath(entry.Name)
+		entryName, decodeErr := decodeBatchImportEntryName(entry)
+		if decodeErr != nil {
+			result.Failed++
+			result.Items = append(result.Items, BatchImportItem{Path: entry.Name, Status: "failed", Message: decodeErr.Error()})
+			continue
+		}
+		relPath, pathErr := cleanBatchImportPath(entryName)
 		if pathErr != nil {
 			result.Failed++
-			result.Items = append(result.Items, BatchImportItem{Path: entry.Name, Status: "failed", Message: pathErr.Error()})
+			result.Items = append(result.Items, BatchImportItem{Path: entryName, Status: "failed", Message: pathErr.Error()})
 			continue
 		}
 		isDir := entry.FileInfo().IsDir() || strings.HasSuffix(entry.Name, "/")

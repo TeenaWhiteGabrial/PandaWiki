@@ -1,7 +1,10 @@
 import AddDocBtn from '@/pages/document/component/AddDocBtn';
+import AddDocByType from '@/pages/document/component/AddDocByType';
 import BatchZipImport from '@/pages/document/component/BatchZipImport';
 import DocAddByCustomText from '@/pages/document/component/DocAddByCustomText';
 import DocDelete from '@/pages/document/component/DocDelete';
+import NavEditModal from '@/pages/document/layout/DocPageNavs/NavEditModal';
+import { ConstsCrawlerSource } from '@/request';
 import type { ITreeItem } from '@/api';
 import TreeMenu from '@/components/Drag/DragTree/TreeMenu';
 import type { DocTreeMenuFn } from './DocPageList/types';
@@ -75,8 +78,11 @@ const DocPageFileManager = ({
   const [batchImportParentName, setBatchImportParentName] = useState('根目录');
   const [batchImportNavId, setBatchImportNavId] = useState<string | null>(null);
   const [batchImportOpen, setBatchImportOpen] = useState(false);
+  const [docImportOpen, setDocImportOpen] = useState(false);
   const [createType, setCreateType] = useState<1 | 2 | null>(null);
   const [createParentId, setCreateParentId] = useState<string | null>(null);
+  const [createNavId, setCreateNavId] = useState<string | null>(null);
+  const [addNavOpen, setAddNavOpen] = useState(false);
 
   useEffect(() => {
     setSelectedId(null);
@@ -190,30 +196,6 @@ const DocPageFileManager = ({
     return result;
   }, [activeNavId, folderId, groups, isNavPath, nodeMap]);
 
-  const currentParentName = useMemo(() => {
-    if (!folderId) {
-      return (
-        groups.find(item => item.nav_id === activeNavId)?.nav_name || rootName
-      );
-    }
-    if (isNavPath) {
-      return (
-        groups.find(item => item.nav_id === activeNavId)?.nav_name || rootName
-      );
-    }
-    return (
-      breadcrumbs
-        .map(item => item.name)
-        .filter(Boolean)
-        .join(' > ') || rootName
-    );
-  }, [activeNavId, breadcrumbs, folderId, groups, isNavPath, rootName]);
-
-  // The toolbar imports into the directory currently being browsed. A
-  // virtual navigation root is represented by an empty parent_id; it is not
-  // a real node and must never be sent as a folder id.
-  const currentImportParentId = isNavPath || !folderId ? null : folderId;
-
   // 一级文件夹的 parent_id 可能记录为当前目录 nav_id；在资源管理器中，
   // 这个值应当视为虚拟根目录，而不是一个可继续进入的文件夹。
   const parentFolderId = useMemo(() => {
@@ -225,6 +207,13 @@ const DocPageFileManager = ({
     }
     return current.nav_id ? `${NAV_PATH_PREFIX}${current.nav_id}` : '';
   }, [folderId, isNavPath, nodeMap]);
+
+  const currentFolderParentId = isNavPath ? null : folderId || null;
+  const currentFolderName =
+    breadcrumbs
+      .map(item => item.name)
+      .filter(Boolean)
+      .join(' > ') || rootName;
 
   return (
     <Card
@@ -288,13 +277,64 @@ const DocPageFileManager = ({
             </Breadcrumbs>
           </Stack>
           {!readOnlyUser && (
-            <AddDocBtn
-              parentId={currentImportParentId}
-              parentName={currentParentName}
-              navId={activeNavId}
-              refresh={refresh}
-              disabled={false}
-            />
+            <Stack direction='row' alignItems='center' gap={1} flexShrink={0}>
+              {!folderId ? (
+                <Button
+                  size='small'
+                  variant='outlined'
+                  startIcon={
+                    <IconJiahao sx={{ fontSize: '10px !important' }} />
+                  }
+                  onClick={() => setAddNavOpen(true)}
+                >
+                  新建目录
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    size='small'
+                    variant='outlined'
+                    onClick={() => {
+                      setCreateParentId(currentFolderParentId);
+                      setCreateNavId(activeNavId || null);
+                      setCreateType(1);
+                    }}
+                  >
+                    新建文件夹
+                  </Button>
+                  <Button
+                    size='small'
+                    variant='outlined'
+                    onClick={() => {
+                      setCreateParentId(currentFolderParentId);
+                      setCreateNavId(activeNavId || null);
+                      setCreateType(2);
+                    }}
+                  >
+                    新建文档
+                  </Button>
+                  <Button
+                    size='small'
+                    variant='outlined'
+                    onClick={() => setDocImportOpen(true)}
+                  >
+                    导入文档
+                  </Button>
+                  <Button
+                    size='small'
+                    variant='contained'
+                    onClick={() => {
+                      setBatchImportParentId(currentFolderParentId);
+                      setBatchImportParentName(currentFolderName);
+                      setBatchImportNavId(activeNavId || null);
+                      setBatchImportOpen(true);
+                    }}
+                  >
+                    批量导入 ZIP
+                  </Button>
+                </>
+              )}
+            </Stack>
           )}
         </Stack>
         <Divider />
@@ -424,6 +464,7 @@ const DocPageFileManager = ({
                             setCreateParentId(
                               item.explorerKind ? null : item.id || null,
                             );
+                            setCreateNavId(item.nav_id || activeNavId || null);
                             setCreateType(1);
                           },
                         };
@@ -436,6 +477,9 @@ const DocPageFileManager = ({
                             onClick: () => {
                               setCreateParentId(
                                 item.explorerKind ? null : item.id || null,
+                              );
+                              setCreateNavId(
+                                item.nav_id || activeNavId || null,
                               );
                               setCreateType(2);
                             },
@@ -565,6 +609,7 @@ const DocPageFileManager = ({
                     {isFolder && !item.explorerKind && !readOnlyUser && (
                       <AddDocBtn
                         parentId={item.id}
+                        navId={item.nav_id}
                         refresh={refresh}
                         exportFile={false}
                         batchImport={false}
@@ -634,11 +679,31 @@ const DocPageFileManager = ({
         type={createType || 2}
         open={createType !== null}
         parentId={createParentId || undefined}
+        navId={createNavId || activeNavId}
         refresh={refresh}
         onClose={() => {
           setCreateType(null);
           setCreateParentId(null);
+          setCreateNavId(null);
         }}
+      />
+      <AddDocByType
+        type={ConstsCrawlerSource.CrawlerSourceFile}
+        open={docImportOpen}
+        refresh={refresh}
+        onCancel={() => setDocImportOpen(false)}
+        parentId={currentFolderParentId}
+        navId={activeNavId}
+      />
+      <NavEditModal
+        open={addNavOpen}
+        onClose={() => setAddNavOpen(false)}
+        onSuccess={() => {
+          setAddNavOpen(false);
+          refresh();
+        }}
+        nav={null}
+        kb_id={kb_id}
       />
     </Card>
   );

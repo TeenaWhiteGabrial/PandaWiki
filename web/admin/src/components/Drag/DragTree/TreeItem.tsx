@@ -104,6 +104,12 @@ const TreeItem = React.forwardRef<
   const createItem = useCallback(
     (type: 1 | 2, contentType?: string) => {
       const newItemId = new Date().getTime().toString();
+      // A navigation root is a virtual grouping node, not a real node in
+      // `nodes`. Its ID belongs in nav_id, never in parent_id. Real folders
+      // remain the parent of second-level folders/documents.
+      const parentId = item.kind === 'nav' ? undefined : item.id;
+      const targetNavId =
+        item.nav_id || (item.kind === 'nav' ? item.id : '') || nav_id || '';
       const temp = [...data];
       updateTree(temp, item.id, {
         ...item,
@@ -117,9 +123,10 @@ const TreeItem = React.forwardRef<
             type,
             emoji: '',
             content_type: contentType,
+            nav_id: targetNavId,
             status: 1,
             isEditting: true,
-            parentId: item.id,
+            parentId,
           },
         ],
       });
@@ -129,7 +136,7 @@ const TreeItem = React.forwardRef<
         scrollToItem?.(newItemId);
       }, 100);
     },
-    [data, item, updateData, scrollToItem],
+    [data, item, nav_id, updateData, scrollToItem],
   );
 
   const renameItem = useCallback(() => {
@@ -407,7 +414,7 @@ const TreeItem = React.forwardRef<
                           name: value,
                           content: '',
                           kb_id: id,
-                          nav_id: nav_id || '',
+                          nav_id: item.nav_id || nav_id || '',
                           parent_id: item.parentId,
                           type: item.type,
                           emoji,

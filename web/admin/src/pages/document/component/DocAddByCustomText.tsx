@@ -26,6 +26,7 @@ interface DocAddByCustomTextProps {
   autoJump?: boolean;
   onClose: () => void;
   parentId?: string;
+  navId?: string | null;
   setDetail?: (data: V1NodeDetailResp) => void;
   refresh?: () => void;
   type?: 1 | 2;
@@ -43,13 +44,19 @@ const DocAddByCustomText = ({
   data,
   autoJump = true,
   parentId,
+  navId,
   onClose,
   refresh,
   setDetail,
   type = 2,
   onCreated,
 }: DocAddByCustomTextProps) => {
-  const { kb_id: id, nav_id } = useAppSelector(state => state.config);
+  const { kb_id: id, nav_id: selectedNavId } = useAppSelector(
+    state => state.config,
+  );
+  // A document can be created from a specific directory even when that
+  // directory is not the one currently selected in the global store.
+  const targetNavId = navId || selectedNavId;
   const text = type === 1 ? '文件夹' : '文档';
   const [attachments, setAttachments] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -114,7 +121,7 @@ const DocAddByCustomText = ({
       putApiV1NodeDetail({
         id: data.id || '',
         kb_id: id,
-        nav_id: data.nav_id || nav_id || '',
+        nav_id: data.nav_id || targetNavId || '',
         name: value.name,
         emoji: value.emoji,
       })
@@ -143,7 +150,7 @@ const DocAddByCustomText = ({
           name: value.name,
           content: '',
           kb_id: id,
-          nav_id: nav_id || '',
+          nav_id: targetNavId || '',
           type,
           emoji: value.emoji,
           content_type: value.content_type,

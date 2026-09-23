@@ -17,6 +17,7 @@ interface AddDocByTypeProps {
   refresh?: () => void;
   onCancel: () => void;
   parentId: string | null;
+  navId?: string | null;
   type: ConstsCrawlerSource;
 }
 
@@ -69,6 +70,7 @@ const AddDocByType = ({
   refresh,
   onCancel,
   parentId = null,
+  navId,
 }: AddDocByTypeProps) => {
   const { kb_id } = useAppSelector(state => state.config);
   const [data, setData] = useState<ListDataItem[]>([]);
@@ -122,6 +124,7 @@ const AddDocByType = ({
             isSupportSelect={isSupportSelect}
             checked={checked}
             parent_id={parentId}
+            nav_id={navId}
             setChecked={setChecked}
             loading={formSubmitLoading}
             type={type}

@@ -91,7 +91,7 @@ const AddDocBtn = ({
         context={
           context || (
             <Button variant='contained' disabled={disabled}>
-              创建文档
+              新建
             </Button>
           )
         }
@@ -113,6 +113,7 @@ const AddDocBtn = ({
           refresh={refresh}
           onCancel={close}
           parentId={parentId}
+          navId={navId}
         />
       )}
       <BatchZipImport
@@ -126,6 +127,8 @@ const AddDocBtn = ({
       <DocAddByCustomText
         type={docFileKey}
         open={customDocOpen}
+        parentId={parentId || undefined}
+        navId={navId}
         refresh={refresh}
         onCreated={node => {
           createLocal?.(node);

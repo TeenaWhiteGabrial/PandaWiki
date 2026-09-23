@@ -30,12 +30,15 @@ interface BatchActionBarProps {
   type: ConstsCrawlerSource;
   isSupportSelect: boolean;
   parent_id: string | null;
+  nav_id?: string | null;
   queue: ReturnType<typeof useGlobalQueue>;
 }
 
 const BatchActionBar = (props: BatchActionBarProps) => {
   const theme = useTheme();
-  const { kb_id, nav_id } = useAppSelector(state => state.config);
+  const { kb_id, nav_id: selectedNavId } = useAppSelector(
+    state => state.config,
+  );
   const {
     data,
     loading,
@@ -45,8 +48,10 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     type,
     isSupportSelect,
     parent_id,
+    nav_id,
     queue,
   } = props;
+  const targetNavId = nav_id || selectedNavId;
   const isFileImportType = type === ConstsCrawlerSource.CrawlerSourceFile;
 
   const getFileExt = useCallback((name?: string) => {
@@ -258,7 +263,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               parent_id: actualParentId,
               type: 1, // 文件夹类型
               kb_id,
-              nav_id: nav_id || '',
+              nav_id: targetNavId || '',
             });
 
             const oldId = item.id!; // 保存原平台 ID
@@ -327,7 +332,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
               parent_id: actualParentId,
               type: 2,
               kb_id,
-              nav_id: nav_id || '',
+              nav_id: targetNavId || '',
             });
 
             setData(prev =>
@@ -365,7 +370,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     isMarkdownFile,
     isSupportSelect,
     kb_id,
-    nav_id,
+    targetNavId,
     parent_id,
     queue,
     setData,
