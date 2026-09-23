@@ -1880,6 +1880,10 @@ export interface V1ShareFileUploadUrlResp {
   key?: string;
 }
 
+export interface V1ShareFileDownloadUrlResp {
+  url?: string;
+}
+
 export interface V1ShareNodeDetailResp {
   content?: string;
   created_at?: string;

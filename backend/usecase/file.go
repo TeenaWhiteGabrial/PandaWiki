@@ -108,6 +108,18 @@ func (u *FileUsecase) UploadFileGetUrl(ctx context.Context, kbID string, file *m
 	return buildInternalStaticFileURL(u.config.S3.Endpoint, key), nil
 }
 
+func (u *FileUsecase) SignFileURL(ctx context.Context, key string, expires time.Duration) (string, error) {
+	key = strings.TrimSpace(strings.TrimPrefix(key, "/static-file/"))
+	key = strings.TrimLeft(key, "/")
+	if key == "" || strings.Contains(key, "..") {
+		return "", fmt.Errorf("file key is invalid")
+	}
+	if u.s3Client == nil {
+		return "", fmt.Errorf("object storage is not configured")
+	}
+	return u.s3Client.SignURL(ctx, domain.Bucket, key, expires)
+}
+
 func (u *FileUsecase) UploadFile(ctx context.Context, kbID string, file *multipart.FileHeader) (string, error) {
 	return u.uploadFile(ctx, kbID, file, true)
 }

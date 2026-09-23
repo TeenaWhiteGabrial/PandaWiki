@@ -1,6 +1,7 @@
 'use client';
 
 import type { V1ShareNodeDetailResp } from '@/request/types';
+import { openShareFile } from '@/utils/shareFileUrl';
 import { Box, Button, Stack, Typography } from '@mui/material';
 
 interface LegacyFileNoticeProps {
@@ -9,7 +10,6 @@ interface LegacyFileNoticeProps {
 
 const LegacyFileNotice = ({ info }: LegacyFileNoticeProps) => {
   const fileKey = info.meta?.file_key || '';
-  const fileUrl = fileKey ? `/static-file/${fileKey}` : '';
 
   return (
     <Stack
@@ -32,15 +32,9 @@ const LegacyFileNotice = ({ info }: LegacyFileNoticeProps) => {
           文件请作为附件上传并在附件区预览。
         </Typography>
       </Box>
-      {fileUrl && (
+      {fileKey && (
         <Box>
-          <Button
-            component='a'
-            href={fileUrl}
-            target='_blank'
-            rel='noreferrer'
-            variant='outlined'
-          >
+          <Button variant='outlined' onClick={() => openShareFile(fileKey)}>
             下载原文件
           </Button>
         </Box>

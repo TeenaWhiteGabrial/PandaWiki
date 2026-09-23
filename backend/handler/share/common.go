@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -46,6 +48,7 @@ func NewShareCommonHandler(
 		})
 	share.POST("/file/upload", h.FileUpload, h.ShareAuthMiddleware.Authorize)
 	share.POST("/file/upload/url", h.FileUploadByUrl, h.ShareAuthMiddleware.Authorize)
+	share.GET("/file/download/url", h.FileDownloadURL, h.ShareAuthMiddleware.Authorize)
 	return h
 }
 
@@ -155,4 +158,27 @@ func (h *ShareCommonHandler) FileUploadByUrl(c echo.Context) error {
 	return h.NewResponseWithData(c, v1.ShareFileUploadUrlResp{
 		Key: key,
 	})
+}
+
+// FileDownloadURL 获取前台文件下载/预览签名地址
+//
+//	@Tags		ShareFile
+//	@Summary	文件下载地址
+//	@Produce	json
+//	@Param		key	query		string	true	"file key"
+//	@Success	200	{object}	domain.Response{data=v1.ShareFileDownloadUrlResp}
+//	@Router		/share/v1/common/file/download/url [get]
+func (h *ShareCommonHandler) FileDownloadURL(c echo.Context) error {
+	key := strings.TrimSpace(c.QueryParam("key"))
+	key = strings.TrimSpace(strings.TrimPrefix(key, "/static-file/"))
+	key = strings.TrimLeft(key, "/")
+	kbID := strings.TrimSpace(c.Request().Header.Get("X-KB-ID"))
+	if kbID != "" && !strings.HasPrefix(key, kbID+"/") {
+		return h.NewResponseWithError(c, "file key is invalid", fmt.Errorf("file key does not belong to current knowledge base"))
+	}
+	url, err := h.fileUsecase.SignFileURL(c.Request().Context(), key, 30*time.Minute)
+	if err != nil {
+		return h.NewResponseWithError(c, "failed to create file download url", err)
+	}
+	return h.NewResponseWithData(c, v1.ShareFileDownloadUrlResp{URL: url})
 }

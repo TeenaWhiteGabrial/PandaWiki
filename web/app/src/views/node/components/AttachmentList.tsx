@@ -1,6 +1,7 @@
 'use client';
 
 import type { DomainNodeAttachmentMeta } from '@/request/types';
+import { openShareFile } from '@/utils/shareFileUrl';
 import {
   Box,
   Button,
@@ -63,10 +64,8 @@ const AttachmentList = ({ attachments = [] }: AttachmentListProps) => {
       >
         <TableBody>
           {normalizedAttachments.map((attachment, index) => {
-            const fileUrl = `/static-file/${attachment.file_key}`;
-            const previewUrl = attachment.preview_key
-              ? `/static-file/${attachment.preview_key}`
-              : fileUrl;
+            const fileKey = attachment.file_key || '';
+            const previewKey = attachment.preview_key || fileKey;
             const previewable = canPreviewInline(attachment);
 
             return (
@@ -85,22 +84,15 @@ const AttachmentList = ({ attachments = [] }: AttachmentListProps) => {
                   >
                     {previewable && (
                       <Button
-                        component='a'
-                        href={previewUrl}
-                        target='_blank'
-                        rel='noreferrer'
                         variant='outlined'
+                        onClick={() => openShareFile(previewKey)}
                       >
                         预览
                       </Button>
                     )}
                     <Button
-                      component='a'
-                      href={fileUrl}
-                      download={attachment.file_name || 'attachment'}
-                      target='_blank'
-                      rel='noreferrer'
                       variant='contained'
+                      onClick={() => openShareFile(fileKey)}
                     >
                       下载
                     </Button>

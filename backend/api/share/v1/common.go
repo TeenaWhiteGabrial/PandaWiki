@@ -20,3 +20,7 @@ type ShareFileUploadUrlReq struct {
 type ShareFileUploadUrlResp struct {
 	Key string `json:"key"`
 }
+
+type ShareFileDownloadUrlResp struct {
+	URL string `json:"url"`
+}

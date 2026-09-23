@@ -15,6 +15,7 @@ import {
   DomainResponse,
   PostShareV1CommonFileUploadPayload,
   V1FileUploadResp,
+  V1ShareFileDownloadUrlResp,
   V1ShareFileUploadUrlReq,
   V1ShareFileUploadUrlResp,
 } from "./types";
@@ -75,6 +76,24 @@ export const postShareV1CommonFileUploadUrl = (
     method: "POST",
     body: body,
     type: ContentType.Json,
+    format: "json",
+    ...params,
+  });
+
+export const getShareV1CommonFileDownloadUrl = (
+  query: {
+    key: string;
+  },
+  params: RequestParams = {},
+) =>
+  httpRequest<
+    DomainResponse & {
+      data?: V1ShareFileDownloadUrlResp;
+    }
+  >({
+    path: `/share/v1/common/file/download/url`,
+    method: "GET",
+    query,
     format: "json",
     ...params,
   });

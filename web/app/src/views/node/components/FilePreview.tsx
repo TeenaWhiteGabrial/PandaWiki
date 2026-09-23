@@ -2,7 +2,8 @@
 
 import { Box, Button, Stack, Typography } from '@mui/material';
 import type { V1ShareNodeDetailResp } from '@/request/types';
-import { useMemo } from 'react';
+import { openShareFile, resolveShareFileUrl } from '@/utils/shareFileUrl';
+import { useEffect, useState } from 'react';
 
 interface FilePreviewProps {
   info: V1ShareNodeDetailResp;
@@ -13,18 +14,40 @@ const FilePreview = ({ info }: FilePreviewProps) => {
   const previewKey = info.meta?.preview_key || '';
   const fileType = (info.meta?.file_type || '').toLowerCase();
   const fileName = info.meta?.file_name || info.name || '未命名文件';
+  const [fileUrl, setFileUrl] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
 
-  const fileUrl = useMemo(() => {
-    if (!fileKey) return '';
-    return `/static-file/${fileKey}`;
-  }, [fileKey]);
+  useEffect(() => {
+    let disposed = false;
+    setFileUrl('');
+    setPreviewUrl('');
 
-  const previewUrl = useMemo(() => {
-    if (!previewKey) return '';
-    return `/static-file/${previewKey}`;
-  }, [previewKey]);
+    if (!fileKey) return;
 
-  if (!fileUrl) {
+    resolveShareFileUrl(fileKey)
+      .then(url => {
+        if (!disposed) setFileUrl(url);
+      })
+      .catch(() => {
+        if (!disposed) setFileUrl('');
+      });
+
+    if (previewKey) {
+      resolveShareFileUrl(previewKey)
+        .then(url => {
+          if (!disposed) setPreviewUrl(url);
+        })
+        .catch(() => {
+          if (!disposed) setPreviewUrl('');
+        });
+    }
+
+    return () => {
+      disposed = true;
+    };
+  }, [fileKey, previewKey]);
+
+  if (!fileKey) {
     return (
       <Box
         sx={{
@@ -65,11 +88,9 @@ const FilePreview = ({ info }: FilePreviewProps) => {
           </Typography>
         </Box>
         <Button
-          component='a'
-          href={fileUrl}
-          target='_blank'
-          rel='noreferrer'
           variant='outlined'
+          disabled={!fileUrl}
+          onClick={() => openShareFile(fileKey)}
         >
           下载原文件
         </Button>
@@ -78,7 +99,7 @@ const FilePreview = ({ info }: FilePreviewProps) => {
       {previewUrl || fileType === 'pdf' ? (
         <Box
           component='iframe'
-          src={previewUrl || fileUrl}
+          src={previewUrl || fileUrl || 'about:blank'}
           sx={{
             width: '100%',
             minHeight: '80vh',
