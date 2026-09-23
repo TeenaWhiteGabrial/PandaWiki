@@ -176,6 +176,11 @@ const DocPageFileManager = ({
     return breadcrumbs[breadcrumbs.length - 1]?.name || rootName;
   }, [activeNavId, breadcrumbs, folderId, groups, isNavPath, rootName]);
 
+  // The toolbar imports into the directory currently being browsed. A
+  // virtual navigation root is represented by an empty parent_id; it is not
+  // a real node and must never be sent as a folder id.
+  const currentImportParentId = isNavPath || !folderId ? null : folderId;
+
   // 一级文件夹的 parent_id 可能记录为当前目录 nav_id；在资源管理器中，
   // 这个值应当视为虚拟根目录，而不是一个可继续进入的文件夹。
   const parentFolderId = useMemo(() => {
@@ -251,7 +256,7 @@ const DocPageFileManager = ({
           </Stack>
           {!readOnlyUser && (
             <AddDocBtn
-              parentId={isNavPath ? null : folderId || null}
+              parentId={currentImportParentId}
               parentName={currentParentName}
               refresh={refresh}
               disabled={false}
