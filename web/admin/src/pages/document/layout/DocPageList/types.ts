@@ -29,6 +29,7 @@ export interface DocTreeMenuHandlers {
   handleFolderDownload?: (item: ITreeItem) => void;
   handleDelete: (item: ITreeItem) => void;
   handlePublish: (item: ITreeItem) => void;
+  handleRestudy?: (item: ITreeItem) => void;
   handleProperties: (item: ITreeItem) => void;
   handleFrontDoc: (id: string) => void;
 }

@@ -1,5 +1,6 @@
 import { useURLSearchParams } from '@/hooks';
 import VersionPublish from '@/pages/release/components/VersionPublish';
+import RagErrorReStart from '@/pages/document/component/RagErrorReStart';
 import { postApiV1NavMove } from '@/request/Nav';
 import { getApiV1NodeListGroupNav, postApiV1NodeMoveNav } from '@/request/Node';
 import {
@@ -45,6 +46,7 @@ const Content = () => {
   const search = searchParams.get('search') || '';
 
   const [publishOpen, setPublishOpen] = useState(false);
+  const [restudyOpen, setRestudyOpen] = useState(false);
   const [uploadTaskOpen, setUploadTaskOpen] = useState(false);
   const [publishIds, setPublishIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<
@@ -327,6 +329,7 @@ const Content = () => {
           viewMode={leftViewMode}
           onViewModeChange={handleViewModeChange}
           onUploadTaskClick={() => setUploadTaskOpen(true)}
+          onRestudyClick={() => setRestudyOpen(true)}
         />
       )}
       <ZipUploadTaskPanel
@@ -411,6 +414,26 @@ const Content = () => {
                   setPreviewCollapsed(false);
                 }}
                 refresh={refresh}
+                onNavDeleted={navId => {
+                  const deletedGroup = groups.find(g => g.nav_id === navId);
+                  setGroups(prev => prev.filter(g => g.nav_id !== navId));
+                  setNavList(prev => prev.filter(nav => nav.id !== navId));
+                  setCurrentFolderId(prev => {
+                    if (prev === `nav:${navId}`) return '';
+                    if (deletedGroup?.list?.some(item => item.id === prev)) {
+                      return '';
+                    }
+                    return prev;
+                  });
+                  if (
+                    deletedGroup?.list?.some(
+                      item => item.id === selectedDocumentId,
+                    )
+                  ) {
+                    setSelectedDocumentId(null);
+                  }
+                  setPreviewCollapsed(true);
+                }}
                 readOnlyUser={readOnlyUser}
                 menu={explorerMenu || undefined}
                 fill
@@ -456,15 +479,22 @@ const Content = () => {
         </Stack>
       </DndContext>
       {!readOnlyUser && (
-        <VersionPublish
-          open={publishOpen}
-          defaultSelected={publishIds}
-          onClose={() => {
-            setPublishOpen(false);
-            setPublishIds([]);
-          }}
-          refresh={refresh}
-        />
+        <>
+          <VersionPublish
+            open={publishOpen}
+            defaultSelected={publishIds}
+            onClose={() => {
+              setPublishOpen(false);
+              setPublishIds([]);
+            }}
+            refresh={refresh}
+          />
+          <RagErrorReStart
+            open={restudyOpen}
+            onClose={() => setRestudyOpen(false)}
+            refresh={refresh}
+          />
+        </>
       )}
     </>
   );

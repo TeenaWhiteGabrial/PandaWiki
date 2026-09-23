@@ -17,6 +17,7 @@ export function useDocTreeMenu(
     handleFolderDownload,
     handleDelete,
     handlePublish,
+    handleRestudy,
     handleProperties,
     handleFrontDoc,
   } = handlers;
@@ -86,6 +87,13 @@ export function useDocTreeMenu(
               onClick: () => handlePublish(item),
             });
           }
+          if (handleRestudy && (item.status === 1 || item.status === 2)) {
+            menuItems.push({
+              label: '重建问答索引',
+              key: 'restudy',
+              onClick: () => handleRestudy(item),
+            });
+          }
           menuItems.push({
             label: '文档权限',
             key: 'properties',
@@ -118,6 +126,7 @@ export function useDocTreeMenu(
       handleBatchImport,
       handleDelete,
       handlePublish,
+      handleRestudy,
       handleProperties,
       handleFrontDoc,
       readOnly,

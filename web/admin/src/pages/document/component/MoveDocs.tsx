@@ -16,6 +16,7 @@ interface DocDeleteProps {
   onClose: () => void;
   data: DomainNodeListItemResp[];
   selected: DomainNodeListItemResp[];
+  currentNavId?: string | null;
   onMoved?: (payload: { ids: string[]; parentId: string }) => void;
   refresh: () => void;
 }
@@ -25,10 +26,12 @@ const MoveDocs = ({
   onClose,
   data,
   selected,
+  currentNavId,
   onMoved,
   refresh,
 }: DocDeleteProps) => {
   const { kb_id, nav_id } = useAppSelector(state => state.config);
+  const effectiveNavId = currentNavId || nav_id;
   const [tree, setTree] = useState<ITreeItem[]>([]);
   const [folderIds, setFolderIds] = useState<string[]>([]);
   const [navList, setNavList] = useState<V1NavListResp[]>([]);
@@ -67,7 +70,9 @@ const MoveDocs = ({
       });
 
     const isSameNav =
-      nav_id && targetNavId && String(nav_id) === String(targetNavId);
+      effectiveNavId &&
+      targetNavId &&
+      String(effectiveNavId) === String(targetNavId);
 
     // 当前目录内移动：未选择其他目录，或选择的仍是当前目录
     if (!targetNavId || isSameNav) {
@@ -122,7 +127,12 @@ const MoveDocs = ({
   }, [open]);
 
   return (
-    <Modal title='移动文档' open={open} onCancel={onClose} onOk={handleOk}>
+    <Modal
+      title='移动文档/文件夹'
+      open={open}
+      onCancel={onClose}
+      onOk={handleOk}
+    >
       <Box sx={{ fontSize: 14, color: 'text.secondary', mb: 1 }}>
         已选中
         <Box component={'span'} sx={{ fontWeight: 700, color: 'primary.main' }}>
@@ -148,7 +158,9 @@ const MoveDocs = ({
             {navList.map(item => {
               const isActive = !!targetNavId && targetNavId === item.id;
               const isCurrentNav =
-                nav_id && item.id && String(nav_id) === String(item.id);
+                effectiveNavId &&
+                item.id &&
+                String(effectiveNavId) === String(item.id);
               const disabled = !!isCurrentNav;
 
               const handleSelectNav = () => {

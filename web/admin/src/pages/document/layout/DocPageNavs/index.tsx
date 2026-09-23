@@ -7,6 +7,7 @@ import EmptyState from '@/components/EmptyState';
 import Loading from '@/components/Loading';
 import { useURLSearchParams } from '@/hooks';
 import { deleteApiV1NavDelete } from '@/request/Nav';
+import { postApiV1NodeRestudy } from '@/request/Node';
 import { ConstsCrawlerSource } from '@/request/types';
 import type { DomainNodeListItemResp, V1NavListResp } from '@/request/types';
 import type { GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp } from '@/request/types';
@@ -650,6 +651,19 @@ const DocPageNavs = ({
     (item: ITreeItem) => onPublishOpen?.([item.id]),
     [onPublishOpen],
   );
+  const handleRestudy = useCallback(
+    (item: ITreeItem) => {
+      if (!kb_id || !item.id) return;
+      postApiV1NodeRestudy({
+        kb_id,
+        node_ids: [item.id],
+      }).then(() => {
+        message.success('正在重建问答索引');
+        refresh?.();
+      });
+    },
+    [kb_id, refresh],
+  );
   const documentMenu = useDocTreeMenu(
     {
       handleUrl,
@@ -657,6 +671,7 @@ const DocPageNavs = ({
       handleFolderDownload,
       handleDelete,
       handlePublish,
+      handleRestudy,
       handleProperties,
       handleFrontDoc,
     },

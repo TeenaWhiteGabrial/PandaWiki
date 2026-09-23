@@ -1,5 +1,6 @@
 import { ITreeItem } from '@/api';
 import { type DragTreeHandle } from '@/components/Drag/DragTree';
+import { postApiV1NodeRestudy } from '@/request/Node';
 import { DomainNodeListItemResp } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
@@ -79,6 +80,19 @@ const DocPageListContainer = ({
     (item: ITreeItem) => onPublishOpen([item.id]),
     [onPublishOpen],
   );
+  const handleRestudy = useCallback(
+    (item: ITreeItem) => {
+      if (!kb_id || !item.id) return;
+      postApiV1NodeRestudy({
+        kb_id,
+        node_ids: [item.id],
+      }).then(() => {
+        message.success('正在重建问答索引');
+        refresh();
+      });
+    },
+    [kb_id, refresh],
+  );
 
   const handleProperties = useCallback(
     (item: ITreeItem) => {
@@ -106,6 +120,7 @@ const DocPageListContainer = ({
       handleUrl,
       handleDelete,
       handlePublish,
+      handleRestudy,
       handleProperties,
       handleFrontDoc,
     },

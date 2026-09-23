@@ -701,9 +701,9 @@ func (r *KnowledgeBaseRepository) CreateKBRelease(ctx context.Context, release *
 	})
 }
 
-// PublishKBRelease atomically exposes the learned nodes and creates the KB
-// release snapshot. Until this transaction commits, the pending node releases
-// are not visible through a KB release.
+// PublishKBRelease atomically exposes the pending node snapshots and creates
+// the KB release. Question-answering indexes are refreshed asynchronously after
+// this transaction commits.
 func (r *KnowledgeBaseRepository) PublishKBRelease(ctx context.Context, release *domain.KBRelease, nodeIDs []string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(nodeIDs) > 0 {

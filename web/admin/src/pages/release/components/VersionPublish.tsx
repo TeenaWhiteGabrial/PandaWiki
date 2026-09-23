@@ -116,7 +116,9 @@ const VersionPublish = ({
           ...data,
           ...(nodeIds.length ? { node_ids: nodeIds } : {}),
         });
-        message.success(`${data.tag} 版本发布成功`);
+        message.success(
+          `${data.tag} 版本发布成功，系统正在后台更新智能问答索引`,
+        );
         reset();
         setSelected([]);
         onClose();
@@ -172,13 +174,13 @@ const VersionPublish = ({
           publishing || (releasedNavs.length === 0 && list.length === 0),
         loading: publishing,
       }}
-      okText={publishing ? '正在建立问答索引…' : '发布'}
+      okText={publishing ? '发布中…' : '发布'}
     >
       <>
         <Alert severity={publishing ? 'info' : 'success'} sx={{ mb: 1.5 }}>
           {publishing
-            ? '正在后台解析文档并建立问答索引。全部完成后版本才会正式生效，请勿关闭页面。'
-            : '发布时系统会自动完成文档解析和问答索引；只有全部处理成功，版本才会正式生效。'}
+            ? '正在发布版本。发布完成后，系统会在后台更新智能问答索引，请勿重复提交。'
+            : '发布后文档会立即生效，系统会在后台更新智能问答索引；索引失败不会影响文档查看，可在文档页重建索引。'}
         </Alert>
         <Box sx={{ fontSize: 14, lineHeight: '32px' }}>
           版本号

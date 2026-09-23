@@ -241,8 +241,6 @@ func (u *KnowledgeBaseUsecase) CreateKBRelease(ctx context.Context, req *domain.
 	}()
 
 	var releaseIDs []string
-	var learned []learnedRelease
-	var datasetID string
 	if len(req.NodeIDs) > 0 {
 		if u.batchImport == nil {
 			return "", fmt.Errorf("ZIP 导入服务未初始化")
@@ -266,18 +264,12 @@ func (u *KnowledgeBaseUsecase) CreateKBRelease(ctx context.Context, req *domain.
 		} else {
 			req.NodeIDs = originalIDs
 		}
-		// Snapshot first, but do not expose the drafts until learning succeeds.
 		releaseIDs, err = u.nodeRepo.CreatePendingNodeReleases(ctx, req.KBID, userId, req.NodeIDs)
 		if err != nil {
 			return "", fmt.Errorf("创建待发布版本失败: %w", err)
 		}
 		if err := u.snapshotReleasesToOSS(ctx, req.KBID, releaseIDs); err != nil {
 			return "", fmt.Errorf("创建版本 OSS 快照失败: %w", err)
-		}
-		learned, datasetID, err = u.learnPendingReleases(ctx, req.KBID, releaseIDs)
-		if err != nil {
-			u.cleanupPendingPublication(datasetID, releaseIDs, learned, err.Error())
-			return "", err
 		}
 	}
 
@@ -290,13 +282,31 @@ func (u *KnowledgeBaseUsecase) CreateKBRelease(ctx context.Context, req *domain.
 		CreatedAt:   time.Now(),
 	}
 	if err := u.repo.PublishKBRelease(ctx, release, req.NodeIDs); err != nil {
-		u.cleanupPendingPublication(datasetID, releaseIDs, learned, err.Error())
+		u.cleanupPendingPublication("", releaseIDs, nil, err.Error())
 		return "", fmt.Errorf("failed to create kb release: %w", err)
 	}
-	u.cleanupOldPublicationRecords(datasetID, learned)
-	u.logger.Info("publication committed", log.String("kb_id", req.KBID), log.String("release_id", release.ID), log.String("stage", "publish"), log.Int("document_count", len(learned)))
+	if len(releaseIDs) > 0 {
+		u.startReleaseLearning(req.KBID, release.ID, releaseIDs)
+	}
+	u.logger.Info("publication committed", log.String("kb_id", req.KBID), log.String("release_id", release.ID), log.String("stage", "publish"), log.Int("document_count", len(releaseIDs)))
 
 	return release.ID, nil
+}
+
+func (u *KnowledgeBaseUsecase) startReleaseLearning(kbID, releaseID string, releaseIDs []string) {
+	ids := append([]string(nil), releaseIDs...)
+	go func() {
+		learnCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		u.logger.Info("publication learning queued", log.String("kb_id", kbID), log.String("release_id", releaseID), log.String("stage", "learning"), log.Int("document_count", len(ids)))
+		learned, datasetID, err := u.learnPendingReleases(learnCtx, kbID, ids)
+		if err != nil {
+			u.logger.Error("publication learning async failed", log.String("kb_id", kbID), log.String("release_id", releaseID), log.String("stage", "learning"), log.Error(err))
+			return
+		}
+		u.cleanupOldPublicationRecords(datasetID, learned)
+		u.logger.Info("publication learning finished", log.String("kb_id", kbID), log.String("release_id", releaseID), log.String("stage", "learning"), log.Int("document_count", len(learned)))
+	}()
 }
 
 func (u *KnowledgeBaseUsecase) snapshotReleasesToOSS(ctx context.Context, kbID string, releaseIDs []string) error {
@@ -358,7 +368,8 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 			content, contentOK, contentMessage := u.batchImport.extractFileContent(ctx, kbID, release.Meta.FileKey, release.Name)
 			if !contentOK {
 				u.markLearningFailed(kbID, release.NodeID, contentMessage)
-				return learned, kb.DatasetID, fmt.Errorf("文档“%s”内容解析失败: %s", release.Name, contentMessage)
+				u.logger.Error("publication content extraction failed", log.String("kb_id", kbID), log.String("node_id", release.NodeID), log.String("node_release_id", release.ID), log.String("stage", "learning"), log.String("document", release.Name), log.String("reason", contentMessage))
+				continue
 			}
 			release.Content = content
 			if err := u.nodeRepo.UpdateNodeReleaseContent(ctx, release.ID, content); err != nil {
@@ -378,7 +389,8 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		})
 		if err != nil {
 			u.markLearningFailed(kbID, release.NodeID, err.Error())
-			return learned, kb.DatasetID, fmt.Errorf("文档“%s”学习提交失败: %w", release.Name, err)
+			u.logger.Error("publication learning submit failed", log.String("kb_id", kbID), log.String("node_id", release.NodeID), log.String("node_release_id", release.ID), log.String("stage", "learning"), log.String("document", release.Name), log.Error(err))
+			continue
 		}
 		learned = append(learned, learnedRelease{release: release, docID: docID})
 		if err := u.nodeRepo.UpdateNodeReleaseDocID(ctx, release.ID, docID); err != nil {
@@ -403,7 +415,8 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		documents, err := u.rag.ListDocuments(waitCtx, kb.DatasetID, docIDs)
 		if err != nil {
 			u.markPendingLearningFailed(kbID, pending, err.Error())
-			return learned, kb.DatasetID, fmt.Errorf("查询学习进度失败: %w", err)
+			u.logger.Error("publication learning progress query failed", log.String("kb_id", kbID), log.String("stage", "learning"), log.Error(err))
+			break
 		}
 		for _, document := range documents {
 			item, exists := pending[document.ID]
@@ -418,8 +431,7 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 			case string(consts.NodeRagStatusFailed):
 				u.markLearningFailed(kbID, item.release.NodeID, document.ProgressMsg)
 				u.logger.Error("publication learning failed", log.String("kb_id", kbID), log.String("node_release_id", item.release.ID), log.String("stage", "learning"), log.String("reason", document.ProgressMsg))
-				u.markPendingLearningFailed(kbID, pending, document.ProgressMsg)
-				return learned, kb.DatasetID, fmt.Errorf("文档“%s”学习失败: %s", item.release.Name, document.ProgressMsg)
+				delete(pending, document.ID)
 			}
 		}
 		if len(pending) == 0 {
@@ -428,7 +440,8 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		select {
 		case <-waitCtx.Done():
 			u.markPendingLearningFailed(kbID, pending, "等待学习完成超时")
-			return learned, kb.DatasetID, fmt.Errorf("等待文档学习完成超时: %w", waitCtx.Err())
+			u.logger.Error("publication learning timed out", log.String("kb_id", kbID), log.String("stage", "learning"), log.Error(waitCtx.Err()))
+			return learned, kb.DatasetID, nil
 		case <-ticker.C:
 		}
 	}

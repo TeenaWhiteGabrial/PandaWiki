@@ -467,8 +467,16 @@ func (u *BatchImportUsecase) importZip(
 func (u *BatchImportUsecase) extractFileContent(ctx context.Context, kbID, fileKey, filename string) (string, bool, string) {
 	extractCtx, cancelExtract := context.WithTimeout(ctx, batchImportExtractTimeout)
 	defer cancelExtract()
+	parseKey := fileKey
+	if u.fileUsecase != nil && u.fileUsecase.s3Client != nil {
+		signedURL, signErr := u.fileUsecase.s3Client.SignURL(extractCtx, domain.Bucket, fileKey, 30*time.Minute)
+		if signErr != nil {
+			return "", false, "生成文件访问链接失败：" + signErr.Error()
+		}
+		parseKey = signedURL
+	}
 	parseResp, parseErr := u.crawler.ParseUrl(extractCtx, &v1.CrawlerParseReq{
-		Key: fileKey, KbID: kbID, CrawlerSource: consts.CrawlerSourceFile, Filename: filename,
+		Key: parseKey, KbID: kbID, CrawlerSource: consts.CrawlerSourceFile, Filename: filename,
 	})
 	if parseErr != nil {
 		return "", false, "内容解析失败：" + parseErr.Error()

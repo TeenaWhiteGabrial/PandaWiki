@@ -54,14 +54,16 @@ func (u *CrawlerUsecase) ParseUrl(ctx context.Context, req *v1.CrawlerParseReq) 
 
 	// 文件类型的解析会先走上传接口
 	if req.CrawlerSource.Type() == consts.CrawlerSourceTypeFile {
-		baseURL := strings.TrimRight(os.Getenv("ANYDOC_STATIC_FILE_BASE_URL"), "/")
-		if baseURL == "" {
-			baseURL = strings.TrimRight(os.Getenv("FILE_BASE_URL"), "/")
-		}
-		if baseURL != "" {
-			req.Key = baseURL + "/" + strings.TrimLeft(req.Key, "/")
-		} else {
-			req.Key = buildInternalStaticFileURL(os.Getenv("S3_ENDPOINT"), req.Key)
+		if !strings.HasPrefix(req.Key, "http://") && !strings.HasPrefix(req.Key, "https://") {
+			baseURL := strings.TrimRight(os.Getenv("ANYDOC_STATIC_FILE_BASE_URL"), "/")
+			if baseURL == "" {
+				baseURL = strings.TrimRight(os.Getenv("FILE_BASE_URL"), "/")
+			}
+			if baseURL != "" {
+				req.Key = baseURL + "/" + strings.TrimLeft(req.Key, "/")
+			} else {
+				req.Key = buildInternalStaticFileURL(os.Getenv("S3_ENDPOINT"), req.Key)
+			}
 		}
 	}
 
