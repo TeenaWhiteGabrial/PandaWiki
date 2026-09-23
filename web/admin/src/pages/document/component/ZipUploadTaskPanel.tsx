@@ -152,6 +152,7 @@ const ZipUploadTaskPanel = ({ open, onClose, kbId }: Props) => {
                 >
                   <ListItemText
                     primary={`ZIP 上传：${task.filename}`}
+                    secondaryTypographyProps={{ component: 'div' }}
                     secondary={
                       <Stack spacing={0.5} sx={{ mt: 0.5 }}>
                         <Typography variant='caption'>
@@ -200,6 +201,7 @@ const ZipUploadTaskPanel = ({ open, onClose, kbId }: Props) => {
                 >
                   <ListItemText
                     primary='文件夹压缩下载'
+                    secondaryTypographyProps={{ component: 'div' }}
                     secondary={
                       <Stack spacing={0.5} sx={{ mt: 0.5 }}>
                         <Typography variant='caption'>
