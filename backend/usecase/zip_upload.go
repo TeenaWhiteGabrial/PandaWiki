@@ -179,7 +179,7 @@ func (u *ZipUploadUsecase) Complete(ctx context.Context, id, userID string) (*do
 	if err != nil {
 		return nil, err
 	}
-	if t.Status == domain.ZipUploadCompleted {
+	if t.Status == domain.ZipUploadCompleted || t.Status == domain.ZipUploadProcessing {
 		return t, nil
 	}
 	parts := map[string]string{}
@@ -214,13 +214,50 @@ func (u *ZipUploadUsecase) Complete(ctx context.Context, id, userID string) (*do
 		_ = u.repo.Update(ctx, t)
 		return nil, err
 	}
-	t.Status = domain.ZipUploadCompleted
+	// The archive is uploaded at this point, but extraction is deliberately
+	// asynchronous. The task becomes completed only after all archive entries
+	// have been materialized as nodes and OSS objects.
+	t.Status = domain.ZipUploadProcessing
+	t.TotalFiles = 0
+	t.ProcessedFiles = 0
+	t.TotalBytes = 0
+	t.ProcessedBytes = 0
 	t.NodeID = nodeID
 	t.UploadedBytes = t.Size
 	if err := u.repo.Update(ctx, t); err != nil {
 		return nil, err
 	}
 	return t, nil
+}
+
+func (u *ZipUploadUsecase) UpdateProcessingProgress(ctx context.Context, id string, totalFiles, processedFiles int, totalBytes, processedBytes int64) error {
+	t, err := u.repo.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if t.Status == domain.ZipUploadCompleted || t.Status == domain.ZipUploadFailed {
+		return nil
+	}
+	t.Status = domain.ZipUploadProcessing
+	t.TotalFiles = totalFiles
+	t.ProcessedFiles = processedFiles
+	t.TotalBytes = totalBytes
+	t.ProcessedBytes = processedBytes
+	return u.repo.Update(ctx, t)
+}
+
+func (u *ZipUploadUsecase) CompleteProcessing(ctx context.Context, id string) error {
+	t, err := u.repo.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if t.Status == domain.ZipUploadFailed {
+		return nil
+	}
+	t.Status = domain.ZipUploadCompleted
+	t.ProcessedFiles = t.TotalFiles
+	t.ProcessedBytes = t.TotalBytes
+	return u.repo.Update(ctx, t)
 }
 
 func (u *ZipUploadUsecase) Retry(ctx context.Context, id, userID string) (*domain.ZipUploadTask, error) {

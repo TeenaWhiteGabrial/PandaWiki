@@ -167,14 +167,12 @@ const BatchZipImport = ({
             status: 'imported',
             content_ok: false,
             message:
-              'ZIP 已解压，目录和原始文件已创建；发布时再进行问答内容解析',
+              'ZIP 已上传，正在后台解压；目录和原始文件完成后会自动创建，发布时再进行问答内容解析',
           },
         ],
       });
       refresh?.();
-      message.success(
-        'ZIP 已上传并完成解压，目录和文件已创建；发布时再进行问答内容解析',
-      );
+      message.success('ZIP 已上传，后台正在解压；可在异步任务中查看进度');
     } catch (error) {
       console.error(error);
       if (activeTaskId)

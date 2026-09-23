@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -223,14 +224,37 @@ func (h *FileHandler) CompleteZipUpload(c echo.Context) error {
 	if err != nil {
 		return h.NewResponseWithError(c, "complete zip upload failed", err)
 	}
-	created, err := h.batchImport.ExpandArchives(c.Request().Context(), t.KBID, []string{t.NodeID}, a.UserId, false)
-	if err != nil {
-		return h.NewResponseWithError(c, "解压 ZIP 失败", err)
-	}
-	if len(created) > 0 {
-		t.NodeID = created[0]
-	}
+	// Return as soon as the multipart object has been committed. Extraction can
+	// involve many OSS writes and preview conversions, so keeping it inside the
+	// HTTP request causes production proxies to time out on medium-sized ZIPs.
+	go h.processZipUpload(t.ID, t.KBID, t.NodeID, a.UserId)
 	return h.NewResponseWithData(c, t)
+}
+
+func (h *FileHandler) processZipUpload(taskID, kbID, nodeID, userID string) {
+	ctx := context.Background()
+	_, err := h.batchImport.ExpandArchivesWithProgress(
+		ctx,
+		kbID,
+		[]string{nodeID},
+		userID,
+		false,
+		func(progress usecase.ArchiveProgress) {
+			if updateErr := h.zipUpload.UpdateProcessingProgress(ctx, taskID, progress.TotalFiles, progress.ProcessedFiles, progress.TotalBytes, progress.ProcessedBytes); updateErr != nil {
+				h.logger.Warn("update zip extraction progress failed", log.String("task_id", taskID), log.Error(updateErr))
+			}
+		},
+	)
+	if err != nil {
+		h.logger.Error("zip extraction failed", log.String("task_id", taskID), log.Error(err))
+		if _, failErr := h.zipUpload.Fail(ctx, taskID, userID, err.Error()); failErr != nil {
+			h.logger.Error("mark zip extraction failed", log.String("task_id", taskID), log.Error(failErr))
+		}
+		return
+	}
+	if err := h.zipUpload.CompleteProcessing(ctx, taskID); err != nil {
+		h.logger.Error("complete zip extraction task failed", log.String("task_id", taskID), log.Error(err))
+	}
 }
 func (h *FileHandler) RetryZipUpload(c echo.Context) error {
 	a, err := h.zipUser(c)
@@ -240,6 +264,9 @@ func (h *FileHandler) RetryZipUpload(c echo.Context) error {
 	t, err := h.zipUpload.Retry(c.Request().Context(), c.Param("id"), a.UserId)
 	if err != nil {
 		return h.NewResponseWithError(c, "retry zip upload failed", err)
+	}
+	if t.NodeID != "" {
+		go h.processZipUpload(t.ID, t.KBID, t.NodeID, a.UserId)
 	}
 	return h.NewResponseWithData(c, t)
 }

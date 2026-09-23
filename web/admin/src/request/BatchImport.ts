@@ -97,12 +97,16 @@ export interface ZipUploadTask {
   part_size: number;
   total_parts: number;
   uploaded_bytes: number;
-  status: 'waiting' | 'uploading' | 'completed' | 'failed';
+  status: 'waiting' | 'uploading' | 'processing' | 'completed' | 'failed';
   retry_count: number;
   error_message?: string;
   node_id?: string;
   file_key?: string;
   uploaded_parts?: Record<string, string> | string;
+  total_files?: number;
+  processed_files?: number;
+  total_bytes?: number;
+  processed_bytes?: number;
 }
 
 export const postApiV1FileUploadZipTasks = (body: { kb_id: string; nav_id: string; parent_id?: string; filename: string; size: number }) =>

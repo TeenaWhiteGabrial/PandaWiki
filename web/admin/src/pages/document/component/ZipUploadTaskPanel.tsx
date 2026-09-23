@@ -105,18 +105,39 @@ const ZipUploadTaskPanel = ({ open, onClose, kbId }: Props) => {
         ) : (
           <List>
             {tasks.map(task => {
-              const percent = task.size
+              const uploadPercent = task.size
                 ? Math.min(
                     100,
                     Math.round((task.uploaded_bytes / task.size) * 100),
                   )
                 : 0;
+              const extractionPercent = task.total_files
+                ? Math.min(
+                    100,
+                    Math.round(
+                      ((task.processed_files || 0) * 100) / task.total_files,
+                    ),
+                  )
+                : task.total_bytes
+                  ? Math.min(
+                      100,
+                      Math.round(
+                        ((task.processed_bytes || 0) * 100) / task.total_bytes,
+                      ),
+                    )
+                  : 0;
+              const percent =
+                task.status === 'processing'
+                  ? extractionPercent
+                  : uploadPercent;
               const detail =
                 task.status === 'failed'
                   ? `失败：${task.error_message || '未知错误'}；重试后重新选择原 ZIP 文件即可继续`
-                  : task.status === 'completed'
-                    ? '已完成'
-                    : `${formatSize(task.uploaded_bytes)} / ${formatSize(task.size)} · ${percent}%`;
+                  : task.status === 'processing'
+                    ? `解压 ${task.processed_files || 0}/${task.total_files || 0} 个文件 · ${percent}%`
+                    : task.status === 'completed'
+                      ? '已完成'
+                      : `${formatSize(task.uploaded_bytes)} / ${formatSize(task.size)} · ${percent}%`;
               return (
                 <ListItem
                   key={`upload-${task.id}`}

@@ -67,10 +67,21 @@ type ZipUploadCommit struct {
 	Size     int64
 }
 
+type ArchiveProgress struct {
+	TotalFiles     int
+	ProcessedFiles int
+	TotalBytes     int64
+	ProcessedBytes int64
+}
+
 // ExpandArchives expands uploaded ZIP placeholder nodes at publication time.
 // The archive is downloaded to a temporary file only for this operation and is
 // removed immediately afterwards.
 func (u *BatchImportUsecase) ExpandArchives(ctx context.Context, kbID string, nodeIDs []string, userID string, parseContent bool) ([]string, error) {
+	return u.ExpandArchivesWithProgress(ctx, kbID, nodeIDs, userID, parseContent, nil)
+}
+
+func (u *BatchImportUsecase) ExpandArchivesWithProgress(ctx context.Context, kbID string, nodeIDs []string, userID string, parseContent bool, onProgress func(ArchiveProgress)) ([]string, error) {
 	nodes, err := u.nodeRepo.GetNodesByIDs(ctx, nodeIDs)
 	if err != nil {
 		return nil, fmt.Errorf("read archive nodes failed: %w", err)
@@ -105,7 +116,7 @@ func (u *BatchImportUsecase) ExpandArchives(ctx context.Context, kbID string, no
 				err = fmt.Errorf("archive upload part is missing")
 				return
 			}
-			result, importErr := u.ImportZip(ctx, kbID, node.NavId, node.ParentID, userID, files[0], parseContent)
+			result, importErr := u.importZip(ctx, kbID, node.NavId, node.ParentID, userID, files[0], parseContent, onProgress)
 			if importErr != nil {
 				err = importErr
 				return
@@ -230,6 +241,16 @@ func (u *BatchImportUsecase) ImportZip(
 	file *multipart.FileHeader,
 	parseContent bool,
 ) (*BatchImportResult, error) {
+	return u.importZip(ctx, kbID, navID, parentID, userID, file, parseContent, nil)
+}
+
+func (u *BatchImportUsecase) importZip(
+	ctx context.Context,
+	kbID, navID, parentID, userID string,
+	file *multipart.FileHeader,
+	parseContent bool,
+	onProgress func(ArchiveProgress),
+) (*BatchImportResult, error) {
 	if file == nil || file.Size <= 0 {
 		return nil, fmt.Errorf("zip file is empty")
 	}
@@ -253,6 +274,20 @@ func (u *BatchImportUsecase) ImportZip(
 	}
 
 	result := &BatchImportResult{BatchID: uuid.NewString(), Items: make([]BatchImportItem, 0)}
+	totalFiles := 0
+	var totalBytes int64
+	for _, entry := range zipReader.File {
+		if entry.FileInfo().IsDir() || strings.HasSuffix(entry.Name, "/") {
+			continue
+		}
+		totalFiles++
+		totalBytes += int64(entry.UncompressedSize64)
+	}
+	processedFiles := 0
+	var processedBytes int64
+	if onProgress != nil {
+		onProgress(ArchiveProgress{TotalFiles: totalFiles, TotalBytes: totalBytes})
+	}
 	// Keep extracted objects under the same KB namespace as the uploaded ZIP.
 	// The relative path after this prefix mirrors the archive directory tree.
 	rootPrefix := fmt.Sprintf("%s/imports/%s", kbID, result.BatchID)
@@ -302,6 +337,11 @@ func (u *BatchImportUsecase) ImportZip(
 				return nil, err
 			}
 			continue
+		}
+		processedFiles++
+		processedBytes += int64(entry.UncompressedSize64)
+		if onProgress != nil {
+			onProgress(ArchiveProgress{TotalFiles: totalFiles, ProcessedFiles: processedFiles, TotalBytes: totalBytes, ProcessedBytes: processedBytes})
 		}
 		if _, exists := seenFiles[relPath]; exists {
 			result.Failed++
