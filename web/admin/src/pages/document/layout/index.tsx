@@ -79,6 +79,17 @@ const Content = () => {
   const minLeftWidth = Math.round(window.innerWidth * 0.3);
   const leftWidth = Math.max(navWidth, minLeftWidth);
 
+  // The tree and explorer share the same left pane. Keep the tree wrapper in
+  // the flex layout as well; without an explicit width/flex basis its inner
+  // card can shrink to its content when the preview is collapsed.
+  const leftPaneSx = {
+    position: 'relative' as const,
+    flex: previewCollapsed ? '1 1 auto' : `0 0 ${leftWidth}px`,
+    width: previewCollapsed ? '100%' : leftWidth,
+    height: 'calc(100vh - 183px)',
+    minWidth: 0,
+  };
+
   const getData = useCallback(() => {
     if (!kb_id) {
       setLoading(false);
@@ -284,6 +295,12 @@ const Content = () => {
   }, [nav_id]);
 
   useEffect(() => {
+    if (leftViewMode === 'tree') {
+      setPreviewCollapsed(true);
+    }
+  }, [leftViewMode]);
+
+  useEffect(() => {
     if (isRefreshDocList) {
       refresh();
       dispatch(setIsRefreshDocList(false));
@@ -332,7 +349,7 @@ const Content = () => {
               aria-hidden={leftViewMode !== 'tree'}
               sx={
                 leftViewMode === 'tree'
-                  ? undefined
+                  ? leftPaneSx
                   : {
                       position: 'absolute',
                       left: -10000,
@@ -377,12 +394,8 @@ const Content = () => {
           {!fullscreen && leftViewMode === 'explorer' && (
             <Box
               sx={{
-                position: 'relative',
-                flex: previewCollapsed ? '1 1 auto' : `0 0 ${leftWidth}px`,
-                width: previewCollapsed ? '100%' : leftWidth,
-                height: 'calc(100vh - 183px)',
+                ...leftPaneSx,
                 mr: 2,
-                minWidth: 0,
               }}
             >
               <DocPageFileManager
