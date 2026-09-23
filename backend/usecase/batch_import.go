@@ -28,12 +28,6 @@ const (
 	batchImportExtractTimeout  = 30 * time.Second
 )
 
-var batchImportExtensions = map[string]struct{}{
-	".md": {}, ".markdown": {}, ".txt": {}, ".html": {}, ".htm": {},
-	".pdf": {}, ".doc": {}, ".docx": {}, ".xls": {}, ".xlsx": {},
-	".ppt": {}, ".pptx": {},
-}
-
 type BatchImportItem struct {
 	Path      string `json:"path"`
 	NodeID    string `json:"node_id,omitempty"`
@@ -121,10 +115,12 @@ func (u *BatchImportUsecase) ExpandArchivesWithProgress(ctx context.Context, kbI
 				err = importErr
 				return
 			}
-			if result.Failed > 0 || result.Imported == 0 {
-				err = fmt.Errorf("archive %q contains no importable files or has failures", node.Name)
+			if result.Imported == 0 {
+				err = fmt.Errorf("archive %q contains no importable files: %s", node.Name, summarizeImportFailures(result))
 				return
 			}
+			// A valid archive may contain auxiliary files such as .DS_Store or
+			// unsupported files. Do not discard valid documents because of them.
 			for _, item := range result.Items {
 				if item.NodeID != "" {
 					created = append(created, item.NodeID)
@@ -235,6 +231,36 @@ func batchImportExt(name string) string {
 	return strings.ToLower(name[idx:])
 }
 
+func isArchiveMetadataFile(name string) bool {
+	clean := strings.TrimPrefix(strings.ReplaceAll(name, "\\", "/"), "./")
+	base := path.Base(clean)
+	return base == ".DS_Store" || base == "Thumbs.db" ||
+		strings.HasPrefix(clean, "__MACOSX/") || strings.HasPrefix(clean, "._") ||
+		strings.HasPrefix(base, "._")
+}
+
+func summarizeImportFailures(result *BatchImportResult) string {
+	const maxDetails = 3
+	details := make([]string, 0, maxDetails)
+	for _, item := range result.Items {
+		if item.Status != "failed" {
+			continue
+		}
+		detail := item.Path
+		if item.Message != "" {
+			detail += ": " + item.Message
+		}
+		details = append(details, detail)
+		if len(details) == maxDetails {
+			break
+		}
+	}
+	if len(details) == 0 {
+		return "未发现支持的文档文件"
+	}
+	return strings.Join(details, "; ")
+}
+
 func (u *BatchImportUsecase) ImportZip(
 	ctx context.Context,
 	kbID, navID, parentID, userID string,
@@ -338,6 +364,9 @@ func (u *BatchImportUsecase) importZip(
 			}
 			continue
 		}
+		if isArchiveMetadataFile(relPath) {
+			continue
+		}
 		processedFiles++
 		processedBytes += int64(entry.UncompressedSize64)
 		if onProgress != nil {
@@ -349,11 +378,6 @@ func (u *BatchImportUsecase) importZip(
 			continue
 		}
 		seenFiles[relPath] = struct{}{}
-		if _, ok := batchImportExtensions[batchImportExt(relPath)]; !ok {
-			result.Failed++
-			result.Items = append(result.Items, BatchImportItem{Path: relPath, Status: "failed", Message: "unsupported file type"})
-			continue
-		}
 		if entry.UncompressedSize64 > uint64(batchImportMaxFileSize) || expandedSize+int64(entry.UncompressedSize64) > batchImportMaxExpandedSize {
 			result.Failed++
 			result.Items = append(result.Items, BatchImportItem{Path: relPath, Status: "failed", Message: "expanded file size exceeds limit"})
@@ -389,13 +413,7 @@ func (u *BatchImportUsecase) importZip(
 			continue
 		}
 
-		previewKey := ""
 		ext := batchImportExt(relPath)
-		if ext == ".pdf" {
-			previewKey = fileKey
-		} else if preview, previewErr := u.fileUsecase.ConvertOfficeToPDF(ctx, kbID, path.Base(relPath), content); previewErr == nil {
-			previewKey = preview
-		}
 
 		markdown := ""
 		contentOK := false
@@ -407,7 +425,7 @@ func (u *BatchImportUsecase) importZip(
 		nodeID, createErr := u.nodeRepo.Create(ctx, &domain.CreateNodeReq{
 			KBID: kbID, NavId: navID, ParentID: parentNodeID, Type: domain.NodeTypeDocument,
 			Name: path.Base(relPath), Content: markdown,
-			Meta: &domain.NodeMeta{ContentType: "file", FileKey: fileKey, FileName: path.Base(relPath), FileType: strings.TrimPrefix(ext, "."), PreviewKey: previewKey, FileReadonly: true},
+			Meta: &domain.NodeMeta{ContentType: "file", FileKey: fileKey, FileName: path.Base(relPath), FileType: strings.TrimPrefix(ext, "."), FileReadonly: true},
 		}, userID)
 		if createErr != nil {
 			result.Failed++
