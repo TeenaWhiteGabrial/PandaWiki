@@ -132,7 +132,7 @@ const ZipUploadTaskPanel = ({ open, onClose, kbId }: Props) => {
                   : uploadPercent;
               const detail =
                 task.status === 'failed'
-                  ? `失败：${task.error_message || '未知错误'}；重试后重新选择原 ZIP 文件即可继续`
+                  ? `失败：${task.error_message || '未知错误'}；可点击重试`
                   : task.status === 'processing'
                     ? `解压 ${task.processed_files || 0}/${task.total_files || 0} 个文件 · ${percent}%`
                     : task.status === 'completed'

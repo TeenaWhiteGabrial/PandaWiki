@@ -151,28 +151,12 @@ const BatchZipImport = ({
             ? lastError
             : new Error(`第 ${part} 个分片上传失败`);
       }
-      const response = await postApiV1FileUploadZipTaskComplete(task.id);
+      await postApiV1FileUploadZipTaskComplete(task.id);
       localStorage.removeItem(`panda-wiki-zip-upload:${task.id}`);
       setProgress(100);
-      setResult({
-        batch_id: response.node_id || '',
-        total: 1,
-        imported: 1,
-        failed: 0,
-        items: [
-          {
-            path: file.name,
-            node_id: response.node_id,
-            file_key: response.file_key,
-            status: 'imported',
-            content_ok: false,
-            message:
-              'ZIP 已上传，正在后台解压；目录和原始文件完成后会自动创建，发布时再进行问答内容解析',
-          },
-        ],
-      });
       refresh?.();
-      message.success('ZIP 已上传，后台正在解压；可在异步任务中查看进度');
+      message.info('ZIP 已上传，正在后台解压；请在异步任务中查看最终结果');
+      close();
     } catch (error) {
       console.error(error);
       if (activeTaskId)
