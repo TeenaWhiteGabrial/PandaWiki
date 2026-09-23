@@ -24,6 +24,7 @@ interface BatchZipImportProps {
   open: boolean;
   parentId?: string | null;
   parentName?: string;
+  navId?: string | null;
   onClose: () => void;
   refresh?: () => void;
 }
@@ -32,10 +33,14 @@ const BatchZipImport = ({
   open,
   parentId = null,
   parentName = '根目录',
+  navId,
   onClose,
   refresh,
 }: BatchZipImportProps) => {
-  const { kb_id, nav_id } = useAppSelector(state => state.config);
+  const { kb_id, nav_id: selectedNavId } = useAppSelector(
+    state => state.config,
+  );
+  const targetNavId = navId || selectedNavId;
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -55,7 +60,7 @@ const BatchZipImport = ({
   };
 
   const submit = async () => {
-    if (!file || !kb_id || !nav_id) {
+    if (!file || !kb_id || !targetNavId) {
       message.warning('请选择 ZIP 文件');
       return;
     }
@@ -76,7 +81,7 @@ const BatchZipImport = ({
           item.id === savedTaskId &&
           item.filename === file.name &&
           item.size === file.size &&
-          item.nav_id === nav_id &&
+          item.nav_id === targetNavId &&
           (item.parent_id || '') === (parentId || '') &&
           item.status !== 'completed',
       );
@@ -85,14 +90,14 @@ const BatchZipImport = ({
           item =>
             item.filename === file.name &&
             item.size === file.size &&
-            item.nav_id === nav_id &&
+            item.nav_id === targetNavId &&
             (item.parent_id || '') === (parentId || '') &&
             item.status !== 'completed',
         );
       if (!task) {
         task = await postApiV1FileUploadZipTasks({
           kb_id,
-          nav_id,
+          nav_id: targetNavId,
           ...(parentId ? { parent_id: parentId } : {}),
           filename: file.name,
           size: file.size,

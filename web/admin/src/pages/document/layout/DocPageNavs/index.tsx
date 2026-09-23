@@ -321,6 +321,7 @@ const DocPageNavs = ({
     null,
   );
   const [batchImportParentName, setBatchImportParentName] = useState('根目录');
+  const [batchImportNavId, setBatchImportNavId] = useState<string | null>(null);
   const [batchImportOpen, setBatchImportOpen] = useState(false);
   const [folderDownloadTask, setFolderDownloadTask] =
     useState<FolderDownloadTask | null>(null);
@@ -522,6 +523,7 @@ const DocPageNavs = ({
                 onClick: () => {
                   setBatchImportParentId(null);
                   setBatchImportParentName(item.name || '根目录');
+                  setBatchImportNavId(nav.id || item.id);
                   setBatchImportOpen(true);
                 },
               },
@@ -641,6 +643,7 @@ const DocPageNavs = ({
   const handleBatchImport = useCallback((item: ITreeItem) => {
     setBatchImportParentId(item.kind === 'nav' ? null : item.id);
     setBatchImportParentName(item.name || '根目录');
+    setBatchImportNavId(item.nav_id || (item.kind === 'nav' ? item.id : null));
     setBatchImportOpen(true);
   }, []);
   const handlePublish = useCallback(
@@ -898,8 +901,10 @@ const DocPageNavs = ({
           setBatchImportOpen(false);
           setBatchImportParentId(null);
           setBatchImportParentName('根目录');
+          setBatchImportNavId(null);
         }}
         parentName={batchImportParentName}
+        navId={batchImportNavId || undefined}
       />
       <NavPermissionModal
         open={permissionOpen}

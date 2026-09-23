@@ -39,6 +39,8 @@ export interface DocPageListContentProps {
   setOpraData: (data: { id?: string }[]) => void;
   dragTreeRef: React.RefObject<DragTreeHandle | null>;
   refresh: () => void;
+  parentName?: string;
+  navId?: string;
   createLocal: (node: {
     id: string;
     name: string;
@@ -73,6 +75,8 @@ const DocPageListContent = ({
   setOpraData,
   dragTreeRef,
   refresh,
+  parentName = '根目录',
+  navId,
   createLocal,
   scrollTo,
   registerTreeDragHandlers,
@@ -190,7 +194,8 @@ const DocPageListContent = ({
         {/* 右侧：多功能按钮（添加文档 + 批量操作） */}
         <Stack direction={'row'} alignItems={'center'} gap={2}>
           <AddDocBtn
-            parentName='根目录'
+            parentName={parentName}
+            navId={navId}
             refresh={refresh}
             createLocal={createLocal}
             scrollTo={scrollTo}

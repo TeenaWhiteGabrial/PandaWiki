@@ -30,6 +30,8 @@ const DocPageListContainer = ({
   const { kb_id, user, kbDetail } = useAppSelector(state => state.config);
   const readOnlyUser = isOrdinaryReadOnlyUser(user, kbDetail);
   const dragTreeRef = useRef<DragTreeHandle>(null);
+  const activeGroup =
+    groups.find(group => group.nav_id === nav_id) || groups[0];
 
   const [supportSelect, setBatchOpen] = useState(false);
   const [list, setList] = useState<DomainNodeListItemResp[]>([]);
@@ -211,6 +213,8 @@ const DocPageListContainer = ({
         setOpraData={setOpraData}
         dragTreeRef={dragTreeRef}
         refresh={refresh}
+        parentName={activeGroup?.nav_name || '根目录'}
+        navId={activeGroup?.nav_id}
         createLocal={createLocal}
         scrollTo={scrollTo}
         registerTreeDragHandlers={registerTreeDragHandlers}

@@ -69,9 +69,6 @@ export const TYPE_CONFIG: Record<
   [ConstsCrawlerSource.CrawlerSourceFile]: {
     label: '导入文档',
     okText: '导入文件',
-    accept:
-      '.md,.markdown,.txt,.html,.htm,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx',
-    acceptDisplay: 'Markdown、TXT、HTML、PDF、Word、Excel、PPT',
     usage: INTERNAL_USAGE,
   },
   [ConstsCrawlerSource.CrawlerSourceUrl]: {

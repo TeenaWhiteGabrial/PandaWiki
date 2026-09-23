@@ -5,7 +5,6 @@ import {
   postApiV1Node,
 } from '@/request';
 import { uploadAttachment } from '@/api';
-import { postApiV1FilePreviewGenerate } from '@/request/FilePreview';
 import { useAppSelector } from '@/store';
 import { message } from '@/components/ui';
 import {
@@ -70,45 +69,22 @@ const BatchActionBar = (props: BatchActionBarProps) => {
     [getFileExt],
   );
 
-  const shouldGeneratePdfPreview = useCallback(
-    (item: ListDataItem) => {
-      const ext = getFileExt(item.file_name || item.title || item.file_type);
-      return ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext);
-    },
-    [getFileExt],
-  );
-
   const buildAttachmentMeta = useCallback(
-    async (item: ListDataItem) => {
+    (item: ListDataItem) => {
       const normalizedFileType = getFileExt(
         item.file_name || item.title || item.file_type,
       );
-      let previewKey: string | undefined;
-      if (normalizedFileType === 'pdf') {
-        previewKey = item.file_key || item.id;
-      } else if (shouldGeneratePdfPreview(item)) {
-        try {
-          previewKey = (
-            await postApiV1FilePreviewGenerate({
-              file_key: item.file_key || item.id || '',
-              file_name: item.file_name || item.title || 'file',
-              kb_id,
-            })
-          )?.preview_key;
-        } catch {
-          // 文件本身已经上传成功，预览转换失败不应阻止文档创建。
-          // 这种情况下仍保留原文件，用户可以下载查看或稍后重试预览。
-          previewKey = undefined;
-        }
-      }
       return {
         file_key: item.file_key || item.id,
         file_name: item.file_name || item.title,
         file_type: normalizedFileType,
-        preview_key: previewKey,
+        // PDF 使用浏览器原生预览；其他格式不做预览转换，只保留原文件。
+        ...(normalizedFileType === 'pdf'
+          ? { preview_key: item.file_key || item.id }
+          : {}),
       };
     },
-    [getFileExt, kb_id, shouldGeneratePdfPreview],
+    [getFileExt],
   );
 
   const {
@@ -579,7 +555,7 @@ const BatchActionBar = (props: BatchActionBarProps) => {
                       file_name: prevItem.file_name || fileName,
                       file_type: prevItem.file_type || fileType,
                       import_kind: 'file-document',
-                      summary: '文件已上传，将直接作为只读文档预览',
+                      summary: '文件已上传，将保留为只读原文件',
                       status: 'parsed',
                       progress: undefined,
                     }
@@ -657,8 +633,9 @@ const BatchActionBar = (props: BatchActionBarProps) => {
             bgcolor: alpha(theme.palette.info.main, 0.08),
           }}
         >
-          文件上传后会直接创建对应文档：Markdown
-          文件保留为可编辑文档，其他格式作为只读文件文档预览，不再创建空白文档。
+          文件上传后会直接创建对应文档：Markdown/TXT
+          保留为可编辑文档，其他格式保留为只读原文件；PDF
+          可直接预览，其他格式不生成预览。
         </Box>
       )}
       <Stack

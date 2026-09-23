@@ -35,9 +35,7 @@ const FileParse = ({ type, parent_id, setData }: FileParseProps) => {
   const handleInitFiles = useCallback(
     async (uploadFiles: File[], rejectedFiles: FileRejection[] = []) => {
       if (rejectedFiles.length > 0) {
-        message.error(
-          `${rejectedFiles.length} 个文件格式不受支持，请选择 Markdown、TXT、HTML、PDF、Word、Excel 或 PPT`,
-        );
+        message.error(`${rejectedFiles.length} 个文件无法添加`);
       }
       if (uploadFiles.length === 0) return;
       if (NoParseTypes.includes(type)) {

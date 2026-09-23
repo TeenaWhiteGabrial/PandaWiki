@@ -23,6 +23,7 @@ interface InputContentProps {
   hidden?: boolean;
   parentId?: string | null;
   parentName?: string;
+  navId?: string | null;
   batchImport?: boolean;
 }
 
@@ -36,6 +37,7 @@ const AddDocBtn = ({
   hidden = false,
   parentId = null,
   parentName = '根目录',
+  navId,
   batchImport = true,
 }: InputContentProps) => {
   if (hidden) return null;
@@ -117,6 +119,7 @@ const AddDocBtn = ({
         open={batchImportOpen}
         parentId={parentId}
         parentName={parentName}
+        navId={navId}
         onClose={() => setBatchImportOpen(false)}
         refresh={refresh}
       />

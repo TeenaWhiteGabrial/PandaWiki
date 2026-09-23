@@ -1,6 +1,7 @@
 import AddDocBtn from '@/pages/document/component/AddDocBtn';
 import BatchZipImport from '@/pages/document/component/BatchZipImport';
 import DocAddByCustomText from '@/pages/document/component/DocAddByCustomText';
+import DocDelete from '@/pages/document/component/DocDelete';
 import type { ITreeItem } from '@/api';
 import TreeMenu from '@/components/Drag/DragTree/TreeMenu';
 import type { DocTreeMenuFn } from './DocPageList/types';
@@ -15,6 +16,7 @@ import {
   Breadcrumbs,
   Button,
   Card,
+  Checkbox,
   Chip,
   Divider,
   IconButton,
@@ -28,6 +30,7 @@ import DocumentTypeIcon from '@/components/DocumentTypeIcon';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { IconGengduo, IconJiahao } from '@panda-wiki/icons';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -62,17 +65,22 @@ const DocPageFileManager = ({
 }: DocPageFileManagerProps) => {
   const { kb_id } = useAppSelector(state => state.config);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [deleteSelectedDocsOpen, setDeleteSelectedDocsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [batchImportParentId, setBatchImportParentId] = useState<string | null>(
     null,
   );
+  const [batchImportParentName, setBatchImportParentName] = useState('根目录');
+  const [batchImportNavId, setBatchImportNavId] = useState<string | null>(null);
   const [batchImportOpen, setBatchImportOpen] = useState(false);
   const [createType, setCreateType] = useState<1 | 2 | null>(null);
   const [createParentId, setCreateParentId] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedId(null);
+    setSelectedDocIds([]);
   }, [folderId, navId]);
 
   const nodes = useMemo(
@@ -127,6 +135,22 @@ const DocPageFileManager = ({
       });
   }, [activeNavId, activeNodes, folderId, groups, isNavPath]);
 
+  const visibleDocuments = useMemo(
+    () =>
+      currentItems.filter(
+        (item): item is ExplorerItem & { id: string } =>
+          item.type !== 1 && !!item.id,
+      ),
+    [currentItems],
+  );
+  const selectedDocuments = useMemo(
+    () => visibleDocuments.filter(item => selectedDocIds.includes(item.id)),
+    [selectedDocIds, visibleDocuments],
+  );
+  const allVisibleDocumentsSelected =
+    visibleDocuments.length > 0 &&
+    visibleDocuments.every(item => selectedDocIds.includes(item.id));
+
   const breadcrumbs = useMemo(() => {
     const result: ExplorerItem[] = [];
     // 资源管理器根层展示所有目录，此时不能把当前选中的 nav_id
@@ -167,13 +191,22 @@ const DocPageFileManager = ({
   }, [activeNavId, folderId, groups, isNavPath, nodeMap]);
 
   const currentParentName = useMemo(() => {
-    if (!folderId) return rootName;
+    if (!folderId) {
+      return (
+        groups.find(item => item.nav_id === activeNavId)?.nav_name || rootName
+      );
+    }
     if (isNavPath) {
       return (
         groups.find(item => item.nav_id === activeNavId)?.nav_name || rootName
       );
     }
-    return breadcrumbs[breadcrumbs.length - 1]?.name || rootName;
+    return (
+      breadcrumbs
+        .map(item => item.name)
+        .filter(Boolean)
+        .join(' > ') || rootName
+    );
   }, [activeNavId, breadcrumbs, folderId, groups, isNavPath, rootName]);
 
   // The toolbar imports into the directory currently being browsed. A
@@ -258,6 +291,7 @@ const DocPageFileManager = ({
             <AddDocBtn
               parentId={currentImportParentId}
               parentName={currentParentName}
+              navId={activeNavId}
               refresh={refresh}
               disabled={false}
             />
@@ -269,8 +303,59 @@ const DocPageFileManager = ({
           alignItems='center'
           sx={{ px: 1.5, py: 0.75, color: 'text.secondary', fontSize: 12 }}
         >
-          <Box sx={{ flex: 1 }}>名称</Box>
-          <Box sx={{ width: 88, textAlign: 'right' }}>状态</Box>
+          <Stack
+            direction='row'
+            alignItems='center'
+            sx={{ flex: 1, minWidth: 0 }}
+          >
+            <Box sx={{ width: 34, display: 'flex', justifyContent: 'center' }}>
+              {visibleDocuments.length > 0 && (
+                <Checkbox
+                  size='small'
+                  checked={allVisibleDocumentsSelected}
+                  indeterminate={
+                    selectedDocuments.length > 0 && !allVisibleDocumentsSelected
+                  }
+                  onChange={event =>
+                    setSelectedDocIds(
+                      event.target.checked
+                        ? visibleDocuments.map(item => item.id)
+                        : [],
+                    )
+                  }
+                  inputProps={{ 'aria-label': '全选当前目录文档' }}
+                  sx={{ p: 0.5 }}
+                />
+              )}
+            </Box>
+            <Box>名称</Box>
+            {selectedDocuments.length > 0 && (
+              <Box sx={{ ml: 1.5 }}>已选 {selectedDocuments.length} 篇</Box>
+            )}
+          </Stack>
+          <Stack direction='row' alignItems='center' gap={1}>
+            {selectedDocuments.length > 0 && (
+              <>
+                <Button
+                  size='small'
+                  color='error'
+                  startIcon={<DeleteOutlineIcon fontSize='small' />}
+                  onClick={() => setDeleteSelectedDocsOpen(true)}
+                  sx={{ minWidth: 0, py: 0.25 }}
+                >
+                  批量删除
+                </Button>
+                <Button
+                  size='small'
+                  onClick={() => setSelectedDocIds([])}
+                  sx={{ minWidth: 0, py: 0.25 }}
+                >
+                  取消
+                </Button>
+              </>
+            )}
+            <Box sx={{ width: 88, textAlign: 'right' }}>状态</Box>
+          </Stack>
         </Stack>
         <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
           {currentItems.length === 0 ? (
@@ -316,6 +401,17 @@ const DocPageFileManager = ({
                           onClick: () => {
                             setBatchImportParentId(
                               item.explorerKind ? null : item.id || null,
+                            );
+                            setBatchImportParentName(
+                              [
+                                ...breadcrumbs.map(crumb => crumb.name),
+                                item.name,
+                              ]
+                                .filter(Boolean)
+                                .join(' > ') || '根目录',
+                            );
+                            setBatchImportNavId(
+                              item.nav_id || activeNavId || null,
                             );
                             setBatchImportOpen(true);
                           },
@@ -373,6 +469,33 @@ const DocPageFileManager = ({
                       else onDocumentSelect(item);
                     }}
                   >
+                    <Box
+                      sx={{
+                        width: 34,
+                        display: 'flex',
+                        justifyContent: 'center',
+                        flex: '0 0 34px',
+                      }}
+                      onClick={event => event.stopPropagation()}
+                    >
+                      {!isFolder && item.id && (
+                        <Checkbox
+                          size='small'
+                          checked={selectedDocIds.includes(item.id)}
+                          onChange={event =>
+                            setSelectedDocIds(previous =>
+                              event.target.checked
+                                ? [...new Set([...previous, item.id!])]
+                                : previous.filter(id => id !== item.id),
+                            )
+                          }
+                          inputProps={{
+                            'aria-label': `选择文档 ${item.name || ''}`,
+                          }}
+                          sx={{ p: 0.5 }}
+                        />
+                      )}
+                    </Box>
                     {isFolder ? (
                       <FolderOutlinedIcon
                         sx={{ color: 'warning.main', fontSize: 28 }}
@@ -490,6 +613,21 @@ const DocPageFileManager = ({
         onClose={() => {
           setBatchImportOpen(false);
           setBatchImportParentId(null);
+          setBatchImportParentName('根目录');
+          setBatchImportNavId(null);
+        }}
+        parentName={batchImportParentName}
+        navId={batchImportNavId || activeNavId}
+      />
+      <DocDelete
+        open={deleteSelectedDocsOpen}
+        onClose={() => setDeleteSelectedDocsOpen(false)}
+        data={selectedDocuments}
+        onDeleted={() => {
+          setDeleteSelectedDocsOpen(false);
+          setSelectedDocIds([]);
+          setSelectedId(null);
+          refresh();
         }}
       />
       <DocAddByCustomText
