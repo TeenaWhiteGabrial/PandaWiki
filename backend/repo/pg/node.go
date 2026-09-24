@@ -953,10 +953,25 @@ func (r *NodeRepository) GetNodeReleaseDetailByKBIDAndID(ctx context.Context, kb
 		return nil, err
 	}
 
+	// 对外暴露的 id 必须是节点 id(node_releases.node_id)，与 GetNodeReleaseListByKBID
+	// 以及 /share/v1/node/detail 的 id 入参语义保持一致；node_releases.id 是发布记录 id，
+	// 不能作为节点 id 返回（会导致按 node_id 查询时找不到节点）。
 	var node *shareV1.ShareNodeDetailResp
 	if err := r.db.WithContext(ctx).
 		Model(&domain.KBReleaseNodeRelease{}).
-		Select("node_releases.*, nodes.permissions, nodes.creator_id").
+		Select(`node_releases.node_id AS id,
+			node_releases.kb_id,
+			node_releases.type,
+			node_releases.name,
+			node_releases.content,
+			node_releases.meta,
+			node_releases.parent_id,
+			node_releases.created_at,
+			node_releases.updated_at,
+			node_releases.editor_id,
+			node_releases.publisher_id,
+			nodes.permissions,
+			nodes.creator_id`).
 		Joins("LEFT JOIN node_releases ON node_releases.id = kb_release_node_releases.node_release_id").
 		Joins("LEFT JOIN nodes ON nodes.id = kb_release_node_releases.node_id").
 		Where("kb_release_node_releases.release_id = ?", kbRelease.ID).
