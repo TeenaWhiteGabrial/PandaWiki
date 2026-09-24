@@ -27,6 +27,7 @@ export interface DocTreeMenuHandlers {
   handleUrl: (item: ITreeItem, key: ConstsCrawlerSource) => void;
   handleBatchImport?: (item: ITreeItem) => void;
   handleFolderDownload?: (item: ITreeItem) => void;
+  handleMove?: (item: ITreeItem) => void;
   handleDelete: (item: ITreeItem) => void;
   handlePublish: (item: ITreeItem) => void;
   handleRestudy?: (item: ITreeItem) => void;

@@ -76,6 +76,15 @@ const DocPageListContainer = ({
     [getOperationData],
   );
 
+  const handleMove = useCallback(
+    (item: ITreeItem) => {
+      setMoveOpen(true);
+      setIsBatch(false);
+      setOpraData(getOperationData(item));
+    },
+    [getOperationData],
+  );
+
   const handlePublish = useCallback(
     (item: ITreeItem) => onPublishOpen([item.id]),
     [onPublishOpen],
@@ -118,6 +127,7 @@ const DocPageListContainer = ({
   const menu = useDocTreeMenu(
     {
       handleUrl,
+      handleMove,
       handleDelete,
       handlePublish,
       handleRestudy,

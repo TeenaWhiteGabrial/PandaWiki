@@ -110,6 +110,7 @@ const DocListModals = ({
       open={moveOpen}
       data={list}
       selected={opraData}
+      currentNavId={opraData[0]?.nav_id || null}
       refresh={refresh}
       onMoved={({ ids, parentId }) => {
         setData(prev => {

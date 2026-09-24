@@ -15,6 +15,7 @@ export function useDocTreeMenu(
     handleUrl,
     handleBatchImport,
     handleFolderDownload,
+    handleMove,
     handleDelete,
     handlePublish,
     handleRestudy,
@@ -70,6 +71,15 @@ export function useDocTreeMenu(
                 },
               ]
             : []),
+          ...(handleMove
+            ? [
+                {
+                  label: '移动',
+                  key: 'move',
+                  onClick: () => handleMove(item),
+                },
+              ]
+            : []),
           {
             label: '目录权限',
             key: 'properties',
@@ -92,6 +102,13 @@ export function useDocTreeMenu(
               label: '重建问答索引',
               key: 'restudy',
               onClick: () => handleRestudy(item),
+            });
+          }
+          if (handleMove) {
+            menuItems.push({
+              label: '移动',
+              key: 'move',
+              onClick: () => handleMove(item),
             });
           }
           menuItems.push({
@@ -124,6 +141,8 @@ export function useDocTreeMenu(
     [
       handleUrl,
       handleBatchImport,
+      handleFolderDownload,
+      handleMove,
       handleDelete,
       handlePublish,
       handleRestudy,

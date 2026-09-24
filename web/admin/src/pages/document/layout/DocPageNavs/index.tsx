@@ -591,6 +591,14 @@ const DocPageNavs = ({
     },
     [getNodeData],
   );
+  const handleMove = useCallback(
+    (item: ITreeItem) => {
+      setMoveOpen(true);
+      setIsBatch(false);
+      setOpraData(getNodeData(item));
+    },
+    [getNodeData],
+  );
   const handleProperties = useCallback(
     (item: ITreeItem) => {
       setPropertiesOpen(true);
@@ -679,6 +687,7 @@ const DocPageNavs = ({
       handleUrl,
       handleBatchImport,
       handleFolderDownload,
+      handleMove,
       handleDelete,
       handlePublish,
       handleRestudy,

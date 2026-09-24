@@ -9,7 +9,7 @@ import {
 } from '@/request/Node';
 import { DomainNodeListItemResp } from '@/request/types';
 import { useAppSelector } from '@/store';
-import { convertToTree } from '@/utils/drag';
+import { collapseAllFolders, convertToTree } from '@/utils/drag';
 import { Box, Stack } from '@mui/material';
 import { useEffect, useState } from 'react';
 
@@ -100,10 +100,13 @@ const MoveDocs = ({
               !excludedIDs.has(item.id) &&
               item.nav_id === groupNavID,
           );
-          const children = convertToTree(folders).map(item => ({
-            ...item,
-            nav_id: item.nav_id || groupNavID,
-          }));
+          const children = collapseAllFolders(
+            convertToTree(folders).map(item => ({
+              ...item,
+              nav_id: item.nav_id || groupNavID,
+            })),
+            true,
+          ) as ITreeItem[];
           return {
             id: getNavVirtualID(groupNavID),
             name: group.nav_name || '未命名目录',
@@ -114,7 +117,7 @@ const MoveDocs = ({
             nav_id: groupNavID,
             children,
             canHaveChildren: true,
-            collapsed: false,
+            collapsed: true,
           };
         });
       setTree(nextTree);
