@@ -115,6 +115,7 @@ export function convertToTree(data: DomainNodeListItemResp[]) {
       rag_status: item.rag_info?.status,
       rag_message: item.rag_info?.message,
       parentId: item.parent_id,
+      nav_id: item.nav_id,
       children: [],
       canHaveChildren: item.type === 1,
       updated_at: item.updated_at || item.created_at,

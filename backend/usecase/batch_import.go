@@ -27,7 +27,7 @@ const (
 	batchImportMaxExpandedSize = int64(100 * 1024 * 1024 * 1024)
 	batchImportMaxFileSize     = int64(100 * 1024 * 1024)
 	batchImportMaxFiles        = 5000
-	batchImportExtractTimeout  = 30 * time.Second
+	batchImportExtractTimeout  = 10 * time.Minute
 )
 
 type BatchImportItem struct {
@@ -488,15 +488,41 @@ func (u *BatchImportUsecase) ExtractFileContent(ctx context.Context, kbID, fileK
 func (u *BatchImportUsecase) extractFileContent(ctx context.Context, kbID, fileKey, filename string) (string, bool, string) {
 	extractCtx, cancelExtract := context.WithTimeout(ctx, batchImportExtractTimeout)
 	defer cancelExtract()
+
+	direct := u.extractFileContentDirect(extractCtx, fileKey, filename)
+	if direct.OK {
+		return direct.Content, true, direct.Message
+	}
+	if direct.SkipCrawler {
+		return "", false, direct.Message
+	}
+
+	content, ok, crawlerMessage := u.extractFileContentViaCrawler(extractCtx, kbID, fileKey, filename)
+	if ok {
+		return content, true, ""
+	}
+	if direct.Message != "" && crawlerMessage != "" {
+		return "", false, direct.Message + "；crawler 兜底失败：" + crawlerMessage
+	}
+	if direct.Message != "" {
+		return "", false, direct.Message
+	}
+	return "", false, crawlerMessage
+}
+
+func (u *BatchImportUsecase) extractFileContentViaCrawler(ctx context.Context, kbID, fileKey, filename string) (string, bool, string) {
+	if u.crawler == nil {
+		return "", false, "crawler 服务未初始化"
+	}
 	parseKey := fileKey
 	if u.fileUsecase != nil && u.fileUsecase.s3Client != nil {
-		signedURL, signErr := u.fileUsecase.s3Client.SignURL(extractCtx, domain.Bucket, fileKey, 30*time.Minute)
+		signedURL, signErr := u.fileUsecase.s3Client.SignURL(ctx, domain.Bucket, fileKey, 30*time.Minute)
 		if signErr != nil {
 			return "", false, "生成文件访问链接失败：" + signErr.Error()
 		}
 		parseKey = signedURL
 	}
-	parseResp, parseErr := u.crawler.ParseUrl(extractCtx, &v1.CrawlerParseReq{
+	parseResp, parseErr := u.crawler.ParseUrl(ctx, &v1.CrawlerParseReq{
 		Key: parseKey, KbID: kbID, CrawlerSource: consts.CrawlerSourceFile, Filename: filename,
 	})
 	if parseErr != nil {
@@ -505,14 +531,14 @@ func (u *BatchImportUsecase) extractFileContent(ctx context.Context, kbID, fileK
 	if parseResp == nil || parseResp.Docs.Value.ID == "" {
 		return "", false, "内容解析未返回文档"
 	}
-	exportResp, exportErr := u.crawler.ExportDoc(extractCtx, &v1.CrawlerExportReq{KbID: kbID, ID: parseResp.ID, DocID: parseResp.Docs.Value.ID})
+	exportResp, exportErr := u.crawler.ExportDoc(ctx, &v1.CrawlerExportReq{KbID: kbID, ID: parseResp.ID, DocID: parseResp.Docs.Value.ID})
 	if exportErr != nil {
 		return "", false, "内容转换失败：" + exportErr.Error()
 	}
 	if exportResp.TaskId == "" {
 		return "", false, "内容转换未生成任务"
 	}
-	scrapeResp, scrapeErr := u.crawler.ScrapeGetResult(extractCtx, exportResp.TaskId)
+	scrapeResp, scrapeErr := u.crawler.ScrapeGetResult(ctx, exportResp.TaskId)
 	if scrapeErr != nil {
 		return "", false, "内容提取失败：" + scrapeErr.Error()
 	}

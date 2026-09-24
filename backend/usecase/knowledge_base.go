@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -364,12 +365,21 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		if release.Type == domain.NodeTypeFolder {
 			continue
 		}
-		if strings.TrimSpace(release.Content) == "" && release.Meta.FileKey != "" && u.batchImport != nil {
-			content, contentOK, contentMessage := u.batchImport.extractFileContent(ctx, kbID, release.Meta.FileKey, release.Name)
-			if !contentOK {
-				u.markLearningFailed(kbID, release.NodeID, contentMessage)
-				u.logger.Error("publication content extraction failed", log.String("kb_id", kbID), log.String("node_id", release.NodeID), log.String("node_release_id", release.ID), log.String("stage", "learning"), log.String("document", release.Name), log.String("reason", contentMessage))
-				continue
+		if strings.TrimSpace(release.Content) == "" && release.Meta.FileKey != "" {
+			content := ""
+			contentOK := false
+			contentMessage := ""
+			if u.batchImport != nil && ShouldExtractReleaseFileContent(release) {
+				content, contentOK, contentMessage = u.batchImport.extractFileContent(ctx, kbID, release.Meta.FileKey, release.Name)
+			} else {
+				contentMessage = "该文件类型不解析正文，仅索引文件元信息"
+			}
+			if !contentOK || strings.TrimSpace(content) == "" {
+				if contentMessage == "" {
+					contentMessage = "内容解析未返回有效文本，仅索引文件元信息"
+				}
+				content = BuildFileMetadataLearningContent(release, contentMessage)
+				u.logger.Warn("publication content extraction fallback to file metadata", log.String("kb_id", kbID), log.String("node_id", release.NodeID), log.String("node_release_id", release.ID), log.String("stage", "learning"), log.String("document", release.Name), log.String("reason", contentMessage))
 			}
 			release.Content = content
 			if err := u.nodeRepo.UpdateNodeReleaseContent(ctx, release.ID, content); err != nil {
@@ -446,6 +456,84 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		}
 	}
 	return learned, kb.DatasetID, nil
+}
+
+func ShouldExtractReleaseFileContent(release *domain.NodeReleaseWithDirPath) bool {
+	fileType := normalizeReleaseFileType(release)
+	switch fileType {
+	case "mp4", "webm", "ogv", "mov", "m4v",
+		"mp3", "wav", "ogg", "oga", "m4a", "aac", "flac",
+		"png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif",
+		"zip", "rar", "7z", "tar", "gz":
+		return false
+	default:
+		return true
+	}
+}
+
+func normalizeReleaseFileType(release *domain.NodeReleaseWithDirPath) string {
+	if release == nil {
+		return ""
+	}
+	fileType := strings.ToLower(strings.TrimSpace(release.Meta.FileType))
+	if strings.HasPrefix(fileType, ".") {
+		fileType = strings.TrimPrefix(fileType, ".")
+	}
+	if strings.Contains(fileType, "/") {
+		parts := strings.Split(fileType, "/")
+		fileType = parts[len(parts)-1]
+	}
+	if fileType != "" {
+		return fileType
+	}
+	fileName := release.Meta.FileName
+	if fileName == "" {
+		fileName = release.Name
+	}
+	return strings.TrimPrefix(strings.ToLower(filepath.Ext(fileName)), ".")
+}
+
+func BuildFileMetadataLearningContent(release *domain.NodeReleaseWithDirPath, reason string) string {
+	fileName := strings.TrimSpace(release.Meta.FileName)
+	if fileName == "" {
+		fileName = strings.TrimSpace(release.Name)
+	}
+	fileType := normalizeReleaseFileType(release)
+	pathText := strings.TrimSpace(release.Path)
+	if pathText == "" {
+		pathText = "/"
+	}
+	baseName := strings.TrimSpace(strings.TrimSuffix(fileName, filepath.Ext(fileName)))
+
+	lines := []string{
+		fmt.Sprintf("# %s", strings.TrimSpace(release.Name)),
+		"",
+		"这是一个文件型文档。系统当前已索引该文件的基础元信息，可用于按名称、路径、类型检索。",
+		fmt.Sprintf("文档名称：%s", strings.TrimSpace(release.Name)),
+		fmt.Sprintf("文件名称：%s", fileName),
+	}
+	if baseName != "" && baseName != fileName {
+		lines = append(lines, fmt.Sprintf("文件关键词：%s", baseName))
+	}
+	if fileType != "" {
+		lines = append(lines, fmt.Sprintf("文件类型：%s", fileType))
+	}
+	lines = append(lines, fmt.Sprintf("所在路径：%s", pathText))
+	if reason != "" {
+		lines = append(lines, fmt.Sprintf("正文解析状态：%s。", sanitizeLearningFallbackReason(reason)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func sanitizeLearningFallbackReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return ""
+	}
+	if len([]rune(reason)) > 120 {
+		reason = string([]rune(reason)[:120]) + "..."
+	}
+	return reason
 }
 
 func (u *KnowledgeBaseUsecase) markPendingLearningFailed(kbID string, pending map[string]learnedRelease, message string) {

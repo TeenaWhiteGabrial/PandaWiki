@@ -2,13 +2,15 @@ import { ITreeItem } from '@/api';
 import Card from '@/components/Card';
 import DragTree from '@/components/Drag/DragTree';
 import { message, Modal } from '@/components/ui';
-import { getApiV1NavList } from '@/request/Nav';
-import { postApiV1NodeBatchMove, postApiV1NodeMoveNav } from '@/request/Node';
-import { DomainNodeListItemResp, V1NavListResp } from '@/request/types';
+import {
+  getApiV1NodeListGroupNav,
+  postApiV1NodeBatchMove,
+  postApiV1NodeMoveNav,
+} from '@/request/Node';
+import { DomainNodeListItemResp } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { convertToTree } from '@/utils/drag';
-import { Box, Checkbox, Stack } from '@mui/material';
-import { IconWenjianjiaKai } from '@panda-wiki/icons';
+import { Box, Stack } from '@mui/material';
 import { useEffect, useState } from 'react';
 
 interface DocDeleteProps {
@@ -21,10 +23,48 @@ interface DocDeleteProps {
   refresh: () => void;
 }
 
+type MoveTarget = {
+  id: string;
+  navId: string;
+  parentId: string;
+  kind: 'nav' | 'folder';
+};
+
+const getNavVirtualID = (navID: string) => `nav:${navID}`;
+
+const findTreeItem = (items: ITreeItem[], id: string): ITreeItem | null => {
+  for (const item of items) {
+    if (item.id === id) return item;
+    if (item.children?.length) {
+      const found = findTreeItem(item.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+const collectDescendantIDs = (
+  items: DomainNodeListItemResp[],
+  rootIDs: Set<string>,
+) => {
+  const result = new Set(rootIDs);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    items.forEach(item => {
+      if (!item.id || !item.parent_id) return;
+      if (result.has(item.parent_id) && !result.has(item.id)) {
+        result.add(item.id);
+        changed = true;
+      }
+    });
+  }
+  return result;
+};
+
 const MoveDocs = ({
   open,
   onClose,
-  data,
   selected,
   currentNavId,
   onMoved,
@@ -33,96 +73,119 @@ const MoveDocs = ({
   const { kb_id, nav_id } = useAppSelector(state => state.config);
   const effectiveNavId = currentNavId || nav_id;
   const [tree, setTree] = useState<ITreeItem[]>([]);
-  const [folderIds, setFolderIds] = useState<string[]>([]);
-  const [navList, setNavList] = useState<V1NavListResp[]>([]);
-  const [navLoading, setNavLoading] = useState(false);
-  const [hasLoadedNavs, setHasLoadedNavs] = useState(false);
-  const [targetNavId, setTargetNavId] = useState<string | null>(null);
+  const [target, setTarget] = useState<MoveTarget | null>(null);
+  const [treeLoading, setTreeLoading] = useState(false);
 
-  const loadNavList = () => {
-    if (!kb_id || navLoading || hasLoadedNavs) return;
-    setNavLoading(true);
-    getApiV1NavList({ kb_id })
-      .then(res => {
-        const list = (res || []) as V1NavListResp[];
-        setNavList(list);
-        setHasLoadedNavs(true);
-      })
-      .finally(() => {
-        setNavLoading(false);
-      });
+  const buildTargetTree = async () => {
+    if (!kb_id) return;
+    setTreeLoading(true);
+    try {
+      const groups = await getApiV1NodeListGroupNav({ kb_id });
+      const selectedFolderIDs = new Set(
+        selected
+          .filter(item => item.type === 1 && item.id)
+          .map(item => item.id!),
+      );
+      const allNodes = (groups || []).flatMap(group => group.list || []);
+      const excludedIDs = collectDescendantIDs(allNodes, selectedFolderIDs);
+      const nextTree = (groups || [])
+        .slice()
+        .sort((a, b) => (a.position || 0) - (b.position || 0))
+        .map(group => {
+          const groupNavID = group.nav_id || '';
+          const folders = (group.list || []).filter(
+            item =>
+              item.type === 1 &&
+              item.id &&
+              !excludedIDs.has(item.id) &&
+              item.nav_id === groupNavID,
+          );
+          const children = convertToTree(folders).map(item => ({
+            ...item,
+            nav_id: item.nav_id || groupNavID,
+          }));
+          return {
+            id: getNavVirtualID(groupNavID),
+            name: group.nav_name || '未命名目录',
+            level: 0,
+            order: group.position,
+            type: 1 as const,
+            kind: 'nav' as const,
+            nav_id: groupNavID,
+            children,
+            canHaveChildren: true,
+            collapsed: false,
+          };
+        });
+      setTree(nextTree);
+    } finally {
+      setTreeLoading(false);
+    }
   };
 
   useEffect(() => {
     if (open) {
-      loadNavList();
+      buildTargetTree();
     }
-  }, [open]);
+  }, [open, kb_id, selected]);
 
   const handleOk = () => {
-    const ids = selected.filter(it => it.type === 1).map(it => it.id!);
+    const ids = selected.filter(it => it.type === 1 && it.id).map(it => it.id!);
     selected
-      .filter(it => it.type === 2)
+      .filter(it => it.type === 2 && it.id)
       .forEach(it => {
         if (!ids.includes(it.parent_id!)) {
           ids.push(it.id!);
         }
       });
 
-    const isSameNav =
-      effectiveNavId &&
-      targetNavId &&
-      String(effectiveNavId) === String(targetNavId);
+    if (!target) {
+      message.error('请选择移动路径');
+      return;
+    }
 
-    // 当前目录内移动：未选择其他目录，或选择的仍是当前目录
-    if (!targetNavId || isSameNav) {
-      if (folderIds.length === 0) {
-        message.error('请选择移动路径');
+    const isSameNav =
+      effectiveNavId && target.navId && String(effectiveNavId) === target.navId;
+
+    if (target.kind === 'nav') {
+      if (isSameNav) {
+        postApiV1NodeBatchMove({ ids, parent_id: '', kb_id }).then(() => {
+          message.success('移动成功');
+          onClose();
+          onMoved?.({ ids, parentId: '' });
+          refresh();
+        });
         return;
       }
-      const parent_id = folderIds.includes('root') ? '' : folderIds[0];
-      postApiV1NodeBatchMove({ ids, parent_id, kb_id }).then(() => {
+
+      postApiV1NodeMoveNav({
+        ids,
+        kb_id,
+        nav_id: target.navId,
+      }).then(() => {
         message.success('移动成功');
         onClose();
-        onMoved?.({ ids, parentId: parent_id });
         refresh();
       });
       return;
     }
 
-    // 跨目录移动：选择了不同的目录
-    if (!targetNavId) {
-      message.error('请选择目标目录');
-      return;
-    }
-
-    const payload = {
+    postApiV1NodeBatchMove({
       ids,
+      parent_id: target.parentId,
       kb_id,
-      nav_id: targetNavId,
-    };
-
-    postApiV1NodeMoveNav(payload).then(() => {
+    }).then(() => {
       message.success('移动成功');
       onClose();
+      onMoved?.({ ids, parentId: target.parentId });
       refresh();
     });
   };
 
   useEffect(() => {
-    if (open && selected.length > 0) {
-      const folder = selected.filter(it => it.type === 1).map(it => it.id);
-      const filterData = data.filter(
-        it => it.type === 1 && !folder.includes(it.id),
-      );
-      setTree(convertToTree(filterData));
-    }
-  }, [open, data, selected]);
-
-  useEffect(() => {
     if (!open) {
-      setFolderIds([]);
-      setTargetNavId(null);
+      setTarget(null);
+      setTree([]);
     }
   }, [open]);
 
@@ -149,131 +212,39 @@ const MoveDocs = ({
           overflowY: 'auto',
         }}
       >
-        {navLoading ? (
+        {treeLoading ? (
           <Box sx={{ fontSize: 14, color: 'text.secondary', p: 1 }}>
             目录加载中...
           </Box>
         ) : (
           <Stack gap={1}>
-            {navList.map(item => {
-              const isActive = !!targetNavId && targetNavId === item.id;
-              const isCurrentNav =
-                effectiveNavId &&
-                item.id &&
-                String(effectiveNavId) === String(item.id);
-              const disabled = !!isCurrentNav;
-
-              const handleSelectNav = () => {
-                if (disabled) return;
-                if (isActive) {
-                  setTargetNavId(null);
-                } else {
-                  setFolderIds([]);
-                  setTargetNavId(item.id || null);
-                }
-              };
-
-              return (
-                <Box key={item.id}>
-                  <Stack
-                    direction='row'
-                    alignItems='center'
-                    gap={1}
-                    sx={{
-                      fontSize: 14,
-                      cursor: disabled ? 'default' : 'pointer',
-                    }}
-                    onClick={handleSelectNav}
-                  >
-                    <Checkbox
-                      sx={{
-                        color: 'text.disabled',
-                        width: '24px',
-                        height: '24px',
-                      }}
-                      checked={isActive}
-                      disabled={disabled}
-                      onClick={e => e.stopPropagation()}
-                      onChange={handleSelectNav}
-                    />
-                    <Box
-                      component='span'
-                      sx={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <Box
-                        component='span'
-                        sx={{
-                          fontWeight: 600,
-                        }}
-                      >
-                        {item.name}
-                      </Box>
-
-                      <Box
-                        component='span'
-                        sx={{
-                          ml: 0.5,
-                          fontSize: 12,
-                          color: 'text.secondary',
-                        }}
-                      >
-                        {isCurrentNav ? '（当前目录）' : '（其他目录）'}
-                      </Box>
-                    </Box>
-                  </Stack>
-                  {isCurrentNav && (
-                    <Box sx={{ mt: 0.5, pl: 2.5 }}>
-                      <Stack
-                        direction={'row'}
-                        alignItems={'center'}
-                        gap={1}
-                        sx={{ fontSize: 14, cursor: 'pointer' }}
-                        onClick={e => {
-                          e.stopPropagation();
-                          setTargetNavId(null);
-                          setFolderIds(
-                            folderIds.includes('root') ? [] : ['root'],
-                          );
-                        }}
-                      >
-                        <Checkbox
-                          sx={{
-                            color: 'text.disabled',
-                            width: '35px',
-                            height: '35px',
-                          }}
-                          checked={folderIds.includes('root')}
-                        />
-                        <IconWenjianjiaKai sx={{ fontSize: 14 }} />
-                        <Box sx={{ fontSize: 13, color: 'text.secondary' }}>
-                          根路径
-                        </Box>
-                      </Stack>
-                      <DragTree
-                        ui='select'
-                        selected={folderIds}
-                        data={tree}
-                        readOnly={true}
-                        relativeSelect={false}
-                        onSelectChange={(ids, id = '') => {
-                          setTargetNavId(null);
-                          if (folderIds.includes(id)) {
-                            setFolderIds([]);
-                          } else {
-                            setFolderIds([id]);
-                          }
-                        }}
-                      />
-                    </Box>
-                  )}
-                </Box>
-              );
-            })}
-            {navList.length === 0 && !navLoading && (
+            {tree.length > 0 ? (
+              <DragTree
+                ui='select'
+                selected={target ? [target.id] : []}
+                data={tree}
+                readOnly={true}
+                relativeSelect={false}
+                onSelectChange={(_, id = '') => {
+                  if (!id) return;
+                  if (target?.id === id) {
+                    setTarget(null);
+                    return;
+                  }
+                  const item = findTreeItem(tree, id);
+                  if (!item) return;
+                  const itemNavId =
+                    item.nav_id ||
+                    (item.kind === 'nav' ? item.id.replace(/^nav:/, '') : '');
+                  setTarget({
+                    id: item.id,
+                    navId: itemNavId,
+                    parentId: item.kind === 'nav' ? '' : item.id,
+                    kind: item.kind === 'nav' ? 'nav' : 'folder',
+                  });
+                }}
+              />
+            ) : (
               <Box sx={{ fontSize: 14, color: 'text.secondary', p: 1 }}>
                 暂无可用目录
               </Box>

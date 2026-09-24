@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"time"
 
-	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/mq"
@@ -81,21 +79,25 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			h.logger.Error("get kb failed", log.Error(err), log.String("kb_id", request.KBID))
 			return nil
 		}
-		if strings.TrimSpace(nodeRelease.Content) == "" && nodeRelease.Meta.FileKey != "" && h.batchImport != nil {
-			content, ok, message := h.batchImport.ExtractFileContent(ctx, nodeRelease.KBID, nodeRelease.Meta.FileKey, nodeRelease.Name)
-			if !ok {
-				_ = h.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, domain.RagInfo{
-					Status:   consts.NodeRagStatusFailed,
-					Message:  message,
-					SyncedAt: time.Now(),
-				})
-				h.logger.Error("extract node file content failed",
+		if strings.TrimSpace(nodeRelease.Content) == "" && nodeRelease.Meta.FileKey != "" {
+			content := ""
+			ok := false
+			message := ""
+			if h.batchImport != nil && usecase.ShouldExtractReleaseFileContent(nodeRelease) {
+				content, ok, message = h.batchImport.ExtractFileContent(ctx, nodeRelease.KBID, nodeRelease.Meta.FileKey, nodeRelease.Name)
+			} else {
+				message = "该文件类型不解析正文，仅索引文件元信息"
+			}
+			if !ok || strings.TrimSpace(content) == "" {
+				if message == "" {
+					message = "内容解析未返回有效文本，仅索引文件元信息"
+				}
+				content = usecase.BuildFileMetadataLearningContent(nodeRelease, message)
+				h.logger.Warn("extract node file content fallback to file metadata",
 					log.String("kb_id", nodeRelease.KBID),
 					log.String("node_id", nodeRelease.NodeID),
 					log.String("node_release_id", nodeRelease.ID),
-					log.String("file_key", nodeRelease.Meta.FileKey),
 					log.String("reason", message))
-				return nil
 			}
 			nodeRelease.Content = content
 			if err := h.nodeRepo.UpdateNodeReleaseContent(ctx, nodeRelease.ID, content); err != nil {

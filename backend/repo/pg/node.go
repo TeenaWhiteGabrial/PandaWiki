@@ -1269,6 +1269,26 @@ func (r *NodeRepository) MoveNodeNav(ctx context.Context, kbID, navID string, no
 
 func (r *NodeRepository) BatchMove(ctx context.Context, req *domain.BatchMoveReq) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		allIDs := r.collectAllChildNodeIDs(tx, req.KBID, req.IDs)
+		targetNavID := ""
+		if req.ParentID != "" {
+			var parent domain.Node
+			if err := tx.WithContext(ctx).
+				Model(&domain.Node{}).
+				Where("kb_id = ?", req.KBID).
+				Where("id = ?", req.ParentID).
+				First(&parent).Error; err != nil {
+				return err
+			}
+			if parent.Type != domain.NodeTypeFolder {
+				return fmt.Errorf("target parent is not a folder")
+			}
+			if lo.Contains(allIDs, req.ParentID) {
+				return fmt.Errorf("cannot move node into itself or its descendant")
+			}
+			targetNavID = parent.NavId
+		}
+
 		// update node parent_id
 		if err := tx.WithContext(ctx).Model(&domain.Node{}).
 			Where("kb_id = ?", req.KBID).
@@ -1277,9 +1297,18 @@ func (r *NodeRepository) BatchMove(ctx context.Context, req *domain.BatchMoveReq
 			Error; err != nil {
 			return err
 		}
+		if targetNavID != "" {
+			if err := tx.WithContext(ctx).Model(&domain.Node{}).
+				Where("kb_id = ?", req.KBID).
+				Where("id IN ?", allIDs).
+				Update("nav_id", targetNavID).
+				Error; err != nil {
+				return err
+			}
+		}
 		if err := tx.WithContext(ctx).Model(&domain.Node{}).
 			Where("kb_id = ?", req.KBID).
-			Where("id IN ?", req.IDs).
+			Where("id IN ?", allIDs).
 			Where("status = ?", domain.NodeStatusPublished).
 			Update("status", domain.NodeStatusDraft).
 			Error; err != nil {
