@@ -32,7 +32,7 @@ import AdjacentDocNav from './components/AdjacentDocNav';
 import DocMetaInfo from './components/DocMetaInfo';
 import CommentSection from './components/CommentSection';
 import AttachmentList from './components/AttachmentList';
-import LegacyFileNotice from './components/LegacyFileNotice';
+import FilePreview from './components/FilePreview';
 
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
@@ -337,7 +337,7 @@ const DocContent = ({
             {!contentReady ? (
               <DocSkeleton showSummary={false} />
             ) : isReadonlyFilePreview ? (
-              <LegacyFileNotice info={info} />
+              <FilePreview info={info} />
             ) : isMarkdown ? (
               <MarkDown
                 content={info.content || ''}

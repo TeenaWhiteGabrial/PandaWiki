@@ -119,6 +119,9 @@ func (s *CTRAG) UpsertRecords(ctx context.Context, req *UpsertRecordsRequest) (s
 			return "", fmt.Errorf("convert html to markdown failed: %w", err)
 		}
 	}
+	if strings.TrimSpace(req.Title) != "" {
+		markdown = fmt.Sprintf("# %s\n\n%s", req.Title, markdown)
+	}
 	data := &raglite.UploadDocumentRequest{
 		DatasetID:  req.DatasetID,
 		DocumentID: req.DocID,

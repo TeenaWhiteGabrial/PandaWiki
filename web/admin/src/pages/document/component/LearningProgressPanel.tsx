@@ -255,55 +255,78 @@ const LearningProgressPanel = ({
           ))}
         </Stack>
 
-        <Stack direction='row' alignItems='center' gap={1}>
-          {filterOptions.map(item => (
-            <Button
-              key={item.key}
+        <Stack direction='row' alignItems='center' gap={1} flexWrap='wrap'>
+          <Stack
+            direction='row'
+            alignItems='center'
+            gap={0.75}
+            flexWrap='wrap'
+            sx={{ flex: 1, minWidth: 300 }}
+          >
+            {filterOptions.map(item => (
+              <Button
+                key={item.key}
+                size='small'
+                variant={filter === item.key ? 'contained' : 'outlined'}
+                sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 72 }}
+                onClick={() => {
+                  setFilter(item.key);
+                  setPage(1);
+                }}
+              >
+                {item.label} {item.count}
+              </Button>
+            ))}
+          </Stack>
+
+          <Stack
+            direction='row'
+            alignItems='center'
+            justifyContent='flex-end'
+            gap={1}
+            sx={{ flexShrink: 0, ml: 'auto' }}
+          >
+            <TextField
               size='small'
-              variant={filter === item.key ? 'contained' : 'outlined'}
-              onClick={() => {
-                setFilter(item.key);
+              placeholder='搜索文档 / 目录 / 原因'
+              value={keyword}
+              onChange={event => {
+                setKeyword(event.target.value);
                 setPage(1);
               }}
+              sx={{ width: 220, flexShrink: 0 }}
+            />
+            <Button
+              size='small'
+              sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 64 }}
+              onClick={refresh}
             >
-              {item.label} {item.count}
+              刷新
             </Button>
-          ))}
-          <Box sx={{ flex: 1 }} />
-          <TextField
-            size='small'
-            placeholder='搜索文档 / 目录 / 原因'
-            value={keyword}
-            onChange={event => {
-              setKeyword(event.target.value);
-              setPage(1);
-            }}
-            sx={{ width: 240 }}
-          />
-          <Button size='small' onClick={refresh}>
-            刷新
-          </Button>
-          <Button
-            size='small'
-            variant='outlined'
-            disabled={submitting || pendingDocs.length === 0}
-            onClick={() =>
-              submitRestudy(pendingDocs, '暂无需要学习的待处理文档')
-            }
-          >
-            学习待处理 {pendingDocs.length}
-          </Button>
-          <Button
-            size='small'
-            color='primary'
-            variant='contained'
-            disabled={submitting || visibleDocs.length === 0}
-            onClick={() =>
-              submitRestudy(visibleDocs, '当前筛选结果没有可重建的文档')
-            }
-          >
-            重建当前结果
-          </Button>
+            <Button
+              size='small'
+              variant='outlined'
+              disabled={submitting || pendingDocs.length === 0}
+              sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 132 }}
+              onClick={() =>
+                submitRestudy(pendingDocs, '暂无需要学习的待处理文档')
+              }
+            >
+              学习待处理 {pendingDocs.length}
+            </Button>
+            <Button
+              size='small'
+              color='primary'
+              variant='contained'
+              disabled={submitting || visibleDocs.length === 0}
+              sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 120 }}
+              onClick={() =>
+                submitRestudy(visibleDocs, '当前筛选结果没有可重建的文档')
+              }
+            >
+              重建当前结果
+            </Button>
+          </Stack>
         </Stack>
 
         <Stack

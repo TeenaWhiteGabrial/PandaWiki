@@ -285,7 +285,21 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 			flushBuffer(ctx, "data")
 		}
 
-		// save assistant answer to conversation message
+		if chatErr != nil {
+			u.logger.Error("对话失败", log.Error(chatErr))
+			eventCh <- domain.SSEEvent{Type: "error", Content: "对话失败，请稍后再试"}
+			return
+		}
+
+		if strings.TrimSpace(answer) == "" {
+			u.logger.Error("chat model returned empty answer", log.String("provider", string(req.ModelInfo.Provider)), log.String("model", string(req.ModelInfo.Model)), log.String("conversation_id", req.ConversationID))
+			if len(rankedNodes) == 0 {
+				answer = "抱歉，我当前的知识不足以回答这个问题。"
+			} else {
+				answer = buildFallbackAnswerFromRankedNodes(rankedNodes)
+			}
+			eventCh <- domain.SSEEvent{Type: "data", Content: answer}
+		}
 
 		if err := u.conversationUsecase.CreateChatConversationMessage(ctx, req.KBID, &domain.ConversationMessage{
 			ID:               messageId,
@@ -313,14 +327,55 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 			return
 		}
 
-		if chatErr != nil {
-			u.logger.Error("对话失败", log.Error(chatErr))
-			eventCh <- domain.SSEEvent{Type: "error", Content: "对话失败，请稍后再试"}
-			return
-		}
 		eventCh <- domain.SSEEvent{Type: "done"}
 	}()
 	return eventCh, nil
+}
+
+func buildFallbackAnswerFromRankedNodes(rankedNodes []*domain.RankedNodeChunks) string {
+	const maxNodes = 3
+	const maxChunkRunes = 1000
+
+	var answer strings.Builder
+	answer.WriteString("根据已检索到的文档，相关内容如下：\n\n")
+	used := 0
+	for _, node := range rankedNodes {
+		if used >= maxNodes {
+			break
+		}
+		answer.WriteString(fmt.Sprintf("%d. %s\n", used+1, node.NodeName))
+		chunkCount := 0
+		for _, chunk := range node.Chunks {
+			content := strings.TrimSpace(chunk.Content)
+			if content == "" {
+				continue
+			}
+			runes := []rune(content)
+			if len(runes) > maxChunkRunes {
+				content = string(runes[:maxChunkRunes]) + "……"
+			}
+			if chunkCount > 0 {
+				answer.WriteString("\n")
+			}
+			answer.WriteString(content)
+			answer.WriteString("\n")
+			chunkCount++
+			if chunkCount >= 2 {
+				break
+			}
+		}
+		answer.WriteString("\n")
+		used++
+	}
+
+	if used > 0 {
+		answer.WriteString("---\n### 引用列表\n")
+		for i := 0; i < used; i++ {
+			node := rankedNodes[i]
+			answer.WriteString(fmt.Sprintf("> [%d]. [%s](/node/%s)\n", i+1, node.NodeName, node.NodeID))
+		}
+	}
+	return strings.TrimSpace(answer.String())
 }
 
 func (u *ChatUsecase) ChatRagOnly(ctx context.Context, req *domain.ChatRagOnlyRequest) (<-chan domain.SSEEvent, error) {
@@ -368,6 +423,7 @@ func (u *ChatUsecase) ChatRagOnly(ctx context.Context, req *domain.ChatRagOnlyRe
 			}
 		}
 		_, rankedNodes, err := u.llmUsecase.GetRankNodes(ctx, GetRankNodesRequest{
+			KBID:                req.KBID,
 			DatasetID:           kb.DatasetID,
 			Question:            req.Message,
 			GroupIDs:            groupIds,
@@ -378,6 +434,18 @@ func (u *ChatUsecase) ChatRagOnly(ctx context.Context, req *domain.ChatRagOnlyRe
 		if err != nil {
 			u.logger.Error("failed to get rank nodes", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get rank nodes"}
+			return
+		}
+		shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.UserInfo.UserID)
+		if err != nil {
+			u.logger.Error("failed to build enterprise access context", log.Error(err))
+			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to build enterprise access context"}
+			return
+		}
+		rankedNodes, err = u.llmUsecase.filterRankedNodesByEnterpriseAccess(ctx, rankedNodes, shareAccess)
+		if err != nil {
+			u.logger.Error("failed to filter rank nodes", log.Error(err))
+			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to filter rank nodes"}
 			return
 		}
 		documents := domain.FormatNodeChunks(rankedNodes, kb.AccessSettings.BaseURL)
@@ -463,6 +531,7 @@ func (u *ChatUsecase) Search(ctx context.Context, req *domain.ChatSearchReq) (*d
 		return nil, err
 	}
 	_, rankedNodes, err := u.llmUsecase.GetRankNodes(ctx, GetRankNodesRequest{
+		KBID:                req.KBID,
 		DatasetID:           kb.DatasetID,
 		Question:            req.Message,
 		GroupIDs:            groupIds,
@@ -473,12 +542,10 @@ func (u *ChatUsecase) Search(ctx context.Context, req *domain.ChatSearchReq) (*d
 		return nil, err
 	}
 
-	// Get node IDs from ranked nodes for permission check
 	nodeIDs := lo.Map(rankedNodes, func(node *domain.RankedNodeChunks, _ int) string {
 		return node.NodeID
 	})
 
-	// Get nodes with permissions
 	nodesMap, err := u.nodeRepo.GetNodesByIDs(ctx, nodeIDs)
 	if err != nil {
 		return nil, err

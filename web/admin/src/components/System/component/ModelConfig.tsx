@@ -256,6 +256,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
           auto_provider?: {
             provider: GithubComChaitinPandaWikiDomainModelProvider;
             base_url: string;
+            base_urls?: AutoModelConfigFormData['base_urls'];
             api_key: string;
             models: AutoModelConfigFormData['models'];
           };
@@ -282,6 +283,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
             requestData.auto_provider = {
               provider: normalizeModelProviderForApi(formData.provider),
               base_url: formData.base_url,
+              base_urls: formData.base_urls,
               api_key: formData.api_key,
               models: formData.models,
             };

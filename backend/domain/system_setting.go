@@ -44,8 +44,12 @@ type AutoProviderSettingItem struct {
 type AutoModeProviderSetting struct {
 	Provider ModelProvider          `json:"provider"`
 	BaseURL  string                 `json:"base_url"`
+	BaseURLs AutoModeModelBaseURLs  `json:"base_urls,omitempty"`
 	APIKey   string                 `json:"api_key"`
 	Models   AutoModeModelSelection `json:"models"`
+
+	// RerankBaseURL 兼容旧字段，读取后会迁移到 BaseURLs.Rerank。
+	RerankBaseURL string `json:"rerank_base_url,omitempty"`
 }
 
 type AutoModeModelSelection struct {
@@ -54,6 +58,14 @@ type AutoModeModelSelection struct {
 	Rerank     string `json:"rerank"`
 	Analysis   string `json:"analysis"`
 	AnalysisVL string `json:"analysis_vl"`
+}
+
+type AutoModeModelBaseURLs struct {
+	Chat       string `json:"chat,omitempty"`
+	Embedding  string `json:"embedding,omitempty"`
+	Rerank     string `json:"rerank,omitempty"`
+	Analysis   string `json:"analysis,omitempty"`
+	AnalysisVL string `json:"analysis_vl,omitempty"`
 }
 
 // UploadDeniedExtensionsSetting 上传禁止扩展名配置

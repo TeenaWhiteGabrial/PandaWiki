@@ -6,7 +6,7 @@ import { Box } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { WrapContext } from '..';
-import LegacyFileNotice from './LegacyFileNotice';
+import FilePreview from './FilePreview';
 import LoadingEditorWrap from './Loading';
 import EditorWrap from './Wrap';
 
@@ -96,7 +96,7 @@ const Edit = () => {
       {loading ? <LoadingEditorWrap /> : null}
       {!loading && detail ? (
         isReadonlyFilePreview ? (
-          <LegacyFileNotice detail={detail} />
+          <FilePreview detail={detail} />
         ) : (
           <EditorWrap detail={detail} readOnlyUser={readOnlyUser} />
         )

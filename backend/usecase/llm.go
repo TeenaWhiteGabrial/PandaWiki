@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	modelkit "github.com/chaitin/ModelKit/v2/usecase"
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
@@ -81,9 +84,15 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 		for _, msg := range msgs {
 			switch msg.Role {
 			case schema.Assistant:
+				if strings.TrimSpace(msg.Content) == "" {
+					continue
+				}
 				historyMessages = append(historyMessages, schema.AssistantMessage(msg.Content, nil))
 			case schema.User:
 				content := u.formatMessageWithImages(msg.Content, msg.ImagePaths)
+				if strings.TrimSpace(content) == "" {
+					continue
+				}
 				historyMessages = append(historyMessages, schema.UserMessage(content))
 			default:
 				continue
@@ -114,6 +123,7 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 				return nil, nil, errors.New("get kb failed")
 			}
 			rewrittenQuery, rankedNodes, err = u.GetRankNodes(ctx, GetRankNodesRequest{
+				KBID:                kbID,
 				DatasetID:           kb.DatasetID,
 				Question:            question,
 				GroupIDs:            groupIDs,
@@ -208,7 +218,7 @@ func (u *LLMUsecase) ChatWithAgent(
 			return fmt.Errorf("recv failed: %w", err)
 		}
 		reasoning, ok := deepseek.GetReasoningContent(msg)
-		if ok {
+		if ok && reasoning != "" {
 			if !firstReasoning {
 				firstReasoning = true
 				reasoning = "<think>" + reasoning
@@ -223,6 +233,12 @@ func (u *LLMUsecase) ChatWithAgent(
 			msg.Content = "</think>\n" + msg.Content
 			if err := onChunk(ctx, "data", msg.Content); err != nil {
 				return fmt.Errorf("on chunk data: %w", err)
+			}
+			continue
+		}
+		if msg.Content == "" {
+			if msg.ResponseMeta.Usage != nil {
+				*usage = *msg.ResponseMeta.Usage
 			}
 			continue
 		}
@@ -501,6 +517,7 @@ func (u *LLMUsecase) SplitByTokenLimit(text string, maxTokens int) ([]string, er
 }
 
 type GetRankNodesRequest struct {
+	KBID                string
 	DatasetID           string
 	Question            string
 	GroupIDs            []int
@@ -524,6 +541,15 @@ func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) 
 		return "", nil, fmt.Errorf("get records from raglite failed: %w", err)
 	}
 	u.logger.Info("get related documents from raglite", log.Any("record_count", len(records)))
+	if len(records) == 0 && req.KBID != "" {
+		fallbackNodes, fallbackErr := u.getRankNodesByLocalFallback(ctx, req.KBID, req.Question, 5)
+		if fallbackErr != nil {
+			u.logger.Warn("local fallback retrieval failed", log.Error(fallbackErr))
+		} else if len(fallbackNodes) > 0 {
+			u.logger.Info("get related documents from local fallback", log.Any("record_count", len(fallbackNodes)))
+			return rewrittenQuery, fallbackNodes, nil
+		}
+	}
 	rankedNodesMap := make(map[string]*domain.RankedNodeChunks)
 	// get raw node by doc_id
 	if len(records) > 0 {
@@ -556,6 +582,150 @@ func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) 
 		}
 	}
 	return rewrittenQuery, rankedNodes, nil
+}
+
+func (u *LLMUsecase) getRankNodesByLocalFallback(ctx context.Context, kbID, question string, limit int) ([]*domain.RankedNodeChunks, error) {
+	releases, err := u.nodeRepo.GetLatestDocumentReleasesWithPathsByKBID(ctx, kbID, 500)
+	if err != nil {
+		return nil, err
+	}
+	terms := buildLocalSearchTerms(question)
+	if len(terms) == 0 {
+		return nil, nil
+	}
+
+	type scoredRelease struct {
+		release *pg.NodeReleaseWithPath
+		score   int
+	}
+	scored := make([]scoredRelease, 0)
+	for _, release := range releases {
+		score := scoreNodeReleaseForQuestion(release, question, terms)
+		if score <= 0 {
+			continue
+		}
+		scored = append(scored, scoredRelease{release: release, score: score})
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score == scored[j].score {
+			return scored[i].release.UpdatedAt.After(scored[j].release.UpdatedAt)
+		}
+		return scored[i].score > scored[j].score
+	})
+	if limit <= 0 || limit > len(scored) {
+		limit = len(scored)
+	}
+	rankedNodes := make([]*domain.RankedNodeChunks, 0, limit)
+	for _, item := range scored[:limit] {
+		release := item.release
+		rankedNodes = append(rankedNodes, &domain.RankedNodeChunks{
+			NodeID:        release.NodeID,
+			NodeName:      release.Name,
+			NodeSummary:   release.Meta.Summary,
+			NodeEmoji:     release.Meta.Emoji,
+			NodePathNames: release.PathNames,
+			Chunks: []*domain.NodeContentChunk{
+				{
+					ID:      release.ID,
+					KBID:    release.KBID,
+					DocID:   release.DocID,
+					Name:    release.Name,
+					Content: release.Content,
+				},
+			},
+		})
+	}
+	return rankedNodes, nil
+}
+
+func scoreNodeReleaseForQuestion(release *pg.NodeReleaseWithPath, question string, terms []string) int {
+	query := normalizeLocalSearchText(question)
+	name := normalizeLocalSearchText(release.Name)
+	baseName := normalizeLocalSearchText(strings.TrimSuffix(release.Name, filepath.Ext(release.Name)))
+	content := normalizeLocalSearchText(release.Content)
+	pathText := normalizeLocalSearchText(strings.Join(release.PathNames, " "))
+
+	score := 0
+	if baseName != "" && strings.Contains(query, baseName) {
+		score += 300
+	}
+	if name != "" && strings.Contains(query, name) {
+		score += 250
+	}
+	for _, term := range terms {
+		weight := len([]rune(term))
+		if weight < 2 {
+			continue
+		}
+		if strings.Contains(name, term) {
+			score += 20 * weight
+		}
+		if strings.Contains(baseName, term) {
+			score += 24 * weight
+		}
+		if strings.Contains(pathText, term) {
+			score += 8 * weight
+		}
+		if strings.Contains(content, term) {
+			score += 4 * weight
+		}
+	}
+	return score
+}
+
+func buildLocalSearchTerms(question string) []string {
+	normalized := normalizeLocalSearchText(question)
+	if normalized == "" {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	add := func(term string) {
+		term = strings.TrimSpace(normalizeLocalSearchText(term))
+		if len([]rune(term)) < 2 {
+			return
+		}
+		seen[term] = struct{}{}
+	}
+
+	for _, token := range strings.FieldsFunc(normalized, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsNumber(r))
+	}) {
+		add(token)
+		runes := []rune(token)
+		if len(runes) >= 4 {
+			maxN := 8
+			if len(runes) < maxN {
+				maxN = len(runes)
+			}
+			for n := 2; n <= maxN; n++ {
+				for i := 0; i+n <= len(runes); i++ {
+					add(string(runes[i : i+n]))
+				}
+			}
+		}
+	}
+
+	commonTerms := []string{"账号", "账户", "密码", "地址", "网址", "路径", "链接", "演示", "平台", "系统", "功能", "介绍"}
+	for _, term := range commonTerms {
+		if strings.Contains(normalized, term) {
+			add(term)
+		}
+	}
+
+	terms := make([]string, 0, len(seen))
+	for term := range seen {
+		terms = append(terms, term)
+	}
+	sort.Slice(terms, func(i, j int) bool {
+		return len([]rune(terms[i])) > len([]rune(terms[j]))
+	})
+	return terms
+}
+
+func normalizeLocalSearchText(text string) string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	replacer := strings.NewReplacer("　", " ", "\r", "\n", "\t", " ")
+	return replacer.Replace(text)
 }
 
 // formatMessageWithImages converts image paths to markdown format and appends to message

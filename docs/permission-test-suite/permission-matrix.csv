@@ -1,0 +1,20 @@
+路径,类型,权限设置,预期可见用户,预期不可见用户,备注
+01-公开区,文件夹,公开/不设置企业权限,所有用户,无,用于公开基线测试
+01-公开区/00-公开-数字孪生概览.md,文档,继承父级,所有用户,无,公开问答基线
+02-研发部专区,文件夹,允许部门=研发部,qa_rd;qa_boss;qa_rd_blocked,qa_hr;qa_fin;qa_public,部门权限
+02-研发部专区/10-研发部-设备健康管理系统.md,文档,继承父级,qa_rd;qa_boss;qa_rd_blocked,qa_hr;qa_fin;qa_public,用于复现“设备健康管理系统功能演示路径信息是什么”
+02-研发部专区/11-继承父级-研发路线图.md,文档,继承父级,qa_rd;qa_boss;qa_rd_blocked,qa_hr;qa_fin;qa_public,继承测试
+03-人力资源专区,文件夹,允许部门=人力资源部,qa_hr,qa_rd;qa_fin;qa_public;qa_boss,部门权限
+03-人力资源专区/20-人力资源部-入职流程.md,文档,继承父级,qa_hr,qa_rd;qa_fin;qa_public;qa_boss,部门权限
+04-财务专区,文件夹,允许部门=财务部,qa_fin,qa_rd;qa_hr;qa_public;qa_boss,部门权限
+04-财务专区/30-财务部-预算审批.txt,文档,继承父级,qa_fin,qa_rd;qa_hr;qa_public;qa_boss,TXT 预览和问答
+05-个人专区,文件夹,允许用户=qa_boss,qa_boss,qa_rd;qa_hr;qa_fin;qa_public;qa_rd_blocked,个人权限
+05-个人专区/40-指定个人-董事会简报.md,文档,继承父级,qa_boss,qa_rd;qa_hr;qa_fin;qa_public;qa_rd_blocked,个人权限
+06-等级专区,文件夹,最低等级=L2,qa_level2;qa_boss,qa_rd;qa_hr;qa_fin;qa_public;qa_rd_blocked,等级权限开启时测试
+06-等级专区/50-L2-合同策略.md,文档,继承父级,qa_level2;qa_boss,qa_rd;qa_hr;qa_fin;qa_public;qa_rd_blocked,等级权限开启时测试
+07-继承覆盖专区,文件夹,允许部门=研发部,qa_rd;qa_boss;qa_rd_blocked,qa_hr;qa_fin;qa_public,父级权限
+07-继承覆盖专区/60-父级研发-总说明.md,文档,继承父级,qa_rd;qa_boss;qa_rd_blocked,qa_hr;qa_fin;qa_public,继承父级
+07-继承覆盖专区/61-覆盖公开-通用FAQ.md,文档,覆盖为公开/不设置企业权限,所有用户,无,验证子级覆盖父级
+07-继承覆盖专区/62-覆盖个人-研发负责人备忘.md,文档,覆盖为允许用户=qa_boss,qa_boss,qa_rd;qa_hr;qa_fin;qa_public;qa_rd_blocked,验证子级覆盖为更严格
+08-拒绝优先专区,文件夹,允许部门=研发部;拒绝用户=qa_rd_blocked,qa_rd;qa_boss,qa_rd_blocked;qa_hr;qa_fin;qa_public,拒绝优先
+08-拒绝优先专区/70-拒绝优先-允许研发但拒绝某人.md,文档,继承父级,qa_rd;qa_boss,qa_rd_blocked;qa_hr;qa_fin;qa_public,拒绝优先

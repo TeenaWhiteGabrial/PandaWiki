@@ -79,6 +79,11 @@ func (u *ModelUsecase) normalizeModelModeSetting(config *domain.ModelModeSetting
 				config.AutoProvider.BaseURL = baseURL
 			}
 		}
+		if strings.TrimSpace(config.AutoProvider.BaseURLs.Rerank) == "" && strings.TrimSpace(config.AutoProvider.RerankBaseURL) != "" {
+			config.AutoProvider.BaseURLs.Rerank = strings.TrimSpace(config.AutoProvider.RerankBaseURL)
+			config.AutoProvider.RerankBaseURL = ""
+		}
+		config.AutoProvider.BaseURLs = normalizeAutoModeModelBaseURLs(config.AutoProvider.BaseURLs)
 	}
 
 	if config.AutoProvider == nil && len(config.AutoProviderConfigs) > 0 {
@@ -90,6 +95,7 @@ func (u *ModelUsecase) normalizeModelModeSetting(config *domain.ModelModeSetting
 			config.AutoProvider = &domain.AutoModeProviderSetting{
 				Provider: domain.ModelProvider(provider),
 				BaseURL:  item.BaseURL,
+				BaseURLs: domain.AutoModeModelBaseURLs{},
 				APIKey:   item.APIKey,
 				Models: domain.AutoModeModelSelection{
 					Chat:       consts.GetAutoModeDefaultModel(provider, string(domain.ModelTypeChat)),
@@ -123,6 +129,7 @@ func (u *ModelUsecase) normalizeModelModeSetting(config *domain.ModelModeSetting
 			config.AutoProvider = &domain.AutoModeProviderSetting{
 				Provider: domain.ModelProviderBrandBaiZhiCloud,
 				BaseURL:  consts.AutoModeBaseURL,
+				BaseURLs: domain.AutoModeModelBaseURLs{},
 				APIKey:   config.AutoModeAPIKey,
 				Models: domain.AutoModeModelSelection{
 					Chat:       consts.GetAutoModeDefaultModel(string(domain.ModelProviderBrandBaiZhiCloud), string(domain.ModelTypeChat)),
@@ -189,10 +196,11 @@ func (u *ModelUsecase) validateAutoProviderConfig(ctx context.Context, config *d
 		if modelType == domain.ModelTypeAnalysis || modelType == domain.ModelTypeAnalysisVL {
 			checkType = domain.ModelTypeChat
 		}
+		baseURL := getAutoModeReqModelBaseURL(config, modelType)
 		check, err := u.modelkit.CheckModel(ctx, &modelkitDomain.CheckModelReq{
 			Provider: normalizedProvider,
 			Model:    modelName,
-			BaseURL:  config.BaseURL,
+			BaseURL:  baseURL,
 			APIKey:   config.APIKey,
 			Type:     string(checkType),
 		})
@@ -299,7 +307,7 @@ func (u *ModelUsecase) GetChatModel(ctx context.Context) (*domain.Model, error) 
 				Model:    activeProvider.Models.Chat,
 				Type:     domain.ModelTypeChat,
 				IsActive: true,
-				BaseURL:  activeProvider.BaseURL,
+				BaseURL:  getAutoModeModelBaseURL(activeProvider, domain.ModelTypeChat),
 				APIKey:   activeProvider.APIKey,
 				Provider: activeProvider.Provider,
 			}
@@ -399,7 +407,14 @@ func (u *ModelUsecase) updateModeSettingConfig(ctx context.Context, req *domain.
 			config.AutoProvider = &domain.AutoModeProviderSetting{
 				Provider: req.AutoProvider.Provider,
 				BaseURL:  req.AutoProvider.BaseURL,
-				APIKey:   req.AutoProvider.APIKey,
+				BaseURLs: normalizeAutoModeModelBaseURLs(domain.AutoModeModelBaseURLs{
+					Chat:       req.AutoProvider.BaseURLs.Chat,
+					Embedding:  req.AutoProvider.BaseURLs.Embedding,
+					Rerank:     firstNonBlank(req.AutoProvider.BaseURLs.Rerank, req.AutoProvider.RerankBaseURL),
+					Analysis:   req.AutoProvider.BaseURLs.Analysis,
+					AnalysisVL: req.AutoProvider.BaseURLs.AnalysisVL,
+				}),
+				APIKey: req.AutoProvider.APIKey,
 				Models: domain.AutoModeModelSelection{
 					Chat:       req.AutoProvider.Models.Chat,
 					Embedding:  req.AutoProvider.Models.Embedding,
@@ -493,7 +508,7 @@ func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, m
 				Model:    modelName,
 				Type:     modelType,
 				IsActive: true,
-				BaseURL:  activeProvider.BaseURL,
+				BaseURL:  getAutoModeModelBaseURL(activeProvider, modelType),
 				APIKey:   activeProvider.APIKey,
 				Provider: activeProvider.Provider,
 			}
@@ -516,4 +531,66 @@ func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, m
 		return u.TriggerUpsertRecords(ctx)
 	}
 	return nil
+}
+
+func getAutoModeModelBaseURL(activeProvider *domain.AutoModeProviderSetting, modelType domain.ModelType) string {
+	if activeProvider == nil {
+		return ""
+	}
+	baseURL := getAutoModeBaseURLByType(activeProvider.BaseURLs, modelType)
+	if strings.TrimSpace(baseURL) != "" {
+		return strings.TrimSpace(baseURL)
+	}
+	return activeProvider.BaseURL
+}
+
+func getAutoModeReqModelBaseURL(provider *domain.AutoModeProviderReq, modelType domain.ModelType) string {
+	if provider == nil {
+		return ""
+	}
+	baseURLs := provider.BaseURLs
+	if strings.TrimSpace(baseURLs.Rerank) == "" && strings.TrimSpace(provider.RerankBaseURL) != "" {
+		baseURLs.Rerank = provider.RerankBaseURL
+	}
+	baseURL := getAutoModeBaseURLByType(baseURLs, modelType)
+	if strings.TrimSpace(baseURL) != "" {
+		return strings.TrimSpace(baseURL)
+	}
+	return provider.BaseURL
+}
+
+func getAutoModeBaseURLByType(baseURLs domain.AutoModeModelBaseURLs, modelType domain.ModelType) string {
+	switch modelType {
+	case domain.ModelTypeChat:
+		return baseURLs.Chat
+	case domain.ModelTypeEmbedding:
+		return baseURLs.Embedding
+	case domain.ModelTypeRerank:
+		return baseURLs.Rerank
+	case domain.ModelTypeAnalysis:
+		return baseURLs.Analysis
+	case domain.ModelTypeAnalysisVL:
+		return baseURLs.AnalysisVL
+	default:
+		return ""
+	}
+}
+
+func normalizeAutoModeModelBaseURLs(baseURLs domain.AutoModeModelBaseURLs) domain.AutoModeModelBaseURLs {
+	return domain.AutoModeModelBaseURLs{
+		Chat:       strings.TrimSpace(baseURLs.Chat),
+		Embedding:  strings.TrimSpace(baseURLs.Embedding),
+		Rerank:     strings.TrimSpace(baseURLs.Rerank),
+		Analysis:   strings.TrimSpace(baseURLs.Analysis),
+		AnalysisVL: strings.TrimSpace(baseURLs.AnalysisVL),
+	}
+}
+
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

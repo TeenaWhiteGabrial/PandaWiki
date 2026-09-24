@@ -201,10 +201,14 @@ type AutoProviderConfig struct {
 }
 
 type AutoModeProviderReq struct {
-	Provider ModelProvider  `json:"provider" validate:"required"`
-	BaseURL  string         `json:"base_url" validate:"required"`
-	APIKey   string         `json:"api_key"`
-	Models   AutoModeModels `json:"models"`
+	Provider ModelProvider         `json:"provider" validate:"required"`
+	BaseURL  string                `json:"base_url" validate:"required"`
+	BaseURLs AutoModeModelBaseURLs `json:"base_urls"`
+	APIKey   string                `json:"api_key"`
+	Models   AutoModeModels        `json:"models"`
+
+	// RerankBaseURL 兼容旧字段，读取后会迁移到 BaseURLs.Rerank。
+	RerankBaseURL string `json:"rerank_base_url"`
 }
 
 type AutoModeModels struct {

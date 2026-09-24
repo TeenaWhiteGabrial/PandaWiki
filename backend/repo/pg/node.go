@@ -730,6 +730,54 @@ func (r *NodeRepository) GetNodeReleasesWithPathsByDocIDs(ctx context.Context, i
 	return result, nil
 }
 
+func (r *NodeRepository) GetLatestDocumentReleasesWithPathsByKBID(ctx context.Context, kbID string, limit int) ([]*NodeReleaseWithPath, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+
+	var nodeReleases []*domain.NodeRelease
+	if err := r.db.WithContext(ctx).
+		Model(&domain.NodeRelease{}).
+		Where("kb_id = ?", kbID).
+		Where("type = ?", domain.NodeTypeDocument).
+		Where("trim(coalesce(content, '')) <> ''").
+		Order("node_id, updated_at DESC").
+		Limit(limit).
+		Distinct("ON (node_id) *").
+		Find(&nodeReleases).Error; err != nil {
+		return nil, err
+	}
+	if len(nodeReleases) == 0 {
+		return []*NodeReleaseWithPath{}, nil
+	}
+
+	docIDs := lo.FilterMap(nodeReleases, func(release *domain.NodeRelease, _ int) (string, bool) {
+		return release.DocID, release.DocID != ""
+	})
+	paths := make(map[string]*NodePathInfo)
+	if len(docIDs) > 0 {
+		var err error
+		paths, err = r.getNodePathsBatch(ctx, docIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get paths: %w", err)
+		}
+	}
+
+	result := make([]*NodeReleaseWithPath, 0, len(nodeReleases))
+	for _, nr := range nodeReleases {
+		nrWithPath := &NodeReleaseWithPath{
+			NodeRelease: nr,
+		}
+		if path, ok := paths[nr.DocID]; ok {
+			nrWithPath.PathIDs = path.PathIDs
+			nrWithPath.PathNames = path.PathNames
+			nrWithPath.Depth = path.Depth
+		}
+		result = append(result, nrWithPath)
+	}
+	return result, nil
+}
+
 // NodePathInfo contains path information for a node
 type NodePathInfo struct {
 	DocID     string
