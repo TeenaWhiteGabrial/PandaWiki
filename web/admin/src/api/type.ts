@@ -201,7 +201,7 @@ export interface ITreeItem {
   children?: ITreeItem[];
   type: 1 | 2;
   isEditting?: boolean;
-  canHaveChildren?: boolean;
+  canHaveChildren?: boolean | ((dragItem: ITreeItem) => boolean);
   updated_at?: string;
   status?: 0 | 1 | 2;
   permissions?: DomainNodePermissions;

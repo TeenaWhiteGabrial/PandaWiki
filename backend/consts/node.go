@@ -25,3 +25,23 @@ const (
 	NodeRagStatusSucceeded  NodeRagInfoStatus = "SUCCEEDED" // 处理成功
 	NodeRagStatusReindexing NodeRagInfoStatus = "REINDEX"   // 重新索引中
 )
+
+type NodeLearningTaskStatus string
+
+const (
+	NodeLearningTaskWaiting         NodeLearningTaskStatus = "waiting"
+	NodeLearningTaskRunning         NodeLearningTaskStatus = "running"
+	NodeLearningTaskCancelRequested NodeLearningTaskStatus = "cancel_requested"
+	NodeLearningTaskCanceled        NodeLearningTaskStatus = "canceled"
+	NodeLearningTaskSucceeded       NodeLearningTaskStatus = "succeeded"
+	NodeLearningTaskFailed          NodeLearningTaskStatus = "failed"
+	NodeLearningTaskSkipped         NodeLearningTaskStatus = "skipped"
+)
+
+type NodeLearningTaskAction string
+
+const (
+	NodeLearningTaskActionPublish NodeLearningTaskAction = "publish"
+	NodeLearningTaskActionRestudy NodeLearningTaskAction = "restudy"
+	NodeLearningTaskActionRebuild NodeLearningTaskAction = "rebuild"
+)

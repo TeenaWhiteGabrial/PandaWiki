@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/mq"
@@ -65,9 +66,27 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 
 	case "upsert":
 		h.logger.Debug("upsert node content vector request", "request", request)
+		if request.TaskID != "" {
+			task, shouldRun, taskErr := h.nodeRepo.MarkNodeLearningTaskRunning(ctx, request.TaskID)
+			if taskErr != nil {
+				h.logger.Error("get node learning task failed",
+					log.String("task_id", request.TaskID),
+					log.Error(taskErr))
+				return nil
+			}
+			if !shouldRun {
+				h.logger.Info("skip upsert because node learning task is not runnable",
+					log.String("task_id", request.TaskID),
+					log.String("task_status", string(task.Status)))
+				return nil
+			}
+		}
 		nodeRelease, err := h.nodeRepo.GetNodeReleaseWithDirPathByID(ctx, request.NodeReleaseID)
 		if err != nil {
 			h.logger.Error("get node content by ids failed", log.Error(err))
+			if request.TaskID != "" {
+				_ = h.nodeRepo.FinishNodeLearningTask(ctx, request.TaskID, consts.NodeLearningTaskFailed, "", err.Error())
+			}
 			return nil
 		}
 		if nodeRelease.Type == domain.NodeTypeFolder {
@@ -119,12 +138,38 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 		})
 		if err != nil {
 			h.logger.Error("upsert node content vector failed", log.Error(err))
+			if request.TaskID != "" {
+				_ = h.nodeRepo.FinishNodeLearningTask(ctx, request.TaskID, consts.NodeLearningTaskFailed, "", err.Error())
+				if node, nodeErr := h.nodeRepo.GetNodeByID(ctx, nodeRelease.NodeID); nodeErr == nil {
+					ragInfo := node.RagInfo
+					ragInfo.TaskStatus = consts.NodeLearningTaskFailed
+					ragInfo.TaskID = request.TaskID
+					ragInfo.TaskAction = consts.NodeLearningTaskActionRebuild
+					ragInfo.TaskMessage = err.Error()
+					if !ragInfo.HasAvailableIndex() {
+						ragInfo.Status = consts.NodeRagStatusFailed
+						ragInfo.Message = err.Error()
+					}
+					_ = h.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, ragInfo)
+				}
+			}
 			return nil
 		}
 		// update node doc_id
 		if err := h.nodeRepo.UpdateNodeReleaseDocID(ctx, request.NodeReleaseID, docID); err != nil {
 			h.logger.Error("update node doc_id failed", log.String("node_id", request.NodeReleaseID), log.Error(err))
+			if request.TaskID != "" {
+				_ = h.nodeRepo.FinishNodeLearningTask(ctx, request.TaskID, consts.NodeLearningTaskFailed, docID, err.Error())
+			}
 			return nil
+		}
+		if request.TaskID != "" {
+			if err := h.nodeRepo.UpdateNodeLearningTaskDocID(ctx, request.TaskID, docID); err != nil {
+				h.logger.Error("update node learning task doc id failed",
+					log.String("task_id", request.TaskID),
+					log.String("doc_id", docID),
+					log.Error(err))
+			}
 		}
 		// delete old RAG records
 		// get old doc_ids by node_id

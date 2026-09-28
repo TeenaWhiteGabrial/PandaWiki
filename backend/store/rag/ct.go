@@ -3,6 +3,7 @@ package rag
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
@@ -119,9 +120,7 @@ func (s *CTRAG) UpsertRecords(ctx context.Context, req *UpsertRecordsRequest) (s
 			return "", fmt.Errorf("convert html to markdown failed: %w", err)
 		}
 	}
-	if strings.TrimSpace(req.Title) != "" {
-		markdown = fmt.Sprintf("# %s\n\n%s", req.Title, markdown)
-	}
+	markdown = buildSearchableMarkdown(req.Title, markdown)
 	data := &raglite.UploadDocumentRequest{
 		DatasetID:  req.DatasetID,
 		DocumentID: req.DocID,
@@ -141,6 +140,34 @@ func (s *CTRAG) UpsertRecords(ctx context.Context, req *UpsertRecordsRequest) (s
 		return "", fmt.Errorf("upload document text failed: %w", err)
 	}
 	return res.DocumentID, nil
+}
+
+func buildSearchableMarkdown(title, content string) string {
+	title = strings.TrimSpace(title)
+	content = strings.TrimSpace(content)
+	if title == "" {
+		return content
+	}
+
+	lines := []string{
+		fmt.Sprintf("# %s", title),
+		"",
+		fmt.Sprintf("文档名称：%s", title),
+	}
+
+	baseName := strings.TrimSpace(strings.TrimSuffix(title, filepath.Ext(title)))
+	if baseName != "" && baseName != title {
+		lines = append(lines, fmt.Sprintf("文档关键词：%s", baseName))
+	}
+
+	if ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(title)), "."); ext != "" {
+		lines = append(lines, fmt.Sprintf("文件类型：%s", ext))
+	}
+
+	if content != "" {
+		lines = append(lines, "", content)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (s *CTRAG) DeleteRecords(ctx context.Context, datasetID string, docIDs []string) error {

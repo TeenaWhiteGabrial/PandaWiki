@@ -178,7 +178,7 @@ const DocPageHeader = ({
                 startIcon={<ManageSearchOutlinedIcon />}
                 onClick={onLearningProgressClick}
               >
-                学习进度
+                索引状态
               </Button>
             </>
           )}

@@ -61,9 +61,20 @@ type NodePermissionEditResp struct {
 type NodeRestudyReq struct {
 	NodeIds []string `json:"node_ids" validate:"required,min=1"`
 	KbId    string   `json:"kb_id" validate:"required"`
+	UserID  string   `json:"-"`
 }
 
 type NodeRestudyResp struct {
+}
+
+type NodeLearningCancelReq struct {
+	NodeIds []string `json:"node_ids" validate:"required,min=1"`
+	KbId    string   `json:"kb_id" validate:"required"`
+	UserID  string   `json:"-"`
+}
+
+type NodeLearningCancelResp struct {
+	Count int `json:"count"`
 }
 
 type NodeStatsReq struct {

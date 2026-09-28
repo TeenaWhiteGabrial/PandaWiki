@@ -4,6 +4,7 @@ import {
   TreeMenuOptions,
 } from '@/components/Drag/DragTree/TreeMenu';
 import { TreeItems } from '@/components/TreeDragSortable';
+import type { FlattenedItem } from '@/components/TreeDragSortable/types';
 import { DomainNodeListItemResp } from '@/request/types';
 import { createContext } from 'react';
 
@@ -32,6 +33,9 @@ export interface DragTreeProps {
   disabled?: (value: ITreeItem) => boolean;
   virtualized?: boolean;
   virtualizedHeight?: number | string;
+  canRootHaveChildren?:
+    | boolean
+    | ((dragItem: FlattenedItem<ITreeItem>) => boolean);
   /** 使用外部 DndContext 时由父级传入，用于注册树的拖拽回调（如从树拖到目录） */
   registerDragHandlers?: (handlers: TreeDragHandlers | null) => void;
   onItemClick?: (item: ITreeItem) => void;

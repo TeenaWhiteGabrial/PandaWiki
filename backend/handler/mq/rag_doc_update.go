@@ -3,6 +3,8 @@ package mq
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/chaitin/panda-wiki/consts"
@@ -11,6 +13,7 @@ import (
 	"github.com/chaitin/panda-wiki/mq"
 	"github.com/chaitin/panda-wiki/mq/types"
 	"github.com/chaitin/panda-wiki/repo/pg"
+	"gorm.io/gorm"
 )
 
 type RagDocUpdateHandler struct {
@@ -44,21 +47,110 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 		log.String("status", event.Status),
 		log.String("message", event.Message))
 
-	nodeId, err := h.nodeRepo.GetNodeIdByDocId(ctx, event.ID)
+	release, err := h.nodeRepo.GetNodeReleaseByDocID(ctx, event.ID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			h.logger.Warn("ignore rag doc update because doc id is not bound to node release",
+				log.String("doc_id", event.ID),
+				log.String("status", event.Status))
+			return nil
+		}
 		h.logger.Error("failed to get node id by doc id",
 			log.String("doc_id", event.ID),
 			log.Error(err))
 		return err
 	}
+	node, err := h.nodeRepo.GetNodeByID(ctx, release.NodeID)
+	if err != nil {
+		h.logger.Error("failed to get node by rag doc update",
+			log.String("node_id", release.NodeID),
+			log.String("doc_id", event.ID),
+			log.Error(err))
+		return err
+	}
 
-	if err := h.nodeRepo.Update(ctx, nodeId, map[string]interface{}{
-		"rag_info": domain.RagInfo{
-			Status:   consts.NodeRagInfoStatus(event.Status),
-			Message:  event.Message,
-			SyncedAt: time.Now(),
-		},
-	}); err != nil {
+	var activeTask *domain.NodeLearningTask
+	task, taskErr := h.nodeRepo.GetLatestNodeLearningTaskByDocID(ctx, event.ID)
+	if taskErr == nil {
+		switch task.Status {
+		case consts.NodeLearningTaskCanceled, consts.NodeLearningTaskCancelRequested:
+			h.logger.Info("ignore rag doc update because task is canceled",
+				log.String("doc_id", event.ID),
+				log.String("task_id", task.ID),
+				log.String("task_status", string(task.Status)))
+			return nil
+		case consts.NodeLearningTaskWaiting, consts.NodeLearningTaskRunning:
+			activeTask = task
+		}
+	} else if !errors.Is(taskErr, gorm.ErrRecordNotFound) {
+		h.logger.Error("failed to get latest node learning task by doc id",
+			log.String("doc_id", event.ID),
+			log.Error(taskErr))
+		return taskErr
+	}
+	if activeTask != nil {
+		if activeTask.NodeReleaseID != release.ID || activeTask.NodeID != release.NodeID {
+			h.logger.Warn("ignore rag doc update because task and release mismatch",
+				log.String("doc_id", event.ID),
+				log.String("task_id", activeTask.ID),
+				log.String("task_release_id", activeTask.NodeReleaseID),
+				log.String("release_id", release.ID))
+			return nil
+		}
+	}
+
+	status := consts.NodeRagInfoStatus(strings.ToUpper(event.Status))
+	ragInfo := node.RagInfo
+	ragInfo.SyncedAt = time.Now()
+	if activeTask != nil {
+		ragInfo.TaskID = activeTask.ID
+		ragInfo.TaskAction = activeTask.Action
+		ragInfo.TaskMessage = event.Message
+	}
+
+	switch status {
+	case consts.NodeRagStatusPending, consts.NodeRagStatusRunning, consts.NodeRagStatusReindexing:
+		if activeTask == nil && ragInfo.HasAvailableIndex() {
+			h.logger.Info("ignore non-terminal rag doc update for available index without active task",
+				log.String("doc_id", event.ID),
+				log.String("status", string(status)))
+			return nil
+		}
+		if !ragInfo.HasAvailableIndex() {
+			ragInfo.Status = status
+			ragInfo.Message = event.Message
+		}
+		if activeTask != nil {
+			ragInfo.TaskStatus = consts.NodeLearningTaskRunning
+		}
+	case consts.NodeRagStatusSucceeded:
+		ragInfo.Status = consts.NodeRagStatusSucceeded
+		ragInfo.Message = event.Message
+		ragInfo.ActiveDocID = event.ID
+		ragInfo.ActiveReleaseID = release.ID
+		if activeTask != nil {
+			ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
+			ragInfo.TaskMessage = event.Message
+			_ = h.nodeRepo.FinishNodeLearningTask(ctx, activeTask.ID, consts.NodeLearningTaskSucceeded, event.ID, "")
+		}
+	case consts.NodeRagStatusFailed:
+		if !ragInfo.HasAvailableIndex() {
+			ragInfo.Status = consts.NodeRagStatusFailed
+			ragInfo.Message = event.Message
+		}
+		if activeTask != nil {
+			ragInfo.TaskStatus = consts.NodeLearningTaskFailed
+			ragInfo.TaskMessage = event.Message
+			_ = h.nodeRepo.FinishNodeLearningTask(ctx, activeTask.ID, consts.NodeLearningTaskFailed, event.ID, event.Message)
+		}
+	default:
+		h.logger.Warn("ignore unknown rag doc update status",
+			log.String("doc_id", event.ID),
+			log.String("status", event.Status))
+		return nil
+	}
+
+	if err := h.nodeRepo.UpdateNodeRagInfo(ctx, release.KBID, release.NodeID, ragInfo); err != nil {
 		return err
 	}
 

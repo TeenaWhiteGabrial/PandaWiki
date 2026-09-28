@@ -89,9 +89,15 @@ func (Node) TableName() string {
 }
 
 type RagInfo struct {
-	Status   consts.NodeRagInfoStatus `json:"status"`
-	Message  string                   `json:"message"`
-	SyncedAt time.Time                `json:"synced_at"`
+	Status          consts.NodeRagInfoStatus      `json:"status"`
+	Message         string                        `json:"message"`
+	SyncedAt        time.Time                     `json:"synced_at"`
+	TaskStatus      consts.NodeLearningTaskStatus `json:"task_status,omitempty"`
+	TaskID          string                        `json:"task_id,omitempty"`
+	TaskAction      consts.NodeLearningTaskAction `json:"task_action,omitempty"`
+	TaskMessage     string                        `json:"task_message,omitempty"`
+	ActiveDocID     string                        `json:"active_doc_id,omitempty"`
+	ActiveReleaseID string                        `json:"active_release_id,omitempty"`
 }
 
 func (d *RagInfo) Value() (driver.Value, error) {
@@ -104,6 +110,10 @@ func (d *RagInfo) Scan(value any) error {
 		return errors.New(fmt.Sprint("invalid node meta type:", value))
 	}
 	return json.Unmarshal(bytes, d)
+}
+
+func (d RagInfo) HasAvailableIndex() bool {
+	return d.Status == consts.NodeRagStatusSucceeded
 }
 
 type NodePermissions struct {
@@ -405,6 +415,27 @@ type NodeRelease struct {
 
 func (NodeRelease) TableName() string {
 	return "node_releases"
+}
+
+// table: node_learning_tasks
+type NodeLearningTask struct {
+	ID            string                        `json:"id" gorm:"primaryKey"`
+	KBID          string                        `json:"kb_id" gorm:"index"`
+	NodeID        string                        `json:"node_id" gorm:"index"`
+	NodeReleaseID string                        `json:"node_release_id" gorm:"index"`
+	Action        consts.NodeLearningTaskAction `json:"action"`
+	Status        consts.NodeLearningTaskStatus `json:"status" gorm:"index"`
+	DocID         string                        `json:"doc_id" gorm:"index"`
+	ErrorMessage  string                        `json:"error_message"`
+	TriggeredBy   string                        `json:"triggered_by"`
+	StartedAt     *time.Time                    `json:"started_at"`
+	FinishedAt    *time.Time                    `json:"finished_at"`
+	CreatedAt     time.Time                     `json:"created_at"`
+	UpdatedAt     time.Time                     `json:"updated_at"`
+}
+
+func (NodeLearningTask) TableName() string {
+	return "node_learning_tasks"
 }
 
 // table: node_release_backup

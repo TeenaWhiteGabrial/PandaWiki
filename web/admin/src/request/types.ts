@@ -159,6 +159,22 @@ export enum ConstsNodeRagInfoStatus {
   NodeRagStatusReindexing = "REINDEX",
 }
 
+export enum ConstsNodeLearningTaskStatus {
+  NodeLearningTaskWaiting = "waiting",
+  NodeLearningTaskRunning = "running",
+  NodeLearningTaskCancelRequested = "cancel_requested",
+  NodeLearningTaskCanceled = "canceled",
+  NodeLearningTaskSucceeded = "succeeded",
+  NodeLearningTaskFailed = "failed",
+  NodeLearningTaskSkipped = "skipped",
+}
+
+export enum ConstsNodeLearningTaskAction {
+  NodeLearningTaskActionPublish = "publish",
+  NodeLearningTaskActionRestudy = "restudy",
+  NodeLearningTaskActionRebuild = "rebuild",
+}
+
 export enum ConstsNodePermName {
   /** 导航内可见 */
   NodePermNameVisible = "visible",
@@ -1261,9 +1277,15 @@ export interface DomainQuestionConfig {
 }
 
 export interface DomainRagInfo {
+  active_doc_id?: string;
+  active_release_id?: string;
   message?: string;
   status?: ConstsNodeRagInfoStatus;
   synced_at?: string;
+  task_action?: ConstsNodeLearningTaskAction;
+  task_id?: string;
+  task_message?: string;
+  task_status?: ConstsNodeLearningTaskStatus;
 }
 
 export interface DomainRecommendNodeListResp {
@@ -1877,6 +1899,16 @@ export interface V1NodeRestudyReq {
 }
 
 export type V1NodeRestudyResp = Record<string, any>;
+
+export interface V1NodeLearningCancelReq {
+  kb_id: string;
+  /** @minItems 1 */
+  node_ids: string[];
+}
+
+export interface V1NodeLearningCancelResp {
+  count?: number;
+}
 
 export interface V1NodeStatsResp {
   /** 未发布的文档数 */

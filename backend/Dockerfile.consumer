@@ -1,8 +1,9 @@
 FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/golang:1.24.3-alpine AS builder
 
 WORKDIR /src
+ARG GO_BUILD_JOBS=4
 ENV CGO_ENABLED=0 \
-    GOMAXPROCS=1 \
+    GOMAXPROCS=${GO_BUILD_JOBS} \
     GOPROXY=https://goproxy.cn,direct \
     GOSUMDB=sum.golang.google.cn
 
@@ -12,7 +13,7 @@ RUN go mod download
 COPY . .
 
 ARG TARGETOS TARGETARCH
-RUN go build -p 1 -ldflags "-s -w -extldflags '-static'" -o /build/panda-wiki-consumer cmd/consumer/main.go cmd/consumer/wire_gen.go
+RUN go build -p ${GO_BUILD_JOBS} -ldflags "-s -w -extldflags '-static'" -o /build/panda-wiki-consumer cmd/consumer/main.go cmd/consumer/wire_gen.go
 
 FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/golang:1.24.3-alpine AS consumer
 

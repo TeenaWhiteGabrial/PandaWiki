@@ -59,6 +59,7 @@ func NewNodeHandler(
 	writeGroup.POST("/move/nav", h.NodeMoveNav)
 	writeGroup.POST("/batch_move", h.BatchMoveNode)
 	writeGroup.POST("/restudy", h.NodeRestudy)
+	writeGroup.POST("/learning/cancel", h.NodeLearningCancel)
 	writeGroup.PATCH("/permission/edit", h.NodePermissionEdit)
 	writeGroup.POST("/release/restore", h.RestoreNodeRelease)
 
@@ -637,10 +638,46 @@ func (h *NodeHandler) NodeRestudy(c echo.Context) error {
 	if err := c.Validate(req); err != nil {
 		return h.NewResponseWithError(c, "validate request params failed", err)
 	}
+	if authInfo := domain.GetAuthInfoFromCtx(c.Request().Context()); authInfo != nil {
+		req.UserID = authInfo.UserId
+	}
 
 	if err := h.usecase.NodeRestudy(c.Request().Context(), &req); err != nil {
 		return h.NewResponseWithError(c, err.Error(), err)
 	}
 
 	return h.NewResponseWithData(c, nil)
+}
+
+// NodeLearningCancel 停止文档学习/重建任务
+//
+//	@Tags			Node
+//	@Summary		停止文档学习/重建任务
+//	@Description	停止文档学习/重建任务
+//	@ID				v1-NodeLearningCancel
+//	@Accept			json
+//	@Produce		json
+//	@Security		bearerAuth
+//	@Param			param	body		v1.NodeLearningCancelReq	true	"para"
+//	@Success		200		{object}	domain.Response{data=v1.NodeLearningCancelResp}
+//	@Router			/api/v1/node/learning/cancel [post]
+func (h *NodeHandler) NodeLearningCancel(c echo.Context) error {
+	var req v1.NodeLearningCancelReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "request params is invalid", err)
+	}
+
+	if err := c.Validate(req); err != nil {
+		return h.NewResponseWithError(c, "validate request params failed", err)
+	}
+	if authInfo := domain.GetAuthInfoFromCtx(c.Request().Context()); authInfo != nil {
+		req.UserID = authInfo.UserId
+	}
+
+	count, err := h.usecase.NodeLearningCancel(c.Request().Context(), &req)
+	if err != nil {
+		return h.NewResponseWithError(c, err.Error(), err)
+	}
+
+	return h.NewResponseWithData(c, &v1.NodeLearningCancelResp{Count: count})
 }

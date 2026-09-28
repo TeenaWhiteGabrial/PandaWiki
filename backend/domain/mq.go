@@ -17,6 +17,7 @@ type NodeReleaseVectorRequest struct {
 	NodeReleaseID string `json:"node_release_id"`
 	NodeID        string `json:"node_id"`
 	DocID         string `json:"doc_id"` // for delete
+	TaskID        string `json:"task_id"`
 	Action        string `json:"action"` // upsert, delete, summary
 	GroupIds      []int  `json:"group_ids"`
 }

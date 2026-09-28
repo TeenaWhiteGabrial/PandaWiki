@@ -29,6 +29,8 @@ import {
   GetApiV1NodeStatsParams,
   GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
   V1NodeDetailResp,
+  V1NodeLearningCancelReq,
+  V1NodeLearningCancelResp,
   V1NodeMoveNavReq,
   V1NodeRestudyReq,
   V1NodeRestudyResp,
@@ -351,6 +353,38 @@ export const postApiV1NodeRestudy = (
     }
   >({
     path: `/api/v1/node/restudy`,
+    method: "POST",
+    body: param,
+    secure: true,
+    type: ContentType.Json,
+    format: "json",
+    ...params,
+  });
+
+/**
+ * @description 停止文档学习/重建任务
+ *
+ * @tags Node
+ * @name PostApiV1NodeLearningCancel
+ * @summary 停止文档学习/重建任务
+ * @request POST:/api/v1/node/learning/cancel
+ * @secure
+ * @response `200` `(DomainResponse & {
+    data?: V1NodeLearningCancelResp,
+
+})` OK
+ */
+
+export const postApiV1NodeLearningCancel = (
+  param: V1NodeLearningCancelReq,
+  params: RequestParams = {},
+) =>
+  httpRequest<
+    DomainResponse & {
+      data?: V1NodeLearningCancelResp;
+    }
+  >({
+    path: `/api/v1/node/learning/cancel`,
     method: "POST",
     body: param,
     secure: true,

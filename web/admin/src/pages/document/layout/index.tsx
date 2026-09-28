@@ -2,7 +2,11 @@ import { useURLSearchParams } from '@/hooks';
 import VersionPublish from '@/pages/release/components/VersionPublish';
 import RagErrorReStart from '@/pages/document/component/RagErrorReStart';
 import { postApiV1NavMove } from '@/request/Nav';
-import { getApiV1NodeListGroupNav, postApiV1NodeMoveNav } from '@/request/Node';
+import {
+  getApiV1NodeListGroupNav,
+  postApiV1NodeBatchMove,
+  postApiV1NodeMoveNav,
+} from '@/request/Node';
 import {
   GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
   V1NavListResp,
@@ -200,6 +204,7 @@ const Content = () => {
       const activeIsNav = navIds.includes(active.id as string);
 
       if (overIsNav && activeIsNav) {
+        treeDragHandlersRef.current?.onDragCancel?.();
         // 目录之间拖拽排序
         const sorted = [...(navList || [])].sort(
           (a, b) => (a.position ?? 0) - (b.position ?? 0),
@@ -227,21 +232,39 @@ const Content = () => {
         }
         return;
       }
+      if (activeIsNav && !overIsNav) {
+        treeDragHandlersRef.current?.onDragCancel?.();
+        return;
+      }
       if (overIsNav && !activeIsNav) {
-        // 如果文档/文件夹本来就在该目录中，则不调用移动接口
         const targetNavId = over.id as string;
-        const isAlreadyInTargetNav = groups.some(
-          g =>
-            g.nav_id === targetNavId &&
-            (g.list || []).some(item => item.id === active.id),
-        );
-        if (isAlreadyInTargetNav) {
+        const activeNode = groups
+          .flatMap(g => g.list || [])
+          .find(item => item.id === active.id);
+        if (!activeNode) {
+          treeDragHandlersRef.current?.onDragCancel?.();
+          return;
+        }
+        const isAlreadyAtTargetRoot =
+          activeNode.nav_id === targetNavId && !activeNode.parent_id;
+        if (isAlreadyAtTargetRoot) {
           treeDragHandlersRef.current?.onDragCancel?.();
           return;
         }
 
-        // 文档树节点拖到目录
         treeDragHandlersRef.current?.onDragCancel?.();
+        if (activeNode.nav_id === targetNavId) {
+          postApiV1NodeBatchMove({
+            ids: [active.id as string],
+            kb_id: kb_id!,
+            parent_id: '',
+          }).then(() => {
+            message.success('已移动到目录根');
+            refresh();
+          });
+          return;
+        }
+
         postApiV1NodeMoveNav({
           ids: [active.id as string],
           kb_id: kb_id!,
@@ -409,6 +432,9 @@ const Content = () => {
                 wikiUrl={wikiUrl}
                 onPublishOpen={handlePublishOpen}
                 readOnlyUser={readOnlyUser}
+                registerTreeDragHandlers={handlers => {
+                  treeDragHandlersRef.current = handlers;
+                }}
                 // 菜单本身是函数，必须包装一层，避免被 React 当作 state updater 执行。
                 onDocumentMenuReady={handleDocumentMenuReady}
               />

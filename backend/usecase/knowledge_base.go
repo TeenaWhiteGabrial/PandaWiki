@@ -387,7 +387,20 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 			}
 		}
 		u.logger.Info("publication learning started", log.String("kb_id", kbID), log.String("node_release_id", release.ID), log.String("stage", "learning"))
-		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, release.NodeID, domain.RagInfo{Status: consts.NodeRagStatusRunning, SyncedAt: time.Now()}); err != nil {
+		node, nodeErr := u.nodeRepo.GetNodeByID(ctx, release.NodeID)
+		if nodeErr != nil {
+			return learned, kb.DatasetID, fmt.Errorf("读取文档学习状态失败: %w", nodeErr)
+		}
+		ragInfo := node.RagInfo
+		if !ragInfo.HasAvailableIndex() {
+			ragInfo.Status = consts.NodeRagStatusRunning
+			ragInfo.Message = ""
+		}
+		ragInfo.TaskStatus = consts.NodeLearningTaskRunning
+		ragInfo.TaskAction = consts.NodeLearningTaskActionPublish
+		ragInfo.TaskMessage = ""
+		ragInfo.SyncedAt = time.Now()
+		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, release.NodeID, ragInfo); err != nil {
 			return learned, kb.DatasetID, fmt.Errorf("更新学习状态失败: %w", err)
 		}
 		docID, err := u.rag.UpsertRecords(ctx, &rag.UpsertRecordsRequest{
@@ -436,7 +449,16 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 			switch strings.ToUpper(document.Status) {
 			case string(consts.NodeRagStatusSucceeded):
 				delete(pending, document.ID)
-				_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, item.release.NodeID, domain.RagInfo{Status: consts.NodeRagStatusSucceeded, Message: document.ProgressMsg, SyncedAt: time.Now()})
+				_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, item.release.NodeID, domain.RagInfo{
+					Status:          consts.NodeRagStatusSucceeded,
+					Message:         document.ProgressMsg,
+					SyncedAt:        time.Now(),
+					TaskStatus:      consts.NodeLearningTaskSucceeded,
+					TaskAction:      consts.NodeLearningTaskActionPublish,
+					TaskMessage:     document.ProgressMsg,
+					ActiveDocID:     document.ID,
+					ActiveReleaseID: item.release.ID,
+				})
 				u.logger.Info("publication learning succeeded", log.String("kb_id", kbID), log.String("node_release_id", item.release.ID), log.String("stage", "learning"))
 			case string(consts.NodeRagStatusFailed):
 				u.markLearningFailed(kbID, item.release.NodeID, document.ProgressMsg)
@@ -587,7 +609,21 @@ func (u *KnowledgeBaseUsecase) cleanupOldPublicationRecords(datasetID string, le
 func (u *KnowledgeBaseUsecase) markLearningFailed(kbID, nodeID, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, nodeID, domain.RagInfo{Status: consts.NodeRagStatusFailed, Message: message, SyncedAt: time.Now()})
+	node, err := u.nodeRepo.GetNodeByID(ctx, nodeID)
+	if err != nil {
+		_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, nodeID, domain.RagInfo{Status: consts.NodeRagStatusFailed, Message: message, SyncedAt: time.Now()})
+		return
+	}
+	ragInfo := node.RagInfo
+	if !ragInfo.HasAvailableIndex() {
+		ragInfo.Status = consts.NodeRagStatusFailed
+		ragInfo.Message = message
+	}
+	ragInfo.TaskStatus = consts.NodeLearningTaskFailed
+	ragInfo.TaskAction = consts.NodeLearningTaskActionPublish
+	ragInfo.TaskMessage = message
+	ragInfo.SyncedAt = time.Now()
+	_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, nodeID, ragInfo)
 }
 
 func (u *KnowledgeBaseUsecase) GetKBReleaseList(ctx context.Context, req *domain.GetKBReleaseListReq) (*domain.GetKBReleaseListResp, error) {

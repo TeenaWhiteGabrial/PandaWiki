@@ -1,7 +1,15 @@
 import { Modal, message } from '@/components/ui';
-import { getRagStatusMeta } from '@/pages/document/utils/ragStatus';
-import { postApiV1NodeRestudy } from '@/request/Node';
 import {
+  getRagStatusMeta,
+  hasAvailableRagIndex,
+  isLearningTaskActive,
+} from '@/pages/document/utils/ragStatus';
+import {
+  postApiV1NodeLearningCancel,
+  postApiV1NodeRestudy,
+} from '@/request/Node';
+import {
+  ConstsNodeLearningTaskStatus,
   ConstsNodeRagInfoStatus,
   DomainNodeListItemResp,
   DomainNodeStatus,
@@ -22,7 +30,13 @@ import {
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 
-type FilterKey = 'attention' | 'running' | 'failed' | 'succeeded' | 'all';
+type FilterKey =
+  | 'attention'
+  | 'running'
+  | 'failed'
+  | 'unavailable'
+  | 'answerable'
+  | 'all';
 
 interface LearningProgressPanelProps {
   open: boolean;
@@ -35,15 +49,30 @@ type LearningDoc = DomainNodeListItemResp & {
   navName: string;
   folderPath: string;
   statusKey: ConstsNodeRagInfoStatus | 'NONE';
+  taskStatus?: ConstsNodeLearningTaskStatus;
+  available: boolean;
 };
 
 const pageSize = 10;
 
-const isRunningStatus = (status: LearningDoc['statusKey']) =>
+const isRagRunningStatus = (status: LearningDoc['statusKey']) =>
   status === ConstsNodeRagInfoStatus.NodeRagStatusPending ||
   status === ConstsNodeRagInfoStatus.NodeRagStatusRunning ||
-  status === ConstsNodeRagInfoStatus.NodeRagStatusReindexing ||
-  status === 'NONE';
+  status === ConstsNodeRagInfoStatus.NodeRagStatusReindexing;
+
+const isDocRunning = (item: LearningDoc) =>
+  isLearningTaskActive(item.taskStatus) ||
+  (!item.available && isRagRunningStatus(item.statusKey));
+
+const isDocFailed = (item: LearningDoc) =>
+  item.taskStatus === ConstsNodeLearningTaskStatus.NodeLearningTaskFailed ||
+  (!item.available &&
+    item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusFailed);
+
+const needsAttention = (item: LearningDoc) =>
+  !item.available ||
+  item.taskStatus === ConstsNodeLearningTaskStatus.NodeLearningTaskFailed ||
+  item.taskStatus === ConstsNodeLearningTaskStatus.NodeLearningTaskCanceled;
 
 const LearningProgressPanel = ({
   open,
@@ -90,41 +119,37 @@ const LearningProgressPanel = ({
           navName,
           folderPath: getFolderPath(item),
           statusKey: item.rag_info?.status || 'NONE',
+          taskStatus: item.rag_info?.task_status,
+          available: hasAvailableRagIndex(item),
         });
       });
     });
 
-    const order: Record<LearningDoc['statusKey'], number> = {
-      [ConstsNodeRagInfoStatus.NodeRagStatusFailed]: 0,
-      [ConstsNodeRagInfoStatus.NodeRagStatusRunning]: 1,
-      [ConstsNodeRagInfoStatus.NodeRagStatusReindexing]: 2,
-      [ConstsNodeRagInfoStatus.NodeRagStatusPending]: 3,
-      NONE: 4,
-      [ConstsNodeRagInfoStatus.NodeRagStatusSucceeded]: 5,
-    };
-
     return result.sort((a, b) => {
-      const statusDiff =
-        (order[a.statusKey] ?? 99) - (order[b.statusKey] ?? 99);
+      const getOrder = (item: LearningDoc) => {
+        if (isDocFailed(item)) return 0;
+        if (isDocRunning(item)) return 1;
+        if (!item.available) return 2;
+        return 3;
+      };
+      const statusDiff = getOrder(a) - getOrder(b);
       if (statusDiff !== 0) return statusDiff;
       return dayjs(b.updated_at).valueOf() - dayjs(a.updated_at).valueOf();
     });
   }, [groups]);
 
   const counts = useMemo(() => {
-    const succeeded = docs.filter(
-      item => item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusSucceeded,
-    ).length;
-    const failed = docs.filter(
-      item => item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusFailed,
-    ).length;
-    const running = docs.filter(item => isRunningStatus(item.statusKey)).length;
+    const answerable = docs.filter(item => item.available).length;
+    const unavailable = docs.filter(item => !item.available).length;
+    const failed = docs.filter(item => isDocFailed(item)).length;
+    const running = docs.filter(item => isDocRunning(item)).length;
     return {
       total: docs.length,
-      attention: docs.length - succeeded,
+      attention: docs.filter(item => needsAttention(item)).length,
       running,
       failed,
-      succeeded,
+      unavailable,
+      answerable,
     };
   }, [docs]);
 
@@ -132,19 +157,17 @@ const LearningProgressPanel = ({
     const normalizedKeyword = keyword.trim().toLowerCase();
     return docs.filter(item => {
       if (filter === 'attention') {
-        if (item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusSucceeded) {
+        if (!needsAttention(item)) {
           return false;
         }
       } else if (filter === 'running') {
-        if (!isRunningStatus(item.statusKey)) return false;
+        if (!isDocRunning(item)) return false;
       } else if (filter === 'failed') {
-        if (item.statusKey !== ConstsNodeRagInfoStatus.NodeRagStatusFailed) {
-          return false;
-        }
-      } else if (filter === 'succeeded') {
-        if (item.statusKey !== ConstsNodeRagInfoStatus.NodeRagStatusSucceeded) {
-          return false;
-        }
+        if (!isDocFailed(item)) return false;
+      } else if (filter === 'unavailable') {
+        if (item.available) return false;
+      } else if (filter === 'answerable') {
+        if (!item.available) return false;
       }
 
       if (!normalizedKeyword) return true;
@@ -158,13 +181,17 @@ const LearningProgressPanel = ({
 
   const totalPages = Math.max(1, Math.ceil(visibleDocs.length / pageSize));
   const pagedDocs = visibleDocs.slice((page - 1) * pageSize, page * pageSize);
-  const shouldAutoRefresh = docs.some(item => isRunningStatus(item.statusKey));
+  const shouldAutoRefresh = docs.some(item => isDocRunning(item));
   const pendingDocs = docs.filter(
     item =>
-      item.statusKey === 'NONE' ||
-      item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusPending ||
-      item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusFailed,
+      !isDocRunning(item) &&
+      (!item.available ||
+        item.taskStatus ===
+          ConstsNodeLearningTaskStatus.NodeLearningTaskFailed ||
+        item.taskStatus ===
+          ConstsNodeLearningTaskStatus.NodeLearningTaskCanceled),
   );
+  const runningVisibleDocs = visibleDocs.filter(item => isDocRunning(item));
 
   const submitRestudy = (items: LearningDoc[], emptyMessage: string) => {
     if (!kb_id) return;
@@ -182,6 +209,28 @@ const LearningProgressPanel = ({
     })
       .then(() => {
         message.success(`已提交 ${ids.length} 个文档，后台正在学习/重建索引`);
+        refresh();
+      })
+      .finally(() => setSubmitting(false));
+  };
+
+  const cancelLearning = (items: LearningDoc[]) => {
+    if (!kb_id) return;
+    const ids = Array.from(
+      new Set(items.map(item => item.id).filter(Boolean) as string[]),
+    );
+    if (ids.length === 0) {
+      message.warning('当前筛选结果没有进行中的学习任务');
+      return;
+    }
+    setSubmitting(true);
+    postApiV1NodeLearningCancel({
+      kb_id,
+      node_ids: ids,
+    })
+      .then(res => {
+        const count = res.count ?? ids.length;
+        message.success(`已停止 ${count} 个学习/重建任务`);
         refresh();
       })
       .finally(() => setSubmitting(false));
@@ -210,16 +259,31 @@ const LearningProgressPanel = ({
     label: string;
     count: number;
   }> = [
-    { key: 'attention', label: '待处理', count: counts.attention },
+    { key: 'attention', label: '需处理', count: counts.attention },
     { key: 'running', label: '进行中', count: counts.running },
-    { key: 'failed', label: '失败', count: counts.failed },
-    { key: 'succeeded', label: '成功', count: counts.succeeded },
+    { key: 'failed', label: '本次异常', count: counts.failed },
+    { key: 'unavailable', label: '不可问答', count: counts.unavailable },
+    { key: 'answerable', label: '可问答', count: counts.answerable },
     { key: 'all', label: '全部', count: counts.total },
   ];
 
+  const confirmRebuildCurrentResult = () => {
+    const currentFilterLabel =
+      filterOptions.find(item => item.key === filter)?.label || '当前';
+    Modal.confirm({
+      title: '确认重建当前结果？',
+      content: `将对“${currentFilterLabel}”筛选结果中的 ${visibleDocs.length} 个文档提交后台重建任务。已有可用索引会保留，重建期间仍可继续问答。`,
+      okText: '确认重建',
+      cancelText: '取消',
+      onOk: () => {
+        submitRestudy(visibleDocs, '当前筛选结果没有可重建的文档');
+      },
+    });
+  };
+
   return (
     <Modal
-      title='学习进度'
+      title='索引状态'
       open={open}
       width={920}
       footer={null}
@@ -228,10 +292,18 @@ const LearningProgressPanel = ({
       <Stack gap={2}>
         <Stack direction='row' gap={1.5}>
           {[
-            { label: '待处理', value: counts.attention, color: 'warning.main' },
+            {
+              label: '可问答',
+              value: counts.answerable,
+              color: 'success.main',
+            },
+            {
+              label: '不可问答',
+              value: counts.unavailable,
+              color: 'error.main',
+            },
             { label: '进行中', value: counts.running, color: 'info.main' },
-            { label: '失败', value: counts.failed, color: 'error.main' },
-            { label: '成功', value: counts.succeeded, color: 'success.main' },
+            { label: '本次异常', value: counts.failed, color: 'warning.main' },
           ].map(item => (
             <Box
               key={item.label}
@@ -254,6 +326,10 @@ const LearningProgressPanel = ({
             </Box>
           ))}
         </Stack>
+
+        <Typography fontSize={12} color='text.secondary'>
+          可问答表示当前已有可用索引；本次异常表示最近一次学习/重建任务失败，通常不影响已有旧索引继续问答。
+        </Typography>
 
         <Stack direction='row' alignItems='center' gap={1} flexWrap='wrap'>
           <Stack
@@ -305,14 +381,22 @@ const LearningProgressPanel = ({
             </Button>
             <Button
               size='small'
+              color='warning'
+              variant='outlined'
+              disabled={submitting || runningVisibleDocs.length === 0}
+              sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 112 }}
+              onClick={() => cancelLearning(runningVisibleDocs)}
+            >
+              停止进行中 {runningVisibleDocs.length}
+            </Button>
+            <Button
+              size='small'
               variant='outlined'
               disabled={submitting || pendingDocs.length === 0}
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 132 }}
-              onClick={() =>
-                submitRestudy(pendingDocs, '暂无需要学习的待处理文档')
-              }
+              onClick={() => submitRestudy(pendingDocs, '暂无需要学习的文档')}
             >
-              学习待处理 {pendingDocs.length}
+              学习需处理 {pendingDocs.length}
             </Button>
             <Button
               size='small'
@@ -320,9 +404,7 @@ const LearningProgressPanel = ({
               variant='contained'
               disabled={submitting || visibleDocs.length === 0}
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 120 }}
-              onClick={() =>
-                submitRestudy(visibleDocs, '当前筛选结果没有可重建的文档')
-              }
+              onClick={confirmRebuildCurrentResult}
             >
               重建当前结果
             </Button>
@@ -367,7 +449,10 @@ const LearningProgressPanel = ({
             ) : (
               pagedDocs.map(item => {
                 const statusMeta = getRagStatusMeta(item);
-                const message = item.rag_info?.message || statusMeta?.message;
+                const message =
+                  item.rag_info?.task_message ||
+                  item.rag_info?.message ||
+                  statusMeta?.message;
                 return (
                   <Stack
                     key={item.id}
@@ -434,18 +519,14 @@ const LearningProgressPanel = ({
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
-                          color:
-                            item.statusKey ===
-                            ConstsNodeRagInfoStatus.NodeRagStatusFailed
-                              ? 'error.main'
-                              : 'text.secondary',
+                          color: isDocFailed(item)
+                            ? 'error.main'
+                            : 'text.secondary',
                           fontSize: 12,
                         }}
                       >
                         {message ||
-                          (isRunningStatus(item.statusKey)
-                            ? '等待后台更新状态'
-                            : '-')}
+                          (isDocRunning(item) ? '等待后台更新状态' : '-')}
                       </Box>
                     </Tooltip>
                   </Stack>

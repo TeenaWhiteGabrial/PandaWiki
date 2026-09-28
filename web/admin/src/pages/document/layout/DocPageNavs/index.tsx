@@ -34,7 +34,7 @@ import {
   IconJiahao,
   IconXiajiantou,
 } from '@panda-wiki/icons';
-import { convertToTree } from '@/utils/drag';
+import { convertToTree, type TreeDragHandlers } from '@/utils/drag';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import NavEditModal from './NavEditModal';
 import NavPermissionModal from './NavPermissionModal';
@@ -282,6 +282,7 @@ interface DocPageNavsProps {
   wikiUrl?: string;
   onPublishOpen?: (ids?: string[]) => void;
   readOnlyUser?: boolean;
+  registerTreeDragHandlers?: (handlers: TreeDragHandlers | null) => void;
   onDocumentMenuReady?: (menu: ReturnType<typeof useDocTreeMenu>) => void;
 }
 
@@ -301,6 +302,7 @@ const DocPageNavs = ({
   wikiUrl = '',
   onPublishOpen,
   readOnlyUser = false,
+  registerTreeDragHandlers,
   onDocumentMenuReady,
 }: DocPageNavsProps) => {
   const dispatch = useAppDispatch();
@@ -351,6 +353,10 @@ const DocPageNavs = ({
       items.map(item => ({
         ...item,
         nav_id: navId,
+        canHaveChildren:
+          item.type === 1
+            ? (dragItem: ITreeItem) => dragItem.kind !== 'nav'
+            : false,
         children: item.children
           ? attachNav(item.children, navId)
           : item.children,
@@ -367,6 +373,7 @@ const DocPageNavs = ({
         kind: 'nav',
         nav_id: nav.id!,
         children,
+        canHaveChildren: (dragItem: ITreeItem) => dragItem.kind !== 'nav',
         // Entering the document workspace starts compact; users can expand
         // any directory on demand.
         collapsed: true,
@@ -823,13 +830,17 @@ const DocPageNavs = ({
               }}
             >
               <DragTree
-                readOnly
+                readOnly={readOnlyUser}
                 supportSelect={false}
                 ref={dragTreeRef}
                 menu={treeMenu}
                 onItemClick={handleTreeItemClick}
                 data={treeData}
                 updateData={data => setTreeData([...data])}
+                canRootHaveChildren={dragItem => dragItem.kind === 'nav'}
+                registerDragHandlers={
+                  readOnlyUser ? undefined : registerTreeDragHandlers
+                }
                 virtualized
               />
             </Box>

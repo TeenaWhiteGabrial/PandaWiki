@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gomarkdown/markdown"
@@ -736,61 +737,102 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 				continue
 			}
 
-			docToNodeMap, err := u.nodeRepo.GetNodeIdsByDocIds(ctx, chunk)
+			docToReleaseMap, err := u.nodeRepo.GetNodeReleasesByDocIDs(ctx, chunk)
 			if err != nil {
-				u.logger.Error("get node ids by doc ids failed",
+				u.logger.Error("get node releases by doc ids failed",
 					log.String("kb_id", kb.ID),
 					log.Error(err))
 				continue
 			}
 
-			type StatusInfo struct {
-				status  string
-				message string
-			}
-			statusGroups := make(map[StatusInfo][]string) // status+message -> []nodeIDs
-
 			for _, doc := range docs {
-				nodeID, exists := docToNodeMap[doc.ID]
+				release, exists := docToReleaseMap[doc.ID]
 				if !exists {
 					u.logger.Warn("doc_id not found in node_releases",
 						log.String("doc_id", doc.ID))
 					continue
 				}
+				nodeID := release.NodeID
 
-				statusKey := StatusInfo{
-					status:  doc.Status,
-					message: doc.ProgressMsg,
-				}
-				statusGroups[statusKey] = append(statusGroups[statusKey], nodeID)
-			}
-
-			for statusInfo, nodeIDs := range statusGroups {
-				updateMap := map[string]interface{}{
-					"rag_info": domain.RagInfo{
-						Status:  consts.NodeRagInfoStatus(statusInfo.status),
-						Message: statusInfo.message,
-					},
-				}
-
-				if err := u.nodeRepo.UpdateNodesByKbID(ctx, nodeIDs, kb.ID, updateMap); err != nil {
-					u.logger.Error("batch update node rag status failed",
+				node, err := u.nodeRepo.GetNodeByID(ctx, nodeID)
+				if err != nil {
+					u.logger.Error("get node failed before sync rag status",
 						log.String("kb_id", kb.ID),
-						log.Int("node_count", len(nodeIDs)),
-						log.String("status", statusInfo.status),
+						log.String("node_id", nodeID),
 						log.Error(err))
 					continue
 				}
 
-				u.logger.Debug("batch updated node rag status",
-					log.String("kb_id", kb.ID),
-					log.Int("node_count", len(nodeIDs)),
-					log.String("status", statusInfo.status))
+				ragInfo := node.RagInfo
+				status := consts.NodeRagInfoStatus(strings.ToUpper(doc.Status))
+				switch status {
+				case consts.NodeRagStatusSucceeded:
+					ragInfo.Status = consts.NodeRagStatusSucceeded
+					ragInfo.Message = doc.ProgressMsg
+					ragInfo.ActiveDocID = doc.ID
+					ragInfo.ActiveReleaseID = release.ID
+				case consts.NodeRagStatusFailed:
+					if !ragInfo.HasAvailableIndex() {
+						ragInfo.Status = consts.NodeRagStatusFailed
+						ragInfo.Message = doc.ProgressMsg
+					}
+				case consts.NodeRagStatusPending, consts.NodeRagStatusRunning, consts.NodeRagStatusReindexing:
+					if !ragInfo.HasAvailableIndex() {
+						ragInfo.Status = status
+						ragInfo.Message = doc.ProgressMsg
+					}
+				default:
+					continue
+				}
+				ragInfo.SyncedAt = time.Now()
+				if err := u.nodeRepo.UpdateNodeRagInfo(ctx, kb.ID, nodeID, ragInfo); err != nil {
+					u.logger.Error("sync node rag status failed",
+						log.String("kb_id", kb.ID),
+						log.String("node_id", nodeID),
+						log.String("status", doc.Status),
+						log.Error(err))
+				}
 			}
 		}
 	}
 
 	return nil
+}
+
+func (u *NodeUsecase) NodeLearningCancel(ctx context.Context, req *v1.NodeLearningCancelReq) (int, error) {
+	const message = "已手动停止"
+	tasks, err := u.nodeRepo.CancelActiveNodeLearningTasks(ctx, req.KbId, req.NodeIds, message)
+	if err != nil {
+		u.logger.Error("cancel node learning tasks failed", log.Error(err))
+		return 0, fmt.Errorf("停止学习任务失败")
+	}
+	for _, task := range tasks {
+		node, getNodeErr := u.nodeRepo.GetNodeByID(ctx, task.NodeID)
+		if getNodeErr != nil {
+			u.logger.Error("get node by id after cancel learning task failed",
+				log.String("node_id", task.NodeID),
+				log.String("task_id", task.ID),
+				log.Error(getNodeErr))
+			continue
+		}
+		ragInfo := node.RagInfo
+		if !ragInfo.HasAvailableIndex() {
+			ragInfo.Status = consts.NodeRagStatusPending
+			ragInfo.Message = message
+		}
+		ragInfo.TaskStatus = consts.NodeLearningTaskCanceled
+		ragInfo.TaskID = task.ID
+		ragInfo.TaskAction = task.Action
+		ragInfo.TaskMessage = message
+		ragInfo.SyncedAt = time.Now()
+		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, req.KbId, task.NodeID, ragInfo); err != nil {
+			u.logger.Error("update node rag info after cancel learning task failed",
+				log.String("node_id", task.NodeID),
+				log.String("task_id", task.ID),
+				log.Error(err))
+		}
+	}
+	return len(tasks), nil
 }
 
 func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) error {
@@ -812,24 +854,53 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 				log.Error(getNodeErr))
 			continue
 		}
-		var ragStatus consts.NodeRagInfoStatus
-		if node.RagInfo.Status == consts.NodeRagStatusSucceeded ||
-			node.RagInfo.Status == consts.NodeRagStatusFailed ||
-			node.RagInfo.Status == consts.NodeRagStatusReindexing ||
-			node.RagInfo.Status == consts.NodeRagStatusRunning {
-			ragStatus = consts.NodeRagStatusReindexing
-		} else {
-			ragStatus = consts.NodeRagStatusRunning
+		task, created, taskErr := u.nodeRepo.CreateNodeLearningTaskIfNotActive(ctx, &domain.NodeLearningTask{
+			KBID:          nodeRelease.KBID,
+			NodeID:        nodeRelease.NodeID,
+			NodeReleaseID: nodeRelease.ID,
+			Action:        consts.NodeLearningTaskActionRebuild,
+			Status:        consts.NodeLearningTaskWaiting,
+			TriggeredBy:   req.UserID,
+		})
+		if taskErr != nil {
+			u.logger.Error("create node learning task failed",
+				log.String("node_id", nodeRelease.NodeID),
+				log.Error(taskErr))
+			continue
+		}
+		if !created {
+			u.logger.Info("skip restudy because node learning task already exists",
+				log.String("node_id", nodeRelease.NodeID),
+				log.String("task_id", task.ID),
+				log.String("task_status", string(task.Status)))
+			continue
 		}
 
+		ragInfo := node.RagInfo
+		if !ragInfo.HasAvailableIndex() {
+			ragInfo.Status = consts.NodeRagStatusRunning
+		}
+		ragInfo.Message = ""
+		ragInfo.TaskStatus = consts.NodeLearningTaskRunning
+		ragInfo.TaskID = task.ID
+		ragInfo.TaskAction = task.Action
+		ragInfo.TaskMessage = ""
+		ragInfo.SyncedAt = time.Now()
 		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, domain.RagInfo{
-			Status:   ragStatus,
-			Message:  "",
-			SyncedAt: time.Now(),
+			Status:          ragInfo.Status,
+			Message:         ragInfo.Message,
+			SyncedAt:        ragInfo.SyncedAt,
+			TaskStatus:      ragInfo.TaskStatus,
+			TaskID:          ragInfo.TaskID,
+			TaskAction:      ragInfo.TaskAction,
+			TaskMessage:     ragInfo.TaskMessage,
+			ActiveDocID:     ragInfo.ActiveDocID,
+			ActiveReleaseID: ragInfo.ActiveReleaseID,
 		}); err != nil {
 			u.logger.Error("update node rag info failed",
 				log.String("node_id", nodeRelease.NodeID),
 				log.Error(err))
+			_ = u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, "", err.Error())
 			continue
 		}
 
@@ -837,12 +908,22 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 			{
 				KBID:          nodeRelease.KBID,
 				NodeReleaseID: nodeRelease.ID,
+				NodeID:        nodeRelease.NodeID,
+				TaskID:        task.ID,
 				Action:        "upsert",
 			},
 		}); err != nil {
 			u.logger.Error("async update node release vector failed",
 				log.String("node_release_id", nodeRelease.ID),
 				log.Error(err))
+			ragInfo.TaskStatus = consts.NodeLearningTaskFailed
+			ragInfo.TaskMessage = err.Error()
+			if !node.RagInfo.HasAvailableIndex() {
+				ragInfo.Status = consts.NodeRagStatusFailed
+				ragInfo.Message = err.Error()
+			}
+			_ = u.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, ragInfo)
+			_ = u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, "", err.Error())
 			continue
 		}
 	}

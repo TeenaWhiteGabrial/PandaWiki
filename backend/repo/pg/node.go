@@ -985,14 +985,41 @@ func (r *NodeRepository) GetNodeReleaseDetailByKBIDAndID(ctx context.Context, kb
 
 func (r *NodeRepository) MoveNodeBetween(ctx context.Context, id, parentID, prevID, nextID, kbId string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		node, err := r.GetNodeByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		allIDs := r.collectAllChildNodeIDs(tx, kbId, []string{id})
+		targetNavID := node.NavId
+		if parentID != "" {
+			var parent domain.Node
+			if err := tx.WithContext(ctx).
+				Model(&domain.Node{}).
+				Where("kb_id = ?", kbId).
+				Where("id = ?", parentID).
+				First(&parent).Error; err != nil {
+				return err
+			}
+			if parent.Type != domain.NodeTypeFolder {
+				return fmt.Errorf("target parent is not a folder")
+			}
+			if lo.Contains(allIDs, parentID) {
+				return fmt.Errorf("cannot move node into itself or its descendant")
+			}
+			targetNavID = parent.NavId
+		}
+
 		var prevPos, maxPos float64 = 0, domain.MaxPosition
 		if prevID != "" {
 			var prevNode *domain.Node
-			if err := tx.Model(&domain.Node{}).
+			query := tx.Model(&domain.Node{}).
 				Where("id = ?", prevID).
 				Where("kb_id = ?", kbId).
-				Where("parent_id = ?", parentID).
-				Select("position, parent_id").
+				Where("parent_id = ?", parentID)
+			if parentID == "" && targetNavID != "" {
+				query = query.Where("nav_id = ?", targetNavID)
+			}
+			if err := query.Select("position, parent_id").
 				First(&prevNode).Error; err != nil {
 				return err
 			}
@@ -1000,20 +1027,18 @@ func (r *NodeRepository) MoveNodeBetween(ctx context.Context, id, parentID, prev
 		}
 		if nextID != "" {
 			var nextNode *domain.Node
-			if err := tx.Model(&domain.Node{}).
+			query := tx.Model(&domain.Node{}).
 				Where("id = ?", nextID).
 				Where("parent_id = ?", parentID).
-				Where("kb_id = ?", kbId).
-				Select("position, parent_id").
+				Where("kb_id = ?", kbId)
+			if parentID == "" && targetNavID != "" {
+				query = query.Where("nav_id = ?", targetNavID)
+			}
+			if err := query.Select("position, parent_id").
 				First(&nextNode).Error; err != nil {
 				return err
 			}
 			maxPos = nextNode.Position
-		}
-
-		node, err := r.GetNodeByID(ctx, id)
-		if err != nil {
-			return err
 		}
 
 		newPos := prevPos + (maxPos-prevPos)/2.0
@@ -1024,12 +1049,23 @@ func (r *NodeRepository) MoveNodeBetween(ctx context.Context, id, parentID, prev
 		}
 
 		querySet := tx.Model(&domain.Node{}).Where("id = ?", id).Update("position", newPos).Update("parent_id", parentID)
-
-		if node.Status == domain.NodeStatusPublished {
-			querySet = querySet.Update("status", domain.NodeStatusDraft)
+		if targetNavID != "" && targetNavID != node.NavId {
+			if err := tx.WithContext(ctx).Model(&domain.Node{}).
+				Where("kb_id = ?", kbId).
+				Where("id IN ?", allIDs).
+				Update("nav_id", targetNavID).Error; err != nil {
+				return err
+			}
 		}
 
-		return querySet.Error
+		if err := querySet.Error; err != nil {
+			return err
+		}
+		return tx.WithContext(ctx).Model(&domain.Node{}).
+			Where("kb_id = ?", kbId).
+			Where("id IN ?", allIDs).
+			Where("status = ?", domain.NodeStatusPublished).
+			Update("status", domain.NodeStatusDraft).Error
 	})
 }
 
@@ -1080,6 +1116,189 @@ func (r *NodeRepository) UpdateNodeRagInfo(ctx context.Context, kbID, nodeID str
 		Updates(map[string]any{
 			"rag_info": ragInfo,
 		}).Error
+}
+
+func (r *NodeRepository) CreateNodeLearningTaskIfNotActive(ctx context.Context, task *domain.NodeLearningTask) (*domain.NodeLearningTask, bool, error) {
+	if task.ID == "" {
+		task.ID = uuid.NewString()
+	}
+	if task.Status == "" {
+		task.Status = consts.NodeLearningTaskWaiting
+	}
+	now := time.Now()
+	task.CreatedAt = now
+	task.UpdatedAt = now
+
+	if err := r.db.WithContext(ctx).Create(task).Error; err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			active, activeErr := r.GetActiveNodeLearningTask(ctx, task.KBID, task.NodeID)
+			if activeErr != nil {
+				return nil, false, activeErr
+			}
+			return active, false, nil
+		}
+		return nil, false, err
+	}
+	return task, true, nil
+}
+
+func (r *NodeRepository) GetActiveNodeLearningTask(ctx context.Context, kbID, nodeID string) (*domain.NodeLearningTask, error) {
+	var task domain.NodeLearningTask
+	err := r.db.WithContext(ctx).
+		Model(&domain.NodeLearningTask{}).
+		Where("kb_id = ? AND node_id = ?", kbID, nodeID).
+		Where("status IN ?", []consts.NodeLearningTaskStatus{
+			consts.NodeLearningTaskWaiting,
+			consts.NodeLearningTaskRunning,
+			consts.NodeLearningTaskCancelRequested,
+		}).
+		Order("created_at DESC").
+		First(&task).Error
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (r *NodeRepository) GetNodeLearningTaskByID(ctx context.Context, taskID string) (*domain.NodeLearningTask, error) {
+	var task domain.NodeLearningTask
+	if err := r.db.WithContext(ctx).Where("id = ?", taskID).First(&task).Error; err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (r *NodeRepository) GetActiveNodeLearningTaskByDocID(ctx context.Context, docID string) (*domain.NodeLearningTask, error) {
+	var task domain.NodeLearningTask
+	err := r.db.WithContext(ctx).
+		Model(&domain.NodeLearningTask{}).
+		Where("doc_id = ?", docID).
+		Where("status IN ?", []consts.NodeLearningTaskStatus{
+			consts.NodeLearningTaskWaiting,
+			consts.NodeLearningTaskRunning,
+			consts.NodeLearningTaskCancelRequested,
+		}).
+		Order("updated_at DESC").
+		First(&task).Error
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (r *NodeRepository) GetLatestNodeLearningTaskByDocID(ctx context.Context, docID string) (*domain.NodeLearningTask, error) {
+	var task domain.NodeLearningTask
+	err := r.db.WithContext(ctx).
+		Model(&domain.NodeLearningTask{}).
+		Where("doc_id = ?", docID).
+		Order("updated_at DESC").
+		First(&task).Error
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (r *NodeRepository) MarkNodeLearningTaskRunning(ctx context.Context, taskID string) (*domain.NodeLearningTask, bool, error) {
+	now := time.Now()
+	if err := r.db.WithContext(ctx).
+		Model(&domain.NodeLearningTask{}).
+		Where("id = ?", taskID).
+		Where("status IN ?", []consts.NodeLearningTaskStatus{
+			consts.NodeLearningTaskWaiting,
+			consts.NodeLearningTaskRunning,
+		}).
+		Updates(map[string]any{
+			"status":     consts.NodeLearningTaskRunning,
+			"started_at": &now,
+			"updated_at": now,
+		}).Error; err != nil {
+		return nil, false, err
+	}
+	task, err := r.GetNodeLearningTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, false, err
+	}
+	return task, task.Status == consts.NodeLearningTaskRunning, nil
+}
+
+func (r *NodeRepository) UpdateNodeLearningTaskDocID(ctx context.Context, taskID, docID string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.NodeLearningTask{}).
+		Where("id = ?", taskID).
+		Updates(map[string]any{
+			"doc_id":     docID,
+			"updated_at": time.Now(),
+		}).Error
+}
+
+func (r *NodeRepository) FinishNodeLearningTask(ctx context.Context, taskID string, status consts.NodeLearningTaskStatus, docID, message string) error {
+	now := time.Now()
+	updates := map[string]any{
+		"status":        status,
+		"error_message": message,
+		"finished_at":   &now,
+		"updated_at":    now,
+	}
+	if docID != "" {
+		updates["doc_id"] = docID
+	}
+	return r.db.WithContext(ctx).
+		Model(&domain.NodeLearningTask{}).
+		Where("id = ?", taskID).
+		Updates(updates).Error
+}
+
+func (r *NodeRepository) CancelActiveNodeLearningTasks(ctx context.Context, kbID string, nodeIDs []string, message string) ([]*domain.NodeLearningTask, error) {
+	if len(nodeIDs) == 0 {
+		return nil, nil
+	}
+	tasks := make([]*domain.NodeLearningTask, 0)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.
+			Model(&domain.NodeLearningTask{}).
+			Where("kb_id = ? AND node_id IN ?", kbID, nodeIDs).
+			Where("status IN ?", []consts.NodeLearningTaskStatus{
+				consts.NodeLearningTaskWaiting,
+				consts.NodeLearningTaskRunning,
+				consts.NodeLearningTaskCancelRequested,
+			}).
+			Order("updated_at DESC").
+			Find(&tasks).Error; err != nil {
+			return err
+		}
+		if len(tasks) == 0 {
+			return nil
+		}
+		taskIDs := make([]string, 0, len(tasks))
+		for _, task := range tasks {
+			taskIDs = append(taskIDs, task.ID)
+		}
+		now := time.Now()
+		if err := tx.
+			Model(&domain.NodeLearningTask{}).
+			Where("id IN ?", taskIDs).
+			Updates(map[string]any{
+				"status":        consts.NodeLearningTaskCanceled,
+				"error_message": message,
+				"finished_at":   &now,
+				"updated_at":    now,
+			}).Error; err != nil {
+			return err
+		}
+		for _, task := range tasks {
+			task.Status = consts.NodeLearningTaskCanceled
+			task.ErrorMessage = message
+			task.FinishedAt = &now
+			task.UpdatedAt = now
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
 }
 
 // traverse all nodes by pg cursor
@@ -1508,6 +1727,18 @@ func (r *NodeRepository) GetNodeIdByDocId(ctx context.Context, docId string) (st
 		return "", fmt.Errorf("node not found for doc_id: %s", docId)
 	}
 	return nodeIds[0], nil
+}
+
+func (r *NodeRepository) GetNodeReleaseByDocID(ctx context.Context, docID string) (*domain.NodeRelease, error) {
+	var release domain.NodeRelease
+	if err := r.db.WithContext(ctx).
+		Model(&domain.NodeRelease{}).
+		Where("doc_id = ?", docID).
+		Order("updated_at DESC").
+		First(&release).Error; err != nil {
+		return nil, err
+	}
+	return &release, nil
 }
 
 func (r *NodeRepository) GetNodeIdsWithoutStatusByKbId(ctx context.Context, kbId string) ([]string, error) {
