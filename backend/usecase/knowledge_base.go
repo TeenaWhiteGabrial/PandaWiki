@@ -40,6 +40,8 @@ type learnedRelease struct {
 	docID   string
 }
 
+const learningProgressQueryChunkSize = 10
+
 func NewKnowledgeBaseUsecase(repo *pg.KnowledgeBaseRepository, nodeRepo *pg.NodeRepository, navRepo *pg.NavRepository, ragRepo *mq.RAGRepository, userRepo *pg.UserRepository, rag rag.RAGService, kbCache *cache.KBRepo, logger *log.Logger, config *config.Config) (*KnowledgeBaseUsecase, error) {
 	u := &KnowledgeBaseUsecase{
 		repo:     repo,
@@ -424,7 +426,7 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		return learned, kb.DatasetID, nil
 	}
 
-	waitCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 	pending := make(map[string]learnedRelease, len(learned))
 	docIDs := make([]string, 0, len(learned))
@@ -435,35 +437,44 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for len(pending) > 0 {
-		documents, err := u.rag.ListDocuments(waitCtx, kb.DatasetID, docIDs)
-		if err != nil {
-			u.markPendingLearningFailed(kbID, pending, err.Error())
-			u.logger.Error("publication learning progress query failed", log.String("kb_id", kbID), log.String("stage", "learning"), log.Error(err))
-			break
+		docIDs = docIDs[:0]
+		for docID := range pending {
+			docIDs = append(docIDs, docID)
 		}
-		for _, document := range documents {
-			item, exists := pending[document.ID]
-			if !exists {
+		for _, chunk := range chunkStringSlice(docIDs, learningProgressQueryChunkSize) {
+			documents, err := u.rag.ListDocuments(waitCtx, kb.DatasetID, chunk)
+			if err != nil {
+				u.logger.Warn("publication learning progress query failed, will retry",
+					log.String("kb_id", kbID),
+					log.String("stage", "learning"),
+					log.Int("document_count", len(chunk)),
+					log.Error(err))
 				continue
 			}
-			switch strings.ToUpper(document.Status) {
-			case string(consts.NodeRagStatusSucceeded):
-				delete(pending, document.ID)
-				_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, item.release.NodeID, domain.RagInfo{
-					Status:          consts.NodeRagStatusSucceeded,
-					Message:         document.ProgressMsg,
-					SyncedAt:        time.Now(),
-					TaskStatus:      consts.NodeLearningTaskSucceeded,
-					TaskAction:      consts.NodeLearningTaskActionPublish,
-					TaskMessage:     document.ProgressMsg,
-					ActiveDocID:     document.ID,
-					ActiveReleaseID: item.release.ID,
-				})
-				u.logger.Info("publication learning succeeded", log.String("kb_id", kbID), log.String("node_release_id", item.release.ID), log.String("stage", "learning"))
-			case string(consts.NodeRagStatusFailed):
-				u.markLearningFailed(kbID, item.release.NodeID, document.ProgressMsg)
-				u.logger.Error("publication learning failed", log.String("kb_id", kbID), log.String("node_release_id", item.release.ID), log.String("stage", "learning"), log.String("reason", document.ProgressMsg))
-				delete(pending, document.ID)
+			for _, document := range documents {
+				item, exists := pending[document.ID]
+				if !exists {
+					continue
+				}
+				switch strings.ToUpper(document.Status) {
+				case string(consts.NodeRagStatusSucceeded):
+					delete(pending, document.ID)
+					_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, item.release.NodeID, domain.RagInfo{
+						Status:          consts.NodeRagStatusSucceeded,
+						Message:         document.ProgressMsg,
+						SyncedAt:        time.Now(),
+						TaskStatus:      consts.NodeLearningTaskSucceeded,
+						TaskAction:      consts.NodeLearningTaskActionPublish,
+						TaskMessage:     document.ProgressMsg,
+						ActiveDocID:     document.ID,
+						ActiveReleaseID: item.release.ID,
+					})
+					u.logger.Info("publication learning succeeded", log.String("kb_id", kbID), log.String("node_release_id", item.release.ID), log.String("stage", "learning"))
+				case string(consts.NodeRagStatusFailed):
+					u.markLearningFailed(kbID, item.release.NodeID, document.ProgressMsg)
+					u.logger.Error("publication learning failed", log.String("kb_id", kbID), log.String("node_release_id", item.release.ID), log.String("stage", "learning"), log.String("reason", document.ProgressMsg))
+					delete(pending, document.ID)
+				}
 			}
 		}
 		if len(pending) == 0 {
@@ -478,6 +489,24 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		}
 	}
 	return learned, kb.DatasetID, nil
+}
+
+func chunkStringSlice(items []string, size int) [][]string {
+	if len(items) == 0 {
+		return nil
+	}
+	if size <= 0 {
+		size = len(items)
+	}
+	chunks := make([][]string, 0, (len(items)+size-1)/size)
+	for start := 0; start < len(items); start += size {
+		end := start + size
+		if end > len(items) {
+			end = len(items)
+		}
+		chunks = append(chunks, items[start:end])
+	}
+	return chunks
 }
 
 func ShouldExtractReleaseFileContent(release *domain.NodeReleaseWithDirPath) bool {

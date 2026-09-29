@@ -2,9 +2,11 @@ package rag
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	raglite "github.com/chaitin/raglite-go-sdk"
@@ -22,6 +24,12 @@ type CTRAG struct {
 	logger *log.Logger
 	mdConv *converter.Converter
 }
+
+const (
+	listDocumentsBatchSize  = 10
+	listDocumentsMaxRetries = 3
+	listDocumentsRetryDelay = 500 * time.Millisecond
+)
 
 func NewCTRAG(config *config.Config, logger *log.Logger) (*CTRAG, error) {
 	client, err := raglite.NewClient(
@@ -311,6 +319,47 @@ func (s *CTRAG) UpdateDocumentGroupIDs(ctx context.Context, datasetID string, do
 }
 
 func (s *CTRAG) ListDocuments(ctx context.Context, datasetID string, documentIDs []string) ([]Document, error) {
+	if len(documentIDs) > listDocumentsBatchSize {
+		documents := make([]Document, 0, len(documentIDs))
+		for start := 0; start < len(documentIDs); start += listDocumentsBatchSize {
+			end := start + listDocumentsBatchSize
+			if end > len(documentIDs) {
+				end = len(documentIDs)
+			}
+			batchDocuments, err := s.listDocumentsWithRetry(ctx, datasetID, documentIDs[start:end])
+			if err != nil {
+				return nil, fmt.Errorf("list RAG documents failed for batch %d-%d/%d: %w", start+1, end, len(documentIDs), err)
+			}
+			documents = append(documents, batchDocuments...)
+		}
+		return documents, nil
+	}
+	return s.listDocumentsWithRetry(ctx, datasetID, documentIDs)
+}
+
+func (s *CTRAG) listDocumentsWithRetry(ctx context.Context, datasetID string, documentIDs []string) ([]Document, error) {
+	var lastErr error
+	for attempt := 1; attempt <= listDocumentsMaxRetries; attempt++ {
+		documents, err := s.listDocuments(ctx, datasetID, documentIDs)
+		if err == nil {
+			return documents, nil
+		}
+		lastErr = err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || attempt == listDocumentsMaxRetries {
+			return nil, err
+		}
+		timer := time.NewTimer(time.Duration(attempt) * listDocumentsRetryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil, lastErr
+}
+
+func (s *CTRAG) listDocuments(ctx context.Context, datasetID string, documentIDs []string) ([]Document, error) {
 	res, err := s.client.Documents.List(ctx, &raglite.ListDocumentsRequest{
 		DocumentIDs: documentIDs,
 		DatasetID:   datasetID,

@@ -83,7 +83,10 @@ func NewNodeUsecase(
 	}
 }
 
-const ragSyncChunkSize = 100
+const (
+	ragSyncChunkSize               = 10
+	nodeLearningTaskRunningTimeout = 2 * time.Hour
+)
 
 func (u *NodeUsecase) Create(ctx context.Context, req *domain.CreateNodeReq, userId string) (string, error) {
 	nodeID, err := u.nodeRepo.Create(ctx, req, userId)
@@ -754,6 +757,24 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 				}
 				nodeID := release.NodeID
 
+				var activeTask *domain.NodeLearningTask
+				task, taskErr := u.nodeRepo.GetActiveNodeLearningTaskByDocID(ctx, doc.ID)
+				if taskErr == nil {
+					if task.NodeReleaseID == release.ID && task.NodeID == release.NodeID {
+						activeTask = task
+					} else {
+						u.logger.Warn("ignore active learning task because task and release mismatch",
+							log.String("doc_id", doc.ID),
+							log.String("task_id", task.ID),
+							log.String("task_release_id", task.NodeReleaseID),
+							log.String("release_id", release.ID))
+					}
+				} else if !errors.Is(taskErr, gorm.ErrRecordNotFound) {
+					u.logger.Error("get active node learning task by doc id failed",
+						log.String("doc_id", doc.ID),
+						log.Error(taskErr))
+				}
+
 				node, err := u.nodeRepo.GetNodeByID(ctx, nodeID)
 				if err != nil {
 					u.logger.Error("get node failed before sync rag status",
@@ -764,6 +785,11 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 				}
 
 				ragInfo := node.RagInfo
+				if activeTask != nil {
+					ragInfo.TaskID = activeTask.ID
+					ragInfo.TaskAction = activeTask.Action
+					ragInfo.TaskMessage = doc.ProgressMsg
+				}
 				status := consts.NodeRagInfoStatus(strings.ToUpper(doc.Status))
 				switch status {
 				case consts.NodeRagStatusSucceeded:
@@ -771,15 +797,36 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 					ragInfo.Message = doc.ProgressMsg
 					ragInfo.ActiveDocID = doc.ID
 					ragInfo.ActiveReleaseID = release.ID
+					if activeTask != nil {
+						ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
+						if err := u.nodeRepo.FinishNodeLearningTask(ctx, activeTask.ID, consts.NodeLearningTaskSucceeded, doc.ID, ""); err != nil {
+							u.logger.Error("finish node learning task as succeeded failed",
+								log.String("task_id", activeTask.ID),
+								log.String("doc_id", doc.ID),
+								log.Error(err))
+						}
+					}
 				case consts.NodeRagStatusFailed:
 					if !ragInfo.HasAvailableIndex() {
 						ragInfo.Status = consts.NodeRagStatusFailed
 						ragInfo.Message = doc.ProgressMsg
 					}
+					if activeTask != nil {
+						ragInfo.TaskStatus = consts.NodeLearningTaskFailed
+						if err := u.nodeRepo.FinishNodeLearningTask(ctx, activeTask.ID, consts.NodeLearningTaskFailed, doc.ID, doc.ProgressMsg); err != nil {
+							u.logger.Error("finish node learning task as failed failed",
+								log.String("task_id", activeTask.ID),
+								log.String("doc_id", doc.ID),
+								log.Error(err))
+						}
+					}
 				case consts.NodeRagStatusPending, consts.NodeRagStatusRunning, consts.NodeRagStatusReindexing:
 					if !ragInfo.HasAvailableIndex() {
 						ragInfo.Status = status
 						ragInfo.Message = doc.ProgressMsg
+					}
+					if activeTask != nil {
+						ragInfo.TaskStatus = consts.NodeLearningTaskRunning
 					}
 				default:
 					continue
@@ -796,7 +843,62 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 		}
 	}
 
+	if _, err := u.ExpireStaleNodeLearningTasks(ctx); err != nil {
+		u.logger.Error("expire stale node learning tasks failed", log.Error(err))
+	}
 	return nil
+}
+
+func (u *NodeUsecase) ExpireStaleNodeLearningTasks(ctx context.Context) (int, error) {
+	tasks, err := u.nodeRepo.ListStaleRunningNodeLearningTasks(ctx, time.Now().Add(-nodeLearningTaskRunningTimeout), 200)
+	if err != nil {
+		return 0, err
+	}
+	if len(tasks) == 0 {
+		return 0, nil
+	}
+
+	const message = "索引重建超时：RAGLite 长时间停留在索引中，请重试重建索引"
+	for _, task := range tasks {
+		if err := u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, task.DocID, message); err != nil {
+			u.logger.Error("finish stale node learning task failed",
+				log.String("task_id", task.ID),
+				log.String("node_id", task.NodeID),
+				log.Error(err))
+			continue
+		}
+		node, getNodeErr := u.nodeRepo.GetNodeByID(ctx, task.NodeID)
+		if getNodeErr != nil {
+			u.logger.Error("get node by id after stale learning task failed",
+				log.String("task_id", task.ID),
+				log.String("node_id", task.NodeID),
+				log.Error(getNodeErr))
+			continue
+		}
+		ragInfo := node.RagInfo
+		if !ragInfo.HasAvailableIndex() {
+			ragInfo.Status = consts.NodeRagStatusFailed
+			ragInfo.Message = message
+		}
+		ragInfo.TaskID = task.ID
+		ragInfo.TaskAction = task.Action
+		ragInfo.TaskStatus = consts.NodeLearningTaskFailed
+		ragInfo.TaskMessage = message
+		ragInfo.SyncedAt = time.Now()
+		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, task.KBID, task.NodeID, ragInfo); err != nil {
+			u.logger.Error("update node rag info after stale learning task failed",
+				log.String("task_id", task.ID),
+				log.String("node_id", task.NodeID),
+				log.Error(err))
+			continue
+		}
+		u.logger.Warn("expired stale node learning task",
+			log.String("task_id", task.ID),
+			log.String("node_id", task.NodeID),
+			log.String("doc_id", task.DocID),
+			log.String("timeout", nodeLearningTaskRunningTimeout.String()))
+	}
+	return len(tasks), nil
 }
 
 func (u *NodeUsecase) NodeLearningCancel(ctx context.Context, req *v1.NodeLearningCancelReq) (int, error) {

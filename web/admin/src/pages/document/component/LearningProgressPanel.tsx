@@ -19,6 +19,7 @@ import { useAppSelector } from '@/store';
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   Divider,
   Pagination,
@@ -85,6 +86,8 @@ const LearningProgressPanel = ({
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const docs = useMemo<LearningDoc[]>(() => {
     const result: LearningDoc[] = [];
@@ -192,6 +195,48 @@ const LearningProgressPanel = ({
           ConstsNodeLearningTaskStatus.NodeLearningTaskCanceled),
   );
   const runningVisibleDocs = visibleDocs.filter(item => isDocRunning(item));
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedDocs = useMemo(
+    () => docs.filter(item => item.id && selectedIdSet.has(item.id)),
+    [docs, selectedIdSet],
+  );
+  const selectedRunningDocs = selectedDocs.filter(item => isDocRunning(item));
+  const pagedSelectableIds = pagedDocs
+    .map(item => item.id)
+    .filter(Boolean) as string[];
+  const selectedPagedCount = pagedSelectableIds.filter(id =>
+    selectedIdSet.has(id),
+  ).length;
+  const isPagedAllSelected =
+    pagedSelectableIds.length > 0 &&
+    selectedPagedCount === pagedSelectableIds.length;
+  const isPagedIndeterminate =
+    selectedPagedCount > 0 && selectedPagedCount < pagedSelectableIds.length;
+
+  const toggleSelected = (id?: string) => {
+    if (!id) return;
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id],
+    );
+  };
+
+  const toggleCurrentPageSelected = () => {
+    if (pagedSelectableIds.length === 0) return;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (isPagedAllSelected) {
+        pagedSelectableIds.forEach(id => next.delete(id));
+      } else {
+        pagedSelectableIds.forEach(id => next.add(id));
+      }
+      return Array.from(next);
+    });
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds([]);
+  };
 
   const submitRestudy = (items: LearningDoc[], emptyMessage: string) => {
     if (!kb_id) return;
@@ -236,9 +281,27 @@ const LearningProgressPanel = ({
       .finally(() => setSubmitting(false));
   };
 
+  const confirmRebuildSelected = () => {
+    if (selectedDocs.length === 0) {
+      message.warning('请先勾选需要重建索引的文档');
+      return;
+    }
+    Modal.confirm({
+      title: '确认重建所选文档？',
+      content: `将对已选中的 ${selectedDocs.length} 个文档提交后台重建任务。已有可用索引会保留，重建期间仍可继续问答。`,
+      okText: '确认重建',
+      cancelText: '取消',
+      onOk: () => {
+        submitRestudy(selectedDocs, '请先勾选需要重建索引的文档');
+      },
+    });
+  };
+
   useEffect(() => {
     if (!open) return;
     setPage(1);
+    setSelectionMode(false);
+    setSelectedIds([]);
     refresh();
   }, [open, refresh]);
 
@@ -253,6 +316,11 @@ const LearningProgressPanel = ({
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
+
+  useEffect(() => {
+    const validIds = new Set(docs.map(item => item.id).filter(Boolean));
+    setSelectedIds(prev => prev.filter(id => validIds.has(id)));
+  }, [docs]);
 
   const filterOptions: Array<{
     key: FilterKey;
@@ -398,6 +466,20 @@ const LearningProgressPanel = ({
             >
               学习需处理 {pendingDocs.length}
             </Button>
+            {!selectionMode && (
+              <Button
+                size='small'
+                variant='outlined'
+                disabled={submitting || visibleDocs.length === 0}
+                sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 132 }}
+                onClick={() => {
+                  setSelectionMode(true);
+                  setSelectedIds([]);
+                }}
+              >
+                重建指定文档
+              </Button>
+            )}
             <Button
               size='small'
               color='primary'
@@ -410,6 +492,67 @@ const LearningProgressPanel = ({
             </Button>
           </Stack>
         </Stack>
+
+        {selectionMode && (
+          <Stack
+            direction='row'
+            alignItems='center'
+            justifyContent='space-between'
+            gap={1}
+            sx={{
+              px: 1.25,
+              py: 1,
+              borderRadius: 2,
+              bgcolor: 'action.hover',
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Typography fontSize={13} color='primary.main'>
+              请选择需要重建索引的文档，已选择 {selectedDocs.length} 个
+              {selectedRunningDocs.length > 0
+                ? `，其中 ${selectedRunningDocs.length} 个正在进行`
+                : ''}
+            </Typography>
+            <Stack direction='row' alignItems='center' gap={1}>
+              <Button
+                size='small'
+                variant='contained'
+                disabled={submitting || selectedDocs.length === 0}
+                sx={{ whiteSpace: 'nowrap', minWidth: 104 }}
+                onClick={confirmRebuildSelected}
+              >
+                重建所选
+              </Button>
+              <Button
+                size='small'
+                color='warning'
+                variant='outlined'
+                disabled={submitting || selectedRunningDocs.length === 0}
+                sx={{ whiteSpace: 'nowrap', minWidth: 104 }}
+                onClick={() => cancelLearning(selectedRunningDocs)}
+              >
+                停止所选
+              </Button>
+              <Button
+                size='small'
+                disabled={submitting}
+                sx={{ whiteSpace: 'nowrap', minWidth: 72 }}
+                onClick={() => setSelectedIds([])}
+              >
+                清空
+              </Button>
+              <Button
+                size='small'
+                disabled={submitting}
+                sx={{ whiteSpace: 'nowrap', minWidth: 72 }}
+                onClick={exitSelectionMode}
+              >
+                退出
+              </Button>
+            </Stack>
+          </Stack>
+        )}
 
         <Stack
           sx={{
@@ -430,6 +573,18 @@ const LearningProgressPanel = ({
               fontSize: 12,
             }}
           >
+            {selectionMode && (
+              <Box sx={{ width: 42 }}>
+                <Checkbox
+                  size='small'
+                  checked={isPagedAllSelected}
+                  indeterminate={isPagedIndeterminate}
+                  disabled={pagedSelectableIds.length === 0}
+                  sx={{ p: 0.25 }}
+                  onChange={toggleCurrentPageSelected}
+                />
+              </Box>
+            )}
             <Box sx={{ flex: 1.2 }}>文档</Box>
             <Box sx={{ flex: 1 }}>所在目录</Box>
             <Box sx={{ width: 96 }}>状态</Box>
@@ -462,11 +617,25 @@ const LearningProgressPanel = ({
                     sx={{
                       px: 1.5,
                       py: 1.15,
+                      bgcolor:
+                        selectionMode && item.id && selectedIdSet.has(item.id)
+                          ? 'action.hover'
+                          : 'transparent',
                       borderBottom: '1px solid',
                       borderColor: 'divider',
                       '&:last-of-type': { borderBottom: 0 },
                     }}
                   >
+                    {selectionMode && (
+                      <Box sx={{ width: 42 }}>
+                        <Checkbox
+                          size='small'
+                          checked={!!item.id && selectedIdSet.has(item.id)}
+                          sx={{ p: 0.25 }}
+                          onChange={() => toggleSelected(item.id)}
+                        />
+                      </Box>
+                    )}
                     <Tooltip title={item.name || ''}>
                       <Box
                         sx={{
@@ -542,7 +711,9 @@ const LearningProgressPanel = ({
           justifyContent='space-between'
         >
           <Typography fontSize={12} color='text.secondary'>
-            共 {visibleDocs.length} 个文档；进行中的任务会每 5 秒自动刷新
+            共 {visibleDocs.length} 个文档
+            {selectionMode ? `，已选择 ${selectedDocs.length} 个` : ''}
+            ；进行中的任务会每 5 秒自动刷新
           </Typography>
           <Pagination
             size='small'

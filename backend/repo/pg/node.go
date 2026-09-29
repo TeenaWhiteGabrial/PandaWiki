@@ -1187,6 +1187,24 @@ func (r *NodeRepository) GetActiveNodeLearningTaskByDocID(ctx context.Context, d
 	return &task, nil
 }
 
+func (r *NodeRepository) ListStaleRunningNodeLearningTasks(ctx context.Context, before time.Time, limit int) ([]*domain.NodeLearningTask, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	tasks := make([]*domain.NodeLearningTask, 0)
+	err := r.db.WithContext(ctx).
+		Model(&domain.NodeLearningTask{}).
+		Where("status = ?", consts.NodeLearningTaskRunning).
+		Where("COALESCE(started_at, updated_at, created_at) < ?", before).
+		Order("COALESCE(started_at, updated_at, created_at) ASC").
+		Limit(limit).
+		Find(&tasks).Error
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
 func (r *NodeRepository) GetLatestNodeLearningTaskByDocID(ctx context.Context, docID string) (*domain.NodeLearningTask, error) {
 	var task domain.NodeLearningTask
 	err := r.db.WithContext(ctx).
@@ -1745,12 +1763,33 @@ func (r *NodeRepository) GetNodeIdsWithoutStatusByKbId(ctx context.Context, kbId
 	docIds := make([]string, 0)
 	if err := r.db.WithContext(ctx).
 		Model(&domain.Node{}).
-		Joins("left join node_releases on node_releases.node_id = nodes.id").
-		Where("(nodes.rag_info ->> 'status' IS NULL OR nodes.rag_info ->> 'status' = '')").
-		Where("nodes.kb_id = ? ", kbId).
-		Where("nodes.type = ? ", domain.NodeTypeDocument).
-		Where("node_releases.doc_id != '' ").
-		Pluck("node_releases.doc_id", &docIds).Error; err != nil {
+		Joins(`JOIN LATERAL (
+			SELECT node_releases.doc_id
+			FROM node_releases
+			WHERE node_releases.node_id = nodes.id
+				AND node_releases.kb_id = nodes.kb_id
+				AND node_releases.doc_id != ''
+			ORDER BY node_releases.updated_at DESC
+			LIMIT 1
+		) latest_release ON TRUE`).
+		Where(`(
+			nodes.rag_info ->> 'status' IS NULL
+			OR nodes.rag_info ->> 'status' = ''
+			OR nodes.rag_info ->> 'status' IN ?
+			OR nodes.rag_info ->> 'task_status' IN ?
+		)`, []string{
+			string(consts.NodeRagStatusPending),
+			string(consts.NodeRagStatusRunning),
+			string(consts.NodeRagStatusReindexing),
+		}, []string{
+			string(consts.NodeLearningTaskWaiting),
+			string(consts.NodeLearningTaskRunning),
+			string(consts.NodeLearningTaskCancelRequested),
+		}).
+		Where("nodes.kb_id = ?", kbId).
+		Where("nodes.type = ?", domain.NodeTypeDocument).
+		Distinct("latest_release.doc_id").
+		Pluck("latest_release.doc_id", &docIds).Error; err != nil {
 		return nil, err
 	}
 	return docIds, nil
