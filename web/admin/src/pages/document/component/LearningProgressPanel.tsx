@@ -185,11 +185,6 @@ const LearningProgressPanel = ({
   const totalPages = Math.max(1, Math.ceil(visibleDocs.length / pageSize));
   const pagedDocs = visibleDocs.slice((page - 1) * pageSize, page * pageSize);
   const shouldAutoRefresh = docs.some(item => isDocRunning(item));
-  const failedDocs = docs.filter(
-    item =>
-      isDocFailed(item) ||
-      item.taskStatus === ConstsNodeLearningTaskStatus.NodeLearningTaskCanceled,
-  );
   const pendingDocs = docs.filter(
     item =>
       !isDocRunning(item) &&
@@ -354,18 +349,6 @@ const LearningProgressPanel = ({
     });
   };
 
-  const confirmRebuildFailedDocs = () => {
-    Modal.confirm({
-      title: '确认重建异常文档？',
-      content: `将对当前 ${failedDocs.length} 个异常文档重新提交后台学习/索引任务。已有可用索引会保留，重建期间仍可继续问答。`,
-      okText: '确认重建',
-      cancelText: '取消',
-      onOk: () => {
-        submitRestudy(failedDocs, '当前没有异常文档需要重建');
-      },
-    });
-  };
-
   return (
     <Modal
       title='索引状态'
@@ -482,16 +465,6 @@ const LearningProgressPanel = ({
               onClick={() => submitRestudy(pendingDocs, '暂无需要学习的文档')}
             >
               学习需处理 {pendingDocs.length}
-            </Button>
-            <Button
-              size='small'
-              color='warning'
-              variant='outlined'
-              disabled={submitting || failedDocs.length === 0}
-              sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 132 }}
-              onClick={confirmRebuildFailedDocs}
-            >
-              重建异常文档 {failedDocs.length}
             </Button>
             {!selectionMode && (
               <Button
