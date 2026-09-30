@@ -46,6 +46,8 @@ services:
       - --jetstream
       - --store_dir
       - /data
+      - --http_port
+      - '8222'
     ports:
       - '${NATS_PORT}:4222'
       - '${NATS_MONITOR_PORT}:8222'
@@ -102,6 +104,9 @@ services:
       NATS_URL: nats://${PROJECT_NAME}-nats:4222
       EMBEDDER_RPM: 800
       LLM_RPM: 50
+      # Disable RAGLite table LLM enhancement by default. Table text is still
+      # indexed, but RAGLite will not call the analysis model to summarize tables.
+      WORKER_MAX_TABLES: ${RAGLITE_WORKER_MAX_TABLES:-0}
     ports:
       - '${RAGLITE_PORT}:5050'
     volumes:

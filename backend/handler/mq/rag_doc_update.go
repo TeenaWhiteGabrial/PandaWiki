@@ -69,9 +69,11 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 		return err
 	}
 
+	var latestTask *domain.NodeLearningTask
 	var activeTask *domain.NodeLearningTask
 	task, taskErr := h.nodeRepo.GetLatestNodeLearningTaskByDocID(ctx, event.ID)
 	if taskErr == nil {
+		latestTask = task
 		switch task.Status {
 		case consts.NodeLearningTaskCanceled, consts.NodeLearningTaskCancelRequested:
 			h.logger.Info("ignore rag doc update because task is canceled",
@@ -89,7 +91,7 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 		return taskErr
 	}
 	if activeTask != nil {
-		if activeTask.NodeReleaseID != release.ID || activeTask.NodeID != release.NodeID {
+		if !nodeLearningTaskMatchesRelease(activeTask, release) {
 			h.logger.Warn("ignore rag doc update because task and release mismatch",
 				log.String("doc_id", event.ID),
 				log.String("task_id", activeTask.ID),
@@ -124,14 +126,23 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 			ragInfo.TaskStatus = consts.NodeLearningTaskRunning
 		}
 	case consts.NodeRagStatusSucceeded:
+		completionTask := activeTask
+		if completionTask == nil && latestTask != nil && nodeLearningTaskMatchesRelease(latestTask, release) {
+			completionTask = latestTask
+		}
 		ragInfo.Status = consts.NodeRagStatusSucceeded
 		ragInfo.Message = event.Message
 		ragInfo.ActiveDocID = event.ID
 		ragInfo.ActiveReleaseID = release.ID
-		if activeTask != nil {
+		if completionTask != nil {
+			ragInfo.TaskID = completionTask.ID
+			ragInfo.TaskAction = completionTask.Action
 			ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
 			ragInfo.TaskMessage = event.Message
-			_ = h.nodeRepo.FinishNodeLearningTask(ctx, activeTask.ID, consts.NodeLearningTaskSucceeded, event.ID, "")
+			_ = h.nodeRepo.FinishNodeLearningTask(ctx, completionTask.ID, consts.NodeLearningTaskSucceeded, event.ID, "")
+		} else if shouldReconcileSucceededTaskStatus(ragInfo.TaskStatus) {
+			ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
+			ragInfo.TaskMessage = event.Message
 		}
 	case consts.NodeRagStatusFailed:
 		if !ragInfo.HasAvailableIndex() {
@@ -156,4 +167,20 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 
 	h.logger.Debug("node rag update success", log.String("doc_id", event.ID))
 	return nil
+}
+
+func nodeLearningTaskMatchesRelease(task *domain.NodeLearningTask, release *domain.NodeRelease) bool {
+	return task != nil &&
+		release != nil &&
+		task.NodeReleaseID == release.ID &&
+		task.NodeID == release.NodeID
+}
+
+func shouldReconcileSucceededTaskStatus(status consts.NodeLearningTaskStatus) bool {
+	switch status {
+	case consts.NodeLearningTaskFailed:
+		return true
+	default:
+		return false
+	}
 }

@@ -85,7 +85,10 @@ func NewNodeUsecase(
 
 const (
 	ragSyncChunkSize               = 10
-	nodeLearningTaskRunningTimeout = 2 * time.Hour
+	nodeLearningDispatchBatchSize  = 30
+	nodeLearningMaxRunningTasks    = 50
+	nodeLearningPendingRetryAfter  = 15 * time.Minute
+	nodeLearningTaskRunningTimeout = 24 * time.Hour
 )
 
 func (u *NodeUsecase) Create(ctx context.Context, req *domain.CreateNodeReq, userId string) (string, error) {
@@ -757,6 +760,7 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 				}
 				nodeID := release.NodeID
 
+				var latestTask *domain.NodeLearningTask
 				var activeTask *domain.NodeLearningTask
 				task, taskErr := u.nodeRepo.GetActiveNodeLearningTaskByDocID(ctx, doc.ID)
 				if taskErr == nil {
@@ -773,6 +777,18 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 					u.logger.Error("get active node learning task by doc id failed",
 						log.String("doc_id", doc.ID),
 						log.Error(taskErr))
+				}
+				if activeTask == nil {
+					task, taskErr := u.nodeRepo.GetLatestNodeLearningTaskByDocID(ctx, doc.ID)
+					if taskErr == nil {
+						if task.NodeReleaseID == release.ID && task.NodeID == release.NodeID {
+							latestTask = task
+						}
+					} else if !errors.Is(taskErr, gorm.ErrRecordNotFound) {
+						u.logger.Error("get latest node learning task by doc id failed",
+							log.String("doc_id", doc.ID),
+							log.Error(taskErr))
+					}
 				}
 
 				node, err := u.nodeRepo.GetNodeByID(ctx, nodeID)
@@ -793,18 +809,31 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 				status := consts.NodeRagInfoStatus(strings.ToUpper(doc.Status))
 				switch status {
 				case consts.NodeRagStatusSucceeded:
+					completionTask := activeTask
+					if completionTask == nil &&
+						latestTask != nil &&
+						latestTask.Status != consts.NodeLearningTaskCanceled &&
+						latestTask.Status != consts.NodeLearningTaskCancelRequested {
+						completionTask = latestTask
+					}
 					ragInfo.Status = consts.NodeRagStatusSucceeded
 					ragInfo.Message = doc.ProgressMsg
 					ragInfo.ActiveDocID = doc.ID
 					ragInfo.ActiveReleaseID = release.ID
-					if activeTask != nil {
+					if completionTask != nil {
+						ragInfo.TaskID = completionTask.ID
+						ragInfo.TaskAction = completionTask.Action
 						ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
-						if err := u.nodeRepo.FinishNodeLearningTask(ctx, activeTask.ID, consts.NodeLearningTaskSucceeded, doc.ID, ""); err != nil {
+						ragInfo.TaskMessage = doc.ProgressMsg
+						if err := u.nodeRepo.FinishNodeLearningTask(ctx, completionTask.ID, consts.NodeLearningTaskSucceeded, doc.ID, ""); err != nil {
 							u.logger.Error("finish node learning task as succeeded failed",
-								log.String("task_id", activeTask.ID),
+								log.String("task_id", completionTask.ID),
 								log.String("doc_id", doc.ID),
 								log.Error(err))
 						}
+					} else if shouldReconcileSucceededRagTaskStatus(ragInfo.TaskStatus) {
+						ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
+						ragInfo.TaskMessage = doc.ProgressMsg
 					}
 				case consts.NodeRagStatusFailed:
 					if !ragInfo.HasAvailableIndex() {
@@ -827,6 +856,18 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 					}
 					if activeTask != nil {
 						ragInfo.TaskStatus = consts.NodeLearningTaskRunning
+						if status == consts.NodeRagStatusPending && time.Since(activeTask.UpdatedAt) >= nodeLearningPendingRetryAfter {
+							if err := u.retryPendingNodeLearningTask(ctx, activeTask, release, doc); err != nil {
+								u.logger.Error("retry pending rag document failed",
+									log.String("kb_id", kb.ID),
+									log.String("node_id", nodeID),
+									log.String("task_id", activeTask.ID),
+									log.String("doc_id", doc.ID),
+									log.Error(err))
+							} else {
+								ragInfo.TaskMessage = "RAGLite 长时间等待索引，已自动重新提交"
+							}
+						}
 					}
 				default:
 					continue
@@ -849,6 +890,150 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 	return nil
 }
 
+func (u *NodeUsecase) DispatchWaitingNodeLearningTasksForAllKB(ctx context.Context) error {
+	kbs, err := u.kbRepo.GetKnowledgeBaseList(ctx)
+	if err != nil {
+		return err
+	}
+	for _, kb := range kbs {
+		if _, err := u.DispatchWaitingNodeLearningTasks(ctx, kb.ID); err != nil {
+			u.logger.Error("dispatch waiting node learning tasks failed",
+				log.String("kb_id", kb.ID),
+				log.Error(err))
+		}
+	}
+	return nil
+}
+
+func (u *NodeUsecase) DispatchWaitingNodeLearningTasks(ctx context.Context, kbID string) (int, error) {
+	runningCount, err := u.nodeRepo.CountNodeLearningTasksByStatus(ctx, kbID, consts.NodeLearningTaskRunning)
+	if err != nil {
+		return 0, err
+	}
+	available := nodeLearningMaxRunningTasks - int(runningCount)
+	if available <= 0 {
+		return 0, nil
+	}
+	limit := nodeLearningDispatchBatchSize
+	if available < limit {
+		limit = available
+	}
+	tasks, err := u.nodeRepo.AcquireWaitingNodeLearningTasks(ctx, kbID, limit)
+	if err != nil {
+		return 0, err
+	}
+	if len(tasks) == 0 {
+		return 0, nil
+	}
+
+	dispatched := 0
+	for _, task := range tasks {
+		if err := u.dispatchNodeLearningTask(ctx, task); err != nil {
+			u.logger.Error("dispatch node learning task failed",
+				log.String("kb_id", task.KBID),
+				log.String("node_id", task.NodeID),
+				log.String("task_id", task.ID),
+				log.Error(err))
+			continue
+		}
+		dispatched++
+	}
+	if dispatched > 0 {
+		u.logger.Info("dispatched waiting node learning tasks",
+			log.String("kb_id", kbID),
+			log.Int("count", dispatched),
+			log.Int("max_running", nodeLearningMaxRunningTasks))
+	}
+	return dispatched, nil
+}
+
+func (u *NodeUsecase) dispatchNodeLearningTask(ctx context.Context, task *domain.NodeLearningTask) error {
+	node, err := u.nodeRepo.GetNodeByID(ctx, task.NodeID)
+	if err != nil {
+		_ = u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, task.DocID, err.Error())
+		return err
+	}
+	ragInfo := node.RagInfo
+	if !ragInfo.HasAvailableIndex() {
+		ragInfo.Status = consts.NodeRagStatusRunning
+		ragInfo.Message = "正在提交索引任务"
+	}
+	ragInfo.TaskID = task.ID
+	ragInfo.TaskAction = task.Action
+	ragInfo.TaskStatus = consts.NodeLearningTaskRunning
+	ragInfo.TaskMessage = "已进入索引队列"
+	ragInfo.SyncedAt = time.Now()
+	if err := u.nodeRepo.UpdateNodeRagInfo(ctx, task.KBID, task.NodeID, ragInfo); err != nil {
+		_ = u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, task.DocID, err.Error())
+		return err
+	}
+	if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, []*domain.NodeReleaseVectorRequest{
+		{
+			KBID:          task.KBID,
+			NodeReleaseID: task.NodeReleaseID,
+			NodeID:        task.NodeID,
+			TaskID:        task.ID,
+			Action:        "upsert",
+		},
+	}); err != nil {
+		ragInfo.TaskStatus = consts.NodeLearningTaskFailed
+		ragInfo.TaskMessage = err.Error()
+		if !node.RagInfo.HasAvailableIndex() {
+			ragInfo.Status = consts.NodeRagStatusFailed
+			ragInfo.Message = err.Error()
+		}
+		_ = u.nodeRepo.UpdateNodeRagInfo(ctx, task.KBID, task.NodeID, ragInfo)
+		_ = u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, task.DocID, err.Error())
+		return err
+	}
+	return nil
+}
+
+func (u *NodeUsecase) retryPendingNodeLearningTask(ctx context.Context, task *domain.NodeLearningTask, release *domain.NodeRelease, doc rag.Document) error {
+	if task == nil || release == nil {
+		return nil
+	}
+	if task.Status != consts.NodeLearningTaskRunning {
+		return nil
+	}
+	runningSince := task.CreatedAt
+	if task.StartedAt != nil {
+		runningSince = *task.StartedAt
+	}
+	if time.Since(runningSince) >= nodeLearningTaskRunningTimeout {
+		return nil
+	}
+	if release.DocID == "" || release.DocID != doc.ID {
+		return nil
+	}
+	u.logger.Warn("pending rag document timed out, requeue node learning task",
+		log.String("task_id", task.ID),
+		log.String("node_id", release.NodeID),
+		log.String("node_release_id", release.ID),
+		log.String("doc_id", doc.ID),
+		log.String("status", doc.Status),
+		log.String("progress_msg", doc.ProgressMsg),
+		log.String("retry_after", nodeLearningPendingRetryAfter.String()))
+	return u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, []*domain.NodeReleaseVectorRequest{
+		{
+			KBID:          release.KBID,
+			NodeReleaseID: release.ID,
+			NodeID:        release.NodeID,
+			TaskID:        task.ID,
+			Action:        "upsert",
+		},
+	})
+}
+
+func shouldReconcileSucceededRagTaskStatus(status consts.NodeLearningTaskStatus) bool {
+	switch status {
+	case consts.NodeLearningTaskFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 func (u *NodeUsecase) ExpireStaleNodeLearningTasks(ctx context.Context) (int, error) {
 	tasks, err := u.nodeRepo.ListStaleRunningNodeLearningTasks(ctx, time.Now().Add(-nodeLearningTaskRunningTimeout), 200)
 	if err != nil {
@@ -858,7 +1043,7 @@ func (u *NodeUsecase) ExpireStaleNodeLearningTasks(ctx context.Context) (int, er
 		return 0, nil
 	}
 
-	const message = "索引重建超时：RAGLite 长时间停留在索引中，请重试重建索引"
+	const message = "索引重建超时：RAGLite 超过 24 小时未返回最终状态，请检查 RAGLite/NATS 队列后重试重建索引"
 	for _, task := range tasks {
 		if err := u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, task.DocID, message); err != nil {
 			u.logger.Error("finish stale node learning task failed",
@@ -948,6 +1133,7 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 		return fmt.Errorf("文档未首次发布，无法重新学习")
 	}
 
+	createdCount := 0
 	for _, nodeRelease := range nodeReleases {
 		node, getNodeErr := u.nodeRepo.GetNodeByID(ctx, nodeRelease.NodeID)
 		if getNodeErr != nil {
@@ -977,16 +1163,19 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 				log.String("task_status", string(task.Status)))
 			continue
 		}
+		createdCount++
 
 		ragInfo := node.RagInfo
 		if !ragInfo.HasAvailableIndex() {
-			ragInfo.Status = consts.NodeRagStatusRunning
+			ragInfo.Status = consts.NodeRagStatusPending
+			ragInfo.Message = "等待进入索引队列"
+		} else {
+			ragInfo.Message = ""
 		}
-		ragInfo.Message = ""
-		ragInfo.TaskStatus = consts.NodeLearningTaskRunning
+		ragInfo.TaskStatus = consts.NodeLearningTaskWaiting
 		ragInfo.TaskID = task.ID
 		ragInfo.TaskAction = task.Action
-		ragInfo.TaskMessage = ""
+		ragInfo.TaskMessage = "排队中"
 		ragInfo.SyncedAt = time.Now()
 		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, domain.RagInfo{
 			Status:          ragInfo.Status,
@@ -1005,28 +1194,14 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 			_ = u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, "", err.Error())
 			continue
 		}
+	}
 
-		if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, []*domain.NodeReleaseVectorRequest{
-			{
-				KBID:          nodeRelease.KBID,
-				NodeReleaseID: nodeRelease.ID,
-				NodeID:        nodeRelease.NodeID,
-				TaskID:        task.ID,
-				Action:        "upsert",
-			},
-		}); err != nil {
-			u.logger.Error("async update node release vector failed",
-				log.String("node_release_id", nodeRelease.ID),
+	if createdCount > 0 {
+		if _, err := u.DispatchWaitingNodeLearningTasks(ctx, req.KbId); err != nil {
+			u.logger.Error("dispatch waiting node learning tasks after restudy failed",
+				log.String("kb_id", req.KbId),
 				log.Error(err))
-			ragInfo.TaskStatus = consts.NodeLearningTaskFailed
-			ragInfo.TaskMessage = err.Error()
-			if !node.RagInfo.HasAvailableIndex() {
-				ragInfo.Status = consts.NodeRagStatusFailed
-				ragInfo.Message = err.Error()
-			}
-			_ = u.nodeRepo.UpdateNodeRagInfo(ctx, nodeRelease.KBID, nodeRelease.NodeID, ragInfo)
-			_ = u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, "", err.Error())
-			continue
+			return fmt.Errorf("提交学习任务失败")
 		}
 	}
 

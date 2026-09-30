@@ -72,6 +72,14 @@ export function getRagStatusMeta(
 
   switch (taskStatus) {
     case ConstsNodeLearningTaskStatus.NodeLearningTaskWaiting:
+      return {
+        label: '排队中',
+        color: 'info',
+        tagColor: 'info',
+        message: taskMessage,
+        polling: true,
+        available,
+      };
     case ConstsNodeLearningTaskStatus.NodeLearningTaskRunning:
       return {
         label: getTaskRunningLabel(taskAction),

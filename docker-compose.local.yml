@@ -55,6 +55,8 @@ services:
       - --jetstream
       - --store_dir
       - /data
+      - --http_port
+      - '8222'
     ports:
       - '4222:4222'
       - '8222:8222'
@@ -117,6 +119,9 @@ services:
       NATS_URL: nats://panda-wiki-nats:4222
       EMBEDDER_RPM: 800
       LLM_RPM: 50
+      # Disable RAGLite table LLM enhancement by default. Table text is still
+      # indexed, but RAGLite will not call the analysis model to summarize tables.
+      WORKER_MAX_TABLES: ${RAGLITE_WORKER_MAX_TABLES:-0}
     ports:
       - '5050:5050'
     volumes:

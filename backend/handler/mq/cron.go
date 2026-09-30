@@ -55,12 +55,20 @@ func NewCronHandler(logger *log.Logger, statRepo *pg.StatRepository, nodeRepo *p
 		if err := h.nodeUseCase.SyncRagNodeStatus(context.Background()); err != nil {
 			h.logger.Error("initial sync rag node status failed", log.Error(err))
 		}
+		if err := h.nodeUseCase.DispatchWaitingNodeLearningTasksForAllKB(context.Background()); err != nil {
+			h.logger.Error("initial dispatch waiting node learning tasks failed", log.Error(err))
+		}
 	}()
 	if _, err := cron.AddFunc("26 * * * *", h.SyncRagNodeStatus); err != nil {
 		h.logger.Error("failed to sync rag node status", log.Error(err))
 		return nil, err
 	}
 	h.logger.Info("add cron job", log.String("cron_id", "sync_rag_node_status"))
+	if _, err := cron.AddFunc("*/1 * * * *", h.DispatchWaitingNodeLearningTasks); err != nil {
+		h.logger.Error("failed to add cron job for dispatching waiting node learning tasks", log.Error(err))
+		return nil, err
+	}
+	h.logger.Info("add cron job", log.String("cron_id", "dispatch_waiting_node_learning_tasks"))
 
 	// 每天2点执行清理30天前的node_release_backup数据
 	if _, err := cron.AddFunc("0 2 * * *", h.CleanupOldNodeReleaseBackups); err != nil {
@@ -121,6 +129,15 @@ func (h *CronHandler) SyncRagNodeStatus() {
 		return
 	}
 	h.logger.Info("sync rag node status successful")
+}
+
+func (h *CronHandler) DispatchWaitingNodeLearningTasks() {
+	h.logger.Info("dispatch waiting node learning tasks")
+	if err := h.nodeUseCase.DispatchWaitingNodeLearningTasksForAllKB(context.Background()); err != nil {
+		h.logger.Error("dispatch waiting node learning tasks failed", log.Error(err))
+		return
+	}
+	h.logger.Info("dispatch waiting node learning tasks successful")
 }
 
 func (h *CronHandler) CleanupOldNodeReleaseBackups() {

@@ -1195,8 +1195,8 @@ func (r *NodeRepository) ListStaleRunningNodeLearningTasks(ctx context.Context, 
 	err := r.db.WithContext(ctx).
 		Model(&domain.NodeLearningTask{}).
 		Where("status = ?", consts.NodeLearningTaskRunning).
-		Where("COALESCE(started_at, updated_at, created_at) < ?", before).
-		Order("COALESCE(started_at, updated_at, created_at) ASC").
+		Where("COALESCE(started_at, created_at) < ?", before).
+		Order("COALESCE(started_at, created_at) ASC").
 		Limit(limit).
 		Find(&tasks).Error
 	if err != nil {
@@ -1239,6 +1239,66 @@ func (r *NodeRepository) MarkNodeLearningTaskRunning(ctx context.Context, taskID
 		return nil, false, err
 	}
 	return task, task.Status == consts.NodeLearningTaskRunning, nil
+}
+
+func (r *NodeRepository) CountNodeLearningTasksByStatus(ctx context.Context, kbID string, statuses ...consts.NodeLearningTaskStatus) (int64, error) {
+	var count int64
+	query := r.db.WithContext(ctx).
+		Model(&domain.NodeLearningTask{}).
+		Where("kb_id = ?", kbID)
+	if len(statuses) > 0 {
+		query = query.Where("status IN ?", statuses)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *NodeRepository) AcquireWaitingNodeLearningTasks(ctx context.Context, kbID string, limit int) ([]*domain.NodeLearningTask, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	tasks := make([]*domain.NodeLearningTask, 0, limit)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.
+			Model(&domain.NodeLearningTask{}).
+			Where("kb_id = ? AND status = ?", kbID, consts.NodeLearningTaskWaiting).
+			Order("created_at ASC").
+			Limit(limit).
+			Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Find(&tasks).Error; err != nil {
+			return err
+		}
+		if len(tasks) == 0 {
+			return nil
+		}
+		taskIDs := make([]string, 0, len(tasks))
+		for _, task := range tasks {
+			taskIDs = append(taskIDs, task.ID)
+		}
+		now := time.Now()
+		if err := tx.
+			Model(&domain.NodeLearningTask{}).
+			Where("id IN ?", taskIDs).
+			Updates(map[string]any{
+				"status":     consts.NodeLearningTaskRunning,
+				"started_at": &now,
+				"updated_at": now,
+			}).Error; err != nil {
+			return err
+		}
+		for _, task := range tasks {
+			task.Status = consts.NodeLearningTaskRunning
+			task.StartedAt = &now
+			task.UpdatedAt = now
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
 }
 
 func (r *NodeRepository) UpdateNodeLearningTaskDocID(ctx context.Context, taskID, docID string) error {
@@ -1773,19 +1833,32 @@ func (r *NodeRepository) GetNodeIdsWithoutStatusByKbId(ctx context.Context, kbId
 			LIMIT 1
 		) latest_release ON TRUE`).
 		Where(`(
-			nodes.rag_info ->> 'status' IS NULL
-			OR nodes.rag_info ->> 'status' = ''
-			OR nodes.rag_info ->> 'status' IN ?
+			(
+				(
+					nodes.rag_info ->> 'status' IS NULL
+					OR nodes.rag_info ->> 'status' = ''
+					OR nodes.rag_info ->> 'status' IN ?
+				)
+				AND COALESCE(nodes.rag_info ->> 'task_status', '') != ?
+			)
 			OR nodes.rag_info ->> 'task_status' IN ?
+			OR (
+				nodes.rag_info ->> 'status' = ?
+				AND nodes.rag_info ->> 'task_status' = ?
+			)
 		)`, []string{
 			string(consts.NodeRagStatusPending),
 			string(consts.NodeRagStatusRunning),
 			string(consts.NodeRagStatusReindexing),
-		}, []string{
+		},
 			string(consts.NodeLearningTaskWaiting),
-			string(consts.NodeLearningTaskRunning),
-			string(consts.NodeLearningTaskCancelRequested),
-		}).
+			[]string{
+				string(consts.NodeLearningTaskRunning),
+				string(consts.NodeLearningTaskCancelRequested),
+			},
+			string(consts.NodeRagStatusSucceeded),
+			string(consts.NodeLearningTaskFailed),
+		).
 		Where("nodes.kb_id = ?", kbId).
 		Where("nodes.type = ?", domain.NodeTypeDocument).
 		Distinct("latest_release.doc_id").
