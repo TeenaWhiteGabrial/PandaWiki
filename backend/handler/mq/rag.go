@@ -72,7 +72,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 				h.logger.Error("get node learning task failed",
 					log.String("task_id", request.TaskID),
 					log.Error(taskErr))
-				return nil
+				return taskErr
 			}
 			if !shouldRun {
 				h.logger.Info("skip upsert because node learning task is not runnable",
@@ -91,12 +91,15 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 		}
 		if nodeRelease.Type == domain.NodeTypeFolder {
 			h.logger.Info("node is folder, skip upsert", log.Any("node_release_id", request.NodeReleaseID))
+			if request.TaskID != "" {
+				_ = h.nodeRepo.FinishNodeLearningTask(ctx, request.TaskID, consts.NodeLearningTaskSkipped, request.DocID, "目录无需建立索引")
+			}
 			return nil
 		}
 		kb, err := h.kbRepo.GetKnowledgeBaseByID(ctx, request.KBID)
 		if err != nil {
 			h.logger.Error("get kb failed", log.Error(err), log.String("kb_id", request.KBID))
-			return nil
+			return err
 		}
 		if strings.TrimSpace(nodeRelease.Content) == "" && nodeRelease.Meta.FileKey != "" {
 			content := ""
@@ -123,7 +126,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 				h.logger.Error("update node release extracted content failed",
 					log.String("node_release_id", nodeRelease.ID),
 					log.Error(err))
-				return nil
+				return err
 			}
 		}
 

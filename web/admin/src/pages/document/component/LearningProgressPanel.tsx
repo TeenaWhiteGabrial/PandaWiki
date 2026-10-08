@@ -238,7 +238,11 @@ const LearningProgressPanel = ({
     setSelectedIds([]);
   };
 
-  const submitRestudy = (items: LearningDoc[], emptyMessage: string) => {
+  const submitRestudy = (
+    items: LearningDoc[],
+    emptyMessage: string,
+    priority = 10,
+  ) => {
     if (!kb_id) return;
     const ids = Array.from(
       new Set(items.map(item => item.id).filter(Boolean) as string[]),
@@ -251,6 +255,7 @@ const LearningProgressPanel = ({
     postApiV1NodeRestudy({
       kb_id,
       node_ids: ids,
+      priority,
     })
       .then(() => {
         message.success(`已提交 ${ids.length} 个文档，后台正在学习/重建索引`);
@@ -292,7 +297,7 @@ const LearningProgressPanel = ({
       okText: '确认重建',
       cancelText: '取消',
       onOk: () => {
-        submitRestudy(selectedDocs, '请先勾选需要重建索引的文档');
+        submitRestudy(selectedDocs, '请先勾选需要重建索引的文档', 100);
       },
     });
   };

@@ -95,6 +95,7 @@ const DocPageListContainer = ({
       postApiV1NodeRestudy({
         kb_id,
         node_ids: [item.id],
+        priority: 100,
       }).then(() => {
         message.success('正在重建问答索引');
         refresh();

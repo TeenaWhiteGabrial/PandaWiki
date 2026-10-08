@@ -61,7 +61,10 @@ type NodePermissionEditResp struct {
 type NodeRestudyReq struct {
 	NodeIds []string `json:"node_ids" validate:"required,min=1"`
 	KbId    string   `json:"kb_id" validate:"required"`
-	UserID  string   `json:"-"`
+	// Priority controls queue ordering. Interactive requests may use a higher
+	// value so a manually selected document is not blocked by a bulk rebuild.
+	Priority int    `json:"priority,omitempty"`
+	UserID   string `json:"-"`
 }
 
 type NodeRestudyResp struct {

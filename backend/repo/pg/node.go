@@ -1228,8 +1228,11 @@ func (r *NodeRepository) MarkNodeLearningTaskRunning(ctx context.Context, taskID
 			consts.NodeLearningTaskRunning,
 		}).
 		Updates(map[string]any{
-			"status":     consts.NodeLearningTaskRunning,
-			"started_at": &now,
+			"status": consts.NodeLearningTaskRunning,
+			// A pending RAGLite document may be observed more than once. Keep
+			// the original start time so retries/status polling cannot postpone
+			// stale-task cleanup indefinitely.
+			"started_at": gorm.Expr("COALESCE(started_at, ?)", now),
 			"updated_at": now,
 		}).Error; err != nil {
 		return nil, false, err
@@ -1264,7 +1267,7 @@ func (r *NodeRepository) AcquireWaitingNodeLearningTasks(ctx context.Context, kb
 		if err := tx.
 			Model(&domain.NodeLearningTask{}).
 			Where("kb_id = ? AND status = ?", kbID, consts.NodeLearningTaskWaiting).
-			Order("created_at ASC").
+			Order("priority DESC, created_at ASC").
 			Limit(limit).
 			Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 			Find(&tasks).Error; err != nil {
@@ -1850,6 +1853,7 @@ func (r *NodeRepository) GetNodeIdsWithoutStatusByKbId(ctx context.Context, kbId
 			string(consts.NodeRagStatusPending),
 			string(consts.NodeRagStatusRunning),
 			string(consts.NodeRagStatusReindexing),
+			string(consts.NodeRagStatusFailed),
 		},
 			string(consts.NodeLearningTaskWaiting),
 			[]string{

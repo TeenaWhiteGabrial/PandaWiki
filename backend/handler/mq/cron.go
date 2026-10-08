@@ -55,11 +55,16 @@ func NewCronHandler(logger *log.Logger, statRepo *pg.StatRepository, nodeRepo *p
 		if err := h.nodeUseCase.SyncRagNodeStatus(context.Background()); err != nil {
 			h.logger.Error("initial sync rag node status failed", log.Error(err))
 		}
+		if count, err := h.nodeUseCase.ExpireStaleNodeLearningTasks(context.Background()); err != nil {
+			h.logger.Error("initial expire stale node learning tasks failed", log.Error(err))
+		} else if count > 0 {
+			h.logger.Warn("expired stale node learning tasks on startup", log.Int("count", count))
+		}
 		if err := h.nodeUseCase.DispatchWaitingNodeLearningTasksForAllKB(context.Background()); err != nil {
 			h.logger.Error("initial dispatch waiting node learning tasks failed", log.Error(err))
 		}
 	}()
-	if _, err := cron.AddFunc("26 * * * *", h.SyncRagNodeStatus); err != nil {
+	if _, err := cron.AddFunc("*/5 * * * *", h.SyncRagNodeStatus); err != nil {
 		h.logger.Error("failed to sync rag node status", log.Error(err))
 		return nil, err
 	}
@@ -69,6 +74,11 @@ func NewCronHandler(logger *log.Logger, statRepo *pg.StatRepository, nodeRepo *p
 		return nil, err
 	}
 	h.logger.Info("add cron job", log.String("cron_id", "dispatch_waiting_node_learning_tasks"))
+	if _, err := cron.AddFunc("*/1 * * * *", h.ExpireStaleNodeLearningTasks); err != nil {
+		h.logger.Error("failed to add cron job for expiring stale node learning tasks", log.Error(err))
+		return nil, err
+	}
+	h.logger.Info("add cron job", log.String("cron_id", "expire_stale_node_learning_tasks"))
 
 	// 每天2点执行清理30天前的node_release_backup数据
 	if _, err := cron.AddFunc("0 2 * * *", h.CleanupOldNodeReleaseBackups); err != nil {
@@ -138,6 +148,20 @@ func (h *CronHandler) DispatchWaitingNodeLearningTasks() {
 		return
 	}
 	h.logger.Info("dispatch waiting node learning tasks successful")
+}
+
+func (h *CronHandler) ExpireStaleNodeLearningTasks() {
+	count, err := h.nodeUseCase.ExpireStaleNodeLearningTasks(context.Background())
+	if err != nil {
+		h.logger.Error("expire stale node learning tasks failed", log.Error(err))
+		return
+	}
+	if count > 0 {
+		h.logger.Warn("expired stale node learning tasks", log.Int("count", count))
+		if err := h.nodeUseCase.DispatchWaitingNodeLearningTasksForAllKB(context.Background()); err != nil {
+			h.logger.Error("dispatch waiting node learning tasks after expiration failed", log.Error(err))
+		}
+	}
 }
 
 func (h *CronHandler) CleanupOldNodeReleaseBackups() {

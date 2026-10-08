@@ -510,16 +510,24 @@ func chunkStringSlice(items []string, size int) [][]string {
 }
 
 func ShouldExtractReleaseFileContent(release *domain.NodeReleaseWithDirPath) bool {
-	fileType := normalizeReleaseFileType(release)
-	switch fileType {
-	case "mp4", "webm", "ogv", "mov", "m4v",
-		"mp3", "wav", "ogg", "oga", "m4a", "aac", "flac",
-		"png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif",
-		"zip", "rar", "7z", "tar", "gz":
-		return false
-	default:
+	if release == nil {
 		return true
 	}
+	// Generic MIME types must not override a recognizable media filename.
+	for _, fileType := range []string{
+		normalizeReleaseFileType(release),
+		strings.TrimPrefix(strings.ToLower(filepath.Ext(release.Meta.FileName)), "."),
+		strings.TrimPrefix(strings.ToLower(filepath.Ext(release.Name)), "."),
+	} {
+		switch fileType {
+		case "mp4", "webm", "ogv", "mov", "m4v",
+			"mp3", "wav", "ogg", "oga", "m4a", "aac", "flac",
+			"png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif",
+			"zip", "rar", "7z", "tar", "gz":
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeReleaseFileType(release *domain.NodeReleaseWithDirPath) string {

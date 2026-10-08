@@ -78,6 +78,7 @@ const RagErrorReStart = ({
       postApiV1NodeRestudy({
         kb_id,
         node_ids: [...selected],
+        priority: 10,
       }).then(() => {
         message.success('正在重建问答索引');
         setSelected([]);

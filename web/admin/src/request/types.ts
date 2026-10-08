@@ -1896,6 +1896,7 @@ export interface V1NodeRestudyReq {
   kb_id: string;
   /** @minItems 1 */
   node_ids: string[];
+  priority?: number;
 }
 
 export type V1NodeRestudyResp = Record<string, any>;

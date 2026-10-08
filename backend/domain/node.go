@@ -425,6 +425,7 @@ type NodeLearningTask struct {
 	NodeReleaseID string                        `json:"node_release_id" gorm:"index"`
 	Action        consts.NodeLearningTaskAction `json:"action"`
 	Status        consts.NodeLearningTaskStatus `json:"status" gorm:"index"`
+	Priority      int                           `json:"priority" gorm:"index"`
 	DocID         string                        `json:"doc_id" gorm:"index"`
 	ErrorMessage  string                        `json:"error_message"`
 	TriggeredBy   string                        `json:"triggered_by"`

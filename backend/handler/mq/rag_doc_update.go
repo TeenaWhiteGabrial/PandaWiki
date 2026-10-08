@@ -102,12 +102,13 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 	}
 
 	status := consts.NodeRagInfoStatus(strings.ToUpper(event.Status))
+	statusMessage := ragDocStatusMessage(status, event.Message)
 	ragInfo := node.RagInfo
 	ragInfo.SyncedAt = time.Now()
 	if activeTask != nil {
 		ragInfo.TaskID = activeTask.ID
 		ragInfo.TaskAction = activeTask.Action
-		ragInfo.TaskMessage = event.Message
+		ragInfo.TaskMessage = statusMessage
 	}
 
 	switch status {
@@ -120,7 +121,7 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 		}
 		if !ragInfo.HasAvailableIndex() {
 			ragInfo.Status = status
-			ragInfo.Message = event.Message
+			ragInfo.Message = statusMessage
 		}
 		if activeTask != nil {
 			ragInfo.TaskStatus = consts.NodeLearningTaskRunning
@@ -131,14 +132,14 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 			completionTask = latestTask
 		}
 		ragInfo.Status = consts.NodeRagStatusSucceeded
-		ragInfo.Message = event.Message
+		ragInfo.Message = statusMessage
 		ragInfo.ActiveDocID = event.ID
 		ragInfo.ActiveReleaseID = release.ID
 		if completionTask != nil {
 			ragInfo.TaskID = completionTask.ID
 			ragInfo.TaskAction = completionTask.Action
 			ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
-			ragInfo.TaskMessage = event.Message
+			ragInfo.TaskMessage = statusMessage
 			_ = h.nodeRepo.FinishNodeLearningTask(ctx, completionTask.ID, consts.NodeLearningTaskSucceeded, event.ID, "")
 		} else if shouldReconcileSucceededTaskStatus(ragInfo.TaskStatus) {
 			ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
@@ -147,12 +148,12 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 	case consts.NodeRagStatusFailed:
 		if !ragInfo.HasAvailableIndex() {
 			ragInfo.Status = consts.NodeRagStatusFailed
-			ragInfo.Message = event.Message
+			ragInfo.Message = statusMessage
 		}
 		if activeTask != nil {
 			ragInfo.TaskStatus = consts.NodeLearningTaskFailed
-			ragInfo.TaskMessage = event.Message
-			_ = h.nodeRepo.FinishNodeLearningTask(ctx, activeTask.ID, consts.NodeLearningTaskFailed, event.ID, event.Message)
+			ragInfo.TaskMessage = statusMessage
+			_ = h.nodeRepo.FinishNodeLearningTask(ctx, activeTask.ID, consts.NodeLearningTaskFailed, event.ID, statusMessage)
 		}
 	default:
 		h.logger.Warn("ignore unknown rag doc update status",
@@ -167,6 +168,26 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 
 	h.logger.Debug("node rag update success", log.String("doc_id", event.ID))
 	return nil
+}
+
+func ragDocStatusMessage(status consts.NodeRagInfoStatus, message string) string {
+	if strings.TrimSpace(message) != "" {
+		return message
+	}
+	switch status {
+	case consts.NodeRagStatusPending:
+		return "RAGLite 已接收，等待索引"
+	case consts.NodeRagStatusRunning:
+		return "RAGLite 正在解析并生成向量"
+	case consts.NodeRagStatusReindexing:
+		return "RAGLite 正在重建索引"
+	case consts.NodeRagStatusSucceeded:
+		return "索引已完成"
+	case consts.NodeRagStatusFailed:
+		return "RAGLite 索引失败"
+	default:
+		return "等待后台更新状态"
+	}
 }
 
 func nodeLearningTaskMatchesRelease(task *domain.NodeLearningTask, release *domain.NodeRelease) bool {
