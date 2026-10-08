@@ -1,5 +1,7 @@
 package domain
 
+const AdministratorOnlyCode = 40301
+
 type PWResponse struct {
 	Message string `json:"message"`
 	Success bool   `json:"success"`

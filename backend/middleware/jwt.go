@@ -61,18 +61,18 @@ func (m *JWTMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		return m.jwtMiddleware(func(c echo.Context) error {
-			if userID, ok := m.MustGetUserID(c); ok {
-				ctx := context.WithValue(c.Request().Context(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{
-					IsToken:    false,
-					Permission: consts.UserKBPermissionNull,
-					UserId:     userID,
-				})
-
-				req := c.Request().WithContext(ctx)
-				c.SetRequest(req)
-
-				m.userAccessRepo.UpdateAccessTime(userID)
+			userID, ok := m.MustGetUserID(c)
+			if !ok {
+				return c.JSON(http.StatusUnauthorized, domain.PWResponse{Success: false, Message: "Unauthorized"})
 			}
+			if !m.isAdministrator(userID) {
+				return administratorAccessDenied(c)
+			}
+			ctx := context.WithValue(c.Request().Context(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{
+				IsToken: false, Permission: consts.UserKBPermissionNull, UserId: userID,
+			})
+			c.SetRequest(c.Request().WithContext(ctx))
+			m.userAccessRepo.UpdateAccessTime(userID)
 			return next(c)
 		})(c)
 	}
@@ -96,6 +96,10 @@ func (m *JWTMiddleware) validateAPIToken(c echo.Context, token string, next echo
 			Message: "Unauthorized",
 		})
 	}
+	// Token ownership cannot bypass the administrator-only management policy.
+	if !m.isAdministrator(apiToken.UserID) {
+		return administratorAccessDenied(c)
+	}
 
 	ctx := context.WithValue(c.Request().Context(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{
 		IsToken:    true,
@@ -108,6 +112,18 @@ func (m *JWTMiddleware) validateAPIToken(c echo.Context, token string, next echo
 	c.SetRequest(req)
 
 	return next(c)
+}
+
+func (m *JWTMiddleware) isAdministrator(userID string) bool {
+	if m.userAccessRepo == nil {
+		return false
+	}
+	valid, err := m.userAccessRepo.ValidateRole(userID, consts.UserRoleManager)
+	return err == nil && valid
+}
+
+func administratorAccessDenied(c echo.Context) error {
+	return c.JSON(http.StatusForbidden, domain.PWResponse{Success: false, Message: "仅管理员可访问管理后台和管理文档，请使用用户端查阅文档", Code: domain.AdministratorOnlyCode})
 }
 
 func (m *JWTMiddleware) ValidateUserRole(role consts.UserRole) echo.MiddlewareFunc {
@@ -158,6 +174,19 @@ func (m *JWTMiddleware) ValidateKBUserPerm(perm consts.UserKBPermission) echo.Mi
 			}
 
 			kbId, _ := GetKbID(c)
+			if kbId == "" {
+				kbId = c.QueryParam("kb_id")
+			}
+			if kbId == "" && strings.HasPrefix(c.Path(), "/api/v1/file/upload/zip/tasks/:id") {
+				if task, err := m.userAccessRepo.ManagementZipTarget(c.Request().Context(), c.Param("id")); err == nil {
+					kbId = task.KBID
+				}
+			}
+			if kbId == "" && strings.HasPrefix(c.Path(), "/api/v1/file/folder-download/:id") {
+				if task, err := m.userAccessRepo.ManagementDownloadTarget(c.Request().Context(), c.Param("id")); err == nil {
+					kbId = task.KBID
+				}
+			}
 
 			if authInfo.IsToken {
 
@@ -198,6 +227,11 @@ func (m *JWTMiddleware) ValidateKBUserPerm(perm consts.UserKBPermission) echo.Mi
 				}
 			}
 
+			if !authInfo.IsToken && perm == consts.UserKBPermissionDocManage {
+				if err := m.validateScopedDocumentOperation(c, kbId, authInfo.UserId); err != nil {
+					return c.JSON(http.StatusForbidden, domain.PWResponse{Success: false, Message: err.Error()})
+				}
+			}
 			return next(c)
 		}
 	}

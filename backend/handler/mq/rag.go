@@ -3,7 +3,9 @@ package mq
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
@@ -81,6 +83,13 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 				return nil
 			}
 		}
+		report := func(stage, message string) {
+			if err := h.nodeRepo.RecordNodeLearningStage(ctx, request.KBID, request.NodeID, request.TaskID, stage, message); err != nil {
+				h.logger.Error("record node learning stage failed", log.String("task_id", request.TaskID), log.String("stage", stage), log.Error(err))
+			}
+		}
+		report("preparing", "后台消费者已取到任务，读取发布版本")
+		ctx = usecase.WithLearningStageReporter(ctx, report)
 		nodeRelease, err := h.nodeRepo.GetNodeReleaseWithDirPathByID(ctx, request.NodeReleaseID)
 		if err != nil {
 			h.logger.Error("get node content by ids failed", log.Error(err))
@@ -114,6 +123,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 				if message == "" {
 					message = "内容解析未返回有效文本，仅索引文件元信息"
 				}
+				report("metadata", message)
 				content = usecase.BuildFileMetadataLearningContent(nodeRelease, message)
 				h.logger.Warn("extract node file content fallback to file metadata",
 					log.String("kb_id", nodeRelease.KBID),
@@ -121,6 +131,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 					log.String("node_release_id", nodeRelease.ID),
 					log.String("reason", message))
 			}
+			report("save_content", "保存已提取的正文或文件元信息")
 			nodeRelease.Content = content
 			if err := h.nodeRepo.UpdateNodeReleaseContent(ctx, nodeRelease.ID, content); err != nil {
 				h.logger.Error("update node release extracted content failed",
@@ -130,6 +141,11 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			}
 		}
 
+		if nodeRelease.Meta.FileKey != "" && !usecase.ShouldExtractReleaseFileContent(nodeRelease) {
+			report("metadata", "此文件仅索引名称、路径、类型；已跳过源文件下载和正文解析")
+		}
+
+		report("submit", fmt.Sprintf("提交文本至 RAGLite（%d 字符）；等待上传接口响应", utf8.RuneCountInString(nodeRelease.Content)))
 		// upsert node content chunks
 		docID, err := h.rag.UpsertRecords(ctx, &rag.UpsertRecordsRequest{
 			ID:        nodeRelease.ID,
@@ -158,6 +174,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			}
 			return nil
 		}
+		report("bind_doc", "RAGLite 已接收文本，保存文档 ID")
 		// update node doc_id
 		if err := h.nodeRepo.UpdateNodeReleaseDocID(ctx, request.NodeReleaseID, docID); err != nil {
 			h.logger.Error("update node doc_id failed", log.String("node_id", request.NodeReleaseID), log.Error(err))
@@ -174,6 +191,10 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 					log.Error(err))
 			}
 		}
+		if err := h.nodeRepo.ObserveNodeLearningRAG(ctx, request.KBID, nodeRelease.NodeID, request.TaskID, kb.DatasetID, docID, "", "", "upload", ""); err != nil {
+			h.logger.Error("record uploaded RAG document failed", log.Error(err))
+		}
+		report("rag_pending", "RAGLite 已接收文本，等待索引状态；等待的是文本向量任务，不是源文件上传")
 		// delete old RAG records
 		// get old doc_ids by node_id
 		oldDocIDs, err := h.nodeRepo.GetOldNodeDocIDsByNodeID(ctx, nodeRelease.ID, nodeRelease.NodeID)

@@ -54,6 +54,8 @@ const StyledTag = styled('div')<{ color: keyof Theme['palette'] }>(
 );
 
 const SCOPE_TYPE_MAP = {
+  permission_level: { label: '按等级', color: 'secondary' },
+  user: { label: '指定用户', color: 'success' },
   public: {
     label: '公开',
     color: 'primary',
@@ -89,7 +91,7 @@ const TreeItem = React.forwardRef<
     ui = 'move',
     selected = [],
     onSelectChange,
-    readOnly,
+    readOnly: contextReadOnly,
     supportSelect = false,
     menu,
     relativeSelect = true,
@@ -101,6 +103,7 @@ const TreeItem = React.forwardRef<
     onItemClick,
   } = context;
 
+  const readOnly = contextReadOnly || item.can_manage === false;
   const [value, setValue] = useState(item.name);
   const [emoji, setEmoji] = useState(item.emoji);
   const isEditting = item.isEditting ?? false;
@@ -223,6 +226,7 @@ const TreeItem = React.forwardRef<
   }, [isEditting]);
 
   const menuList = useMemo(() => {
+    if (readOnly) return [];
     if (menu) {
       return (
         menu({
@@ -231,11 +235,17 @@ const TreeItem = React.forwardRef<
           renameItem,
           isEditing: isEditting,
           removeItem,
-        }) || []
+        })?.filter(
+          option =>
+            !(
+              ['folder', 'batch-import-zip'].includes(option.key) &&
+              item.can_create_folder === false
+            ) && !(option.key === 'doc' && item.can_create_document === false),
+        ) || []
       );
     }
     return [];
-  }, [item, isEditting, createItem, renameItem, removeItem]);
+  }, [item, isEditting, createItem, renameItem, removeItem, readOnly]);
 
   const permissions = useMemo(() => {
     if (item.permissions) return item.permissions;

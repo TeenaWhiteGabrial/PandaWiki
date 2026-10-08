@@ -104,3 +104,27 @@ func TestPermissionInheritanceDefaultsAndLegacyOverrides(t *testing.T) {
 		t.Fatal("explicit inherit=false should override parent")
 	}
 }
+
+func TestReadingAudienceModesAndNavIntersection(t *testing.T) {
+	t.Setenv("DISABLE_PERMISSION_LEVELS", "false")
+	u := &EnterpriseUsecase{}
+	access := &domain.EnterpriseAccessContext{PrincipalID: "alice", PermissionLevelID: "staff", PermissionLevelRank: 5, DepartmentIDs: []string{"engineering"}}
+	for _, perm := range []domain.NodePermissions{
+		{ScopeType: "permission_level", AllowedPermissionLevelIDs: []string{"staff"}},
+		{ScopeType: "department", AllowedDepartmentIDs: []string{"engineering"}},
+		{ScopeType: "user", AllowedUserIDs: []string{"alice"}},
+	} {
+		if !u.CanVisitable(perm, access) {
+			t.Fatal("matching audience cannot read")
+		}
+		outsider := &domain.EnterpriseAccessContext{PrincipalID: "outsider", PermissionLevelID: "executive", PermissionLevelRank: 100, DepartmentIDs: []string{"sales"}}
+		if u.CanVisitable(perm, outsider) {
+			t.Fatal("outsider bypassed audience")
+		}
+	}
+	node := domain.NodePermissions{ScopeType: "user", AllowedUserIDs: []string{"alice"}}
+	nav := domain.NodePermissions{ScopeType: "user", AllowedUserIDs: []string{"bob"}}
+	if u.CanVisitable(u.MergeNodeAndNavPermissions(node, nav), access) {
+		t.Fatal("empty audience intersection must not become public")
+	}
+}

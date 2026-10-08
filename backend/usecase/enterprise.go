@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 
 	enterpriseV1 "github.com/chaitin/panda-wiki/api/enterprise/v1"
 	"github.com/chaitin/panda-wiki/config"
@@ -170,7 +169,7 @@ func (u *EnterpriseUsecase) ResolveNodePermissions(ctx context.Context, node *do
 
 	perm := node.Permissions
 	if !shouldInheritNodePermissions(perm, node.ParentID) {
-		return perm, nil
+		return u.normalizeResolvedNodePermissions(ctx, perm)
 	}
 
 	visited := map[string]struct{}{node.ID: {}}
@@ -183,22 +182,22 @@ func (u *EnterpriseUsecase) ResolveNodePermissions(ctx context.Context, node *do
 
 		parentNode, err := u.nodeRepo.GetNodeByID(ctx, parentID)
 		if err != nil {
-			return perm, nil
+			return u.normalizeResolvedNodePermissions(ctx, perm)
 		}
 		perm = parentNode.Permissions
 		if !shouldInheritNodePermissions(perm, parentNode.ParentID) {
-			return perm, nil
+			return u.normalizeResolvedNodePermissions(ctx, perm)
 		}
 		parentID = parentNode.ParentID
 	}
 
-	return perm, nil
+	return u.normalizeResolvedNodePermissions(ctx, perm)
 }
 
 func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nodeID, parentID string, current domain.NodePermissions) (domain.NodePermissions, error) {
 	perm := current
 	if !shouldInheritNodePermissions(perm, parentID) {
-		return perm, nil
+		return u.normalizeResolvedNodePermissions(ctx, perm)
 	}
 
 	visited := map[string]struct{}{nodeID: {}}
@@ -211,16 +210,16 @@ func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nod
 
 		parentNode, err := u.nodeRepo.GetNodeByID(ctx, nextParentID)
 		if err != nil {
-			return perm, nil
+			return u.normalizeResolvedNodePermissions(ctx, perm)
 		}
 		perm = parentNode.Permissions
 		if !shouldInheritNodePermissions(perm, parentNode.ParentID) {
-			return perm, nil
+			return u.normalizeResolvedNodePermissions(ctx, perm)
 		}
 		nextParentID = parentNode.ParentID
 	}
 
-	return perm, nil
+	return u.normalizeResolvedNodePermissions(ctx, perm)
 }
 
 func shouldInheritNodePermissions(perm domain.NodePermissions, parentID string) bool {
@@ -235,6 +234,7 @@ func shouldInheritNodePermissions(perm domain.NodePermissions, parentID string) 
 
 func hasExplicitNodePermissionRule(perm domain.NodePermissions) bool {
 	return perm.ScopeType != "" ||
+		len(perm.AllowedPermissionLevelIDs) > 0 ||
 		perm.MinPermissionLevelID != "" ||
 		perm.MinPermissionLevelRank > 0 ||
 		len(perm.AllowedDepartmentIDs) > 0 ||
@@ -252,37 +252,9 @@ func (u *EnterpriseUsecase) MergeNodeAndNavPermissions(nodePerm, navPerm domain.
 	}
 
 	merged := nodePerm
-	if merged.ScopeType == "" {
-		merged.ScopeType = navPerm.ScopeType
-	}
-	if merged.MinPermissionLevelRank < navPerm.MinPermissionLevelRank {
-		merged.MinPermissionLevelRank = navPerm.MinPermissionLevelRank
-	}
-	if merged.MinPermissionLevelID == "" {
-		merged.MinPermissionLevelID = navPerm.MinPermissionLevelID
-	}
-
-	if len(navPerm.AllowedDepartmentIDs) > 0 {
-		if len(merged.AllowedDepartmentIDs) == 0 {
-			merged.AllowedDepartmentIDs = append([]string(nil), navPerm.AllowedDepartmentIDs...)
-		} else {
-			merged.AllowedDepartmentIDs = lo.Intersect(merged.AllowedDepartmentIDs, navPerm.AllowedDepartmentIDs)
-		}
-	}
-	if len(navPerm.AllowedUserIDs) > 0 {
-		if len(merged.AllowedUserIDs) == 0 {
-			merged.AllowedUserIDs = append([]string(nil), navPerm.AllowedUserIDs...)
-		} else {
-			merged.AllowedUserIDs = lo.Intersect(merged.AllowedUserIDs, navPerm.AllowedUserIDs)
-		}
-	}
-
-	if len(navPerm.DeniedDepartmentIDs) > 0 {
-		merged.DeniedDepartmentIDs = lo.Uniq(append(append([]string(nil), merged.DeniedDepartmentIDs...), navPerm.DeniedDepartmentIDs...))
-	}
-	if len(navPerm.DeniedUserIDs) > 0 {
-		merged.DeniedUserIDs = lo.Uniq(append(append([]string(nil), merged.DeniedUserIDs...), navPerm.DeniedUserIDs...))
-	}
+	// Both rules must hold; intersecting lists can become empty and accidentally
+	// turn an impossible intersection into unrestricted access.
+	merged.Constraints = append(append([]domain.NodePermissions(nil), nodePerm.Constraints...), navPerm)
 
 	return merged
 }
@@ -321,6 +293,11 @@ func (u *EnterpriseUsecase) ListDescendantDepartmentIDs(ctx context.Context, dep
 }
 
 func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domain.EnterpriseAccessContext) bool {
+	for _, constraint := range perm.Constraints {
+		if !u.canAccess(constraint, access) {
+			return false
+		}
+	}
 	if !perm.HasEnterpriseRule() {
 		return true
 	}
@@ -342,6 +319,24 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 		}
 	}
 
+	// Explicit modes grant to the selected audience; legacy custom mode retains
+	// its minimum-rank requirement and department/user audience semantics.
+	switch perm.ScopeType {
+	case "permission_level":
+		if config.PermissionLevelsDisabled() {
+			return true
+		}
+		return access.PrincipalID != "" && access.PrincipalID != "visitor" && slices.Contains(perm.AllowedPermissionLevelIDs, access.PermissionLevelID)
+	case "user":
+		return slices.Contains(perm.AllowedUserIDs, access.PrincipalID) && access.PrincipalID != ""
+	case "department":
+		for _, id := range access.DepartmentIDs {
+			if slices.Contains(perm.AllowedDepartmentIDs, id) {
+				return true
+			}
+		}
+		return false
+	}
 	if len(perm.AllowedUserIDs) == 0 && len(perm.AllowedDepartmentIDs) == 0 {
 		return true
 	}
@@ -354,4 +349,40 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 		}
 	}
 	return false
+}
+
+func (u *EnterpriseUsecase) NormalizeNodePermissions(ctx context.Context, perm domain.NodePermissions) (domain.NodePermissions, error) {
+	if (perm.ScopeType == "permission_level" && len(perm.AllowedPermissionLevelIDs) == 0) || (perm.ScopeType == "department" && len(perm.AllowedDepartmentIDs) == 0) || (perm.ScopeType == "user" && len(perm.AllowedUserIDs) == 0) {
+		return perm, fmt.Errorf("请选择查阅权限的授权对象")
+	}
+
+	if perm.MinPermissionLevelID != "" {
+		level, err := u.repo.GetPermissionLevelByID(ctx, perm.MinPermissionLevelID)
+		if err != nil {
+			return perm, fmt.Errorf("权限等级不存在：%w", err)
+		}
+		if level.Status != domain.PermissionLevelStatusActive {
+			return perm, fmt.Errorf("权限等级已停用")
+		}
+		perm.MinPermissionLevelRank = level.Rank
+	} else {
+		perm.MinPermissionLevelRank = 0
+	}
+	for _, id := range perm.AllowedPermissionLevelIDs {
+		level, err := u.repo.GetPermissionLevelByID(ctx, id)
+		if err != nil {
+			return perm, err
+		}
+		if level.Status != domain.PermissionLevelStatusActive {
+			return perm, fmt.Errorf("权限等级已停用")
+		}
+	}
+	return perm, nil
+}
+
+func (u *EnterpriseUsecase) normalizeResolvedNodePermissions(ctx context.Context, perm domain.NodePermissions) (domain.NodePermissions, error) {
+	if !config.PermissionLevelsDisabled() && perm.MinPermissionLevelID != "" {
+		return u.NormalizeNodePermissions(ctx, perm)
+	}
+	return perm, nil
 }

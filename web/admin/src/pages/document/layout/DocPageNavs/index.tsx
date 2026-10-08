@@ -147,7 +147,7 @@ const SortableNavItem = ({
             },
           }}
         >
-          栏目权限
+          目录权限
         </Stack>
       ),
       onClick: onPermission,
@@ -371,6 +371,10 @@ const DocPageNavs = ({
         level: 0,
         type: 1,
         kind: 'nav',
+        can_manage: nav.can_manage ?? group?.can_manage,
+        can_create_document:
+          nav.can_create_document ?? group?.can_create_document,
+        can_create_folder: nav.can_create_folder ?? group?.can_create_folder,
         nav_id: nav.id!,
         children,
         canHaveChildren: (dragItem: ITreeItem) => dragItem.kind !== 'nav',
@@ -498,7 +502,7 @@ const DocPageNavs = ({
     }: Parameters<typeof documentMenu>[0]): TreeMenuItem[] => {
       if (item.kind !== 'nav') return [];
       const nav = sortedNavs.find(value => value.id === item.id);
-      if (!nav) return [];
+      if (!nav || nav.can_manage === false) return [];
 
       // 目录根节点和普通文件夹使用同一套内容操作：目录本身就是
       // 该导航下的第一层文件夹，创建时 parent_id 保持为空即可。
@@ -575,10 +579,9 @@ const DocPageNavs = ({
   const getNodeData = useCallback(
     (item: ITreeItem): DomainNodeListItemResp[] => {
       const group = groups.find(value => value.nav_id === item.nav_id);
-      const found = group
-        ? findItemInTree(convertToTree(group.list || []), item.id)
-        : null;
-      return found ? [found] : [item as unknown as DomainNodeListItemResp];
+      const found = group?.list?.find(node => node.id === item.id);
+      const node = found || findItemInTree([item], item.id);
+      return node ? [node] : [];
     },
     [groups],
   );
@@ -845,24 +848,29 @@ const DocPageNavs = ({
                 virtualized
               />
             </Box>
-            {!isSearching && (
-              <Box sx={{ px: 2, py: 1, borderTop: 1, borderColor: 'divider' }}>
-                <Button
-                  fullWidth
-                  variant='text'
-                  startIcon={
-                    <IconJiahao sx={{ fontSize: '10px !important' }} />
-                  }
-                  onClick={handleAdd}
-                  sx={{
-                    justifyContent: 'center',
-                    textTransform: 'none',
-                  }}
+            {!isSearching &&
+              !readOnlyUser &&
+              (sortedNavs.length === 0 ||
+                sortedNavs.some(nav => nav.can_configure !== false)) && (
+                <Box
+                  sx={{ px: 2, py: 1, borderTop: 1, borderColor: 'divider' }}
                 >
-                  添加目录
-                </Button>
-              </Box>
-            )}
+                  <Button
+                    fullWidth
+                    variant='text'
+                    startIcon={
+                      <IconJiahao sx={{ fontSize: '10px !important' }} />
+                    }
+                    onClick={handleAdd}
+                    sx={{
+                      justifyContent: 'center',
+                      textTransform: 'none',
+                    }}
+                  >
+                    添加目录
+                  </Button>
+                </Box>
+              )}
           </>
         )}
       </Card>

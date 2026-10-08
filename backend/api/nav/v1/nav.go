@@ -51,10 +51,20 @@ type NavMoveReq struct {
 }
 
 type NavListResp struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Position    float64                `json:"position"`
-	Permissions domain.NodePermissions `json:"permissions"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
+	CanManage         bool                   `json:"can_manage" gorm:"-"`
+	CanCreateDocument bool                   `json:"can_create_document" gorm:"-"`
+	CanCreateFolder   bool                   `json:"can_create_folder" gorm:"-"`
+	CanConfigure      bool                   `json:"can_configure" gorm:"-"`
+	ID                string                 `json:"id"`
+	Name              string                 `json:"name"`
+	Position          float64                `json:"position"`
+	Permissions       domain.NodePermissions `json:"permissions"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+}
+
+type NavManagementEditReq struct {
+	KBID   string                           `json:"kb_id" validate:"required"`
+	ID     string                           `json:"id" validate:"required"`
+	Grants []domain.DocumentManagementGrant `json:"grants"`
 }

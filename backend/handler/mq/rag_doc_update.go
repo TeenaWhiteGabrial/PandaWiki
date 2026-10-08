@@ -103,6 +103,11 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 
 	status := consts.NodeRagInfoStatus(strings.ToUpper(event.Status))
 	statusMessage := ragDocStatusMessage(status, event.Message)
+	if latestTask != nil && nodeLearningTaskMatchesRelease(latestTask, release) {
+		if err := h.nodeRepo.ObserveNodeLearningRAG(ctx, release.KBID, release.NodeID, latestTask.ID, "", event.ID, string(status), statusMessage, "event", ""); err != nil {
+			return err
+		}
+	}
 	ragInfo := node.RagInfo
 	ragInfo.SyncedAt = time.Now()
 	if activeTask != nil {

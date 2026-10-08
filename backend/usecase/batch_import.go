@@ -497,6 +497,7 @@ func (u *BatchImportUsecase) extractFileContent(ctx context.Context, kbID, fileK
 		return "", false, direct.Message
 	}
 
+	reportLearningStage(extractCtx, "crawler", "使用解析服务提取正文；本地解析结果："+direct.Message)
 	content, ok, crawlerMessage := u.extractFileContentViaCrawler(extractCtx, kbID, fileKey, filename)
 	if ok {
 		return content, true, ""
@@ -531,6 +532,7 @@ func (u *BatchImportUsecase) extractFileContentViaCrawler(ctx context.Context, k
 	if parseResp == nil || parseResp.Docs.Value.ID == "" {
 		return "", false, "内容解析未返回文档"
 	}
+	reportLearningStage(ctx, "crawler_export", "解析服务已接收文件，正在转换正文")
 	exportResp, exportErr := u.crawler.ExportDoc(ctx, &v1.CrawlerExportReq{KbID: kbID, ID: parseResp.ID, DocID: parseResp.Docs.Value.ID})
 	if exportErr != nil {
 		return "", false, "内容转换失败：" + exportErr.Error()
@@ -538,6 +540,7 @@ func (u *BatchImportUsecase) extractFileContentViaCrawler(ctx context.Context, k
 	if exportResp.TaskId == "" {
 		return "", false, "内容转换未生成任务"
 	}
+	reportLearningStage(ctx, "crawler_result", "等待解析服务返回转换结果")
 	scrapeResp, scrapeErr := u.crawler.ScrapeGetResult(ctx, exportResp.TaskId)
 	if scrapeErr != nil {
 		return "", false, "内容提取失败：" + scrapeErr.Error()

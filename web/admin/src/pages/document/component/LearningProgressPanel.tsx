@@ -1,3 +1,9 @@
+import LearningProgressDetail from './LearningProgressDetail';
+import {
+  learningStageLabels,
+  formatLearningDuration,
+  stageElapsedMs,
+} from '../utils/learningProgress';
 import { Modal, message } from '@/components/ui';
 import {
   getRagStatusMeta,
@@ -82,6 +88,7 @@ const LearningProgressPanel = ({
   refresh,
 }: LearningProgressPanelProps) => {
   const { kb_id } = useAppSelector(state => state.config);
+  const [detailId, setDetailId] = useState<string>();
   const [filter, setFilter] = useState<FilterKey>('attention');
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(1);
@@ -176,6 +183,8 @@ const LearningProgressPanel = ({
       if (!normalizedKeyword) return true;
       return `${item.name || ''} ${item.folderPath || ''} ${
         item.rag_info?.message || ''
+      } ${item.rag_info?.task_message || ''} ${
+        item.rag_info?.learning_progress?.stages?.at(-1)?.message || ''
       }`
         .toLowerCase()
         .includes(normalizedKeyword);
@@ -376,7 +385,11 @@ const LearningProgressPanel = ({
               color: 'error.main',
             },
             { label: '进行中', value: counts.running, color: 'info.main' },
-            { label: '本次异常', value: counts.failed, color: 'warning.main' },
+            {
+              label: '本次异常',
+              value: counts.failed,
+              color: 'warning.main',
+            },
           ].map(item => (
             <Box
               key={item.label}
@@ -593,7 +606,7 @@ const LearningProgressPanel = ({
             <Box sx={{ flex: 1.2 }}>文档</Box>
             <Box sx={{ flex: 1 }}>所在目录</Box>
             <Box sx={{ width: 96 }}>状态</Box>
-            <Box sx={{ width: 132 }}>更新时间</Box>
+            <Box sx={{ width: 132 }}>进度更新时间</Box>
             <Box sx={{ flex: 1.4 }}>进展 / 失败原因</Box>
           </Stack>
           <Divider />
@@ -681,28 +694,51 @@ const LearningProgressPanel = ({
                       )}
                     </Box>
                     <Box
-                      sx={{ width: 132, color: 'text.secondary', fontSize: 12 }}
+                      sx={{
+                        width: 132,
+                        color: 'text.secondary',
+                        fontSize: 12,
+                      }}
                     >
-                      {item.updated_at ? dayjs(item.updated_at).fromNow() : '-'}
+                      {item.rag_info?.learning_progress?.stages?.length
+                        ? dayjs(
+                            item.rag_info.learning_progress.last_progress_at,
+                          ).fromNow()
+                        : '-'}
                     </Box>
-                    <Tooltip title={message || ''}>
-                      <Box
-                        sx={{
-                          flex: 1.4,
-                          minWidth: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          color: isDocFailed(item)
-                            ? 'error.main'
-                            : 'text.secondary',
-                          fontSize: 12,
-                        }}
+                    <Stack sx={{ flex: 1.4, minWidth: 0 }} gap={0.5}>
+                      {item.rag_info?.learning_progress?.stages?.at(-1) &&
+                        (() => {
+                          const stage =
+                            item.rag_info.learning_progress.stages.at(-1)!;
+                          return (
+                            <Typography fontSize={12} fontWeight={600}>
+                              {learningStageLabels[stage.key] || stage.key} ·{' '}
+                              {formatLearningDuration(stageElapsedMs(stage))}
+                            </Typography>
+                          );
+                        })()}
+                      <Typography
+                        fontSize={12}
+                        color={
+                          isDocFailed(item) ? 'error.main' : 'text.secondary'
+                        }
+                        sx={{ overflowWrap: 'anywhere' }}
                       >
-                        {message ||
-                          (isDocRunning(item) ? '等待后台更新状态' : '-')}
-                      </Box>
-                    </Tooltip>
+                        {item.rag_info?.learning_progress?.check_error ||
+                          item.rag_info?.learning_progress?.stages?.at(-1)
+                            ?.message ||
+                          message ||
+                          (isDocRunning(item) ? '暂无步骤记录' : '-')}
+                      </Typography>
+                      <Button
+                        size='small'
+                        sx={{ alignSelf: 'flex-start', p: 0, minWidth: 0 }}
+                        onClick={() => setDetailId(item.id)}
+                      >
+                        步骤与耗时
+                      </Button>
+                    </Stack>
                   </Stack>
                 );
               })
@@ -718,7 +754,7 @@ const LearningProgressPanel = ({
           <Typography fontSize={12} color='text.secondary'>
             共 {visibleDocs.length} 个文档
             {selectionMode ? `，已选择 ${selectedDocs.length} 个` : ''}
-            ；进行中的任务会每 5 秒自动刷新
+            ；页面每 5 秒刷新，后台状态通知即时更新，兜底查询每 5 分钟执行
           </Typography>
           <Pagination
             size='small'
@@ -728,6 +764,10 @@ const LearningProgressPanel = ({
           />
         </Stack>
       </Stack>
+      <LearningProgressDetail
+        doc={open ? docs.find(item => item.id === detailId) : undefined}
+        onClose={() => setDetailId(undefined)}
+      />
     </Modal>
   );
 };

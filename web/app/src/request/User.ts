@@ -3,7 +3,7 @@ import { V1LoginReq, V1LoginResp, V1UserInfoResp } from './types';
 
 export const getApiV1User = (params: RequestParams = {}) =>
   httpRequest<V1UserInfoResp>({
-    path: '/api/v1/user',
+    path: '/share/v1/auth/user',
     method: 'GET',
     type: ContentType.Json,
     ...params,
@@ -14,7 +14,7 @@ export const postApiV1UserLogin = (
   params: RequestParams = {},
 ) =>
   httpRequest<V1LoginResp>({
-    path: '/api/v1/user/login',
+    path: '/share/v1/auth/login/account',
     method: 'POST',
     body,
     type: ContentType.Json,

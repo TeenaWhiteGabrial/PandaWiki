@@ -98,7 +98,10 @@ const Edit = () => {
         isReadonlyFilePreview ? (
           <FilePreview detail={detail} />
         ) : (
-          <EditorWrap detail={detail} readOnlyUser={readOnlyUser} />
+          <EditorWrap
+            detail={detail}
+            readOnlyUser={readOnlyUser || detail.can_manage === false}
+          />
         )
       ) : null}
     </Box>

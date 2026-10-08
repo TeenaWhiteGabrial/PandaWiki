@@ -17,14 +17,17 @@ import {
   setUser,
 } from '@/store/slices/config';
 import { ConstsUserRole } from '@/request/types';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { applyAppBrand, getAppBrandFromDetail } from '@/utils/appBrand';
+import { isAdministrator } from '@/utils/permission';
+import { message } from '@/components/ui';
 
 const useAuth = (hasAuth: boolean) => {
   const { pathname } = useLocation();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const [authorized, setAuthorized] = useState(false);
   const getModel = () => {
     return getApiV1ModelList().then(res => {
       // @ts-expect-error 类型不匹配
@@ -61,23 +64,32 @@ const useAuth = (hasAuth: boolean) => {
   };
 
   const initData = () => {
-    getUser().then(user => {
-      Promise.all([
-        user.role === ConstsUserRole.UserRoleAdmin
-          ? getModel()
-          : Promise.resolve(null),
-        getKbList(),
-      ]).then(([, kbList]) => {
-        if (
-          (user.role === ConstsUserRole.UserRoleUser ||
-            user.role === ConstsUserRole.UserRoleManager) &&
-          kbList.length === 0 &&
-          pathname !== '/login'
-        ) {
-          navigate('401');
+    getUser()
+      .then(user => {
+        if (!isAdministrator(user.role)) {
+          localStorage.removeItem('panda_wiki_token');
+          dispatch(setUser({}));
+          message.warning('仅管理员可登录管理后台，请使用用户端查阅文档');
+          navigate('/login', { replace: true });
+          return;
         }
-      });
-    });
+        setAuthorized(true);
+        Promise.all([
+          user.role === ConstsUserRole.UserRoleAdmin
+            ? getModel()
+            : Promise.resolve(null),
+          getKbList(),
+        ]).then(([, kbList]) => {
+          if (
+            user.role === ConstsUserRole.UserRoleManager &&
+            kbList.length === 0 &&
+            pathname !== '/login'
+          ) {
+            navigate('401');
+          }
+        });
+      })
+      .catch(() => setAuthorized(false));
   };
 
   useEffect(() => {
@@ -86,6 +98,7 @@ const useAuth = (hasAuth: boolean) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasAuth]);
+  return authorized;
 };
 
 const useAdminBrand = (hasAuth: boolean) => {
@@ -110,8 +123,9 @@ const useAdminBrand = (hasAuth: boolean) => {
 };
 
 export const MainLayout = () => {
-  useAuth(true);
-  useAdminBrand(true);
+  const authorized = useAuth(true);
+  useAdminBrand(authorized);
+  if (!authorized) return null;
   return (
     <>
       <Box
@@ -151,8 +165,9 @@ export const NoSidebarHeaderLayout = ({
 }: {
   hasAuth: boolean;
 }) => {
-  useAuth(hasAuth);
-  useAdminBrand(hasAuth);
+  const authorized = useAuth(hasAuth);
+  useAdminBrand(hasAuth && authorized);
+  if (hasAuth && !authorized) return null;
   return (
     <Box
       sx={{

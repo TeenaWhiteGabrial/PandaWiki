@@ -124,6 +124,9 @@ export function convertToTree(data: DomainNodeListItemResp[]) {
       canHaveChildren: item.type === 1,
       updated_at: item.updated_at || item.created_at,
       permissions: item.permissions,
+      can_manage: item.can_manage,
+      can_create_document: item.can_create_document,
+      can_create_folder: item.can_create_folder,
     };
 
     nodeMap.set(item.id!, node);

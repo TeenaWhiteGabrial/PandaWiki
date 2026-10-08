@@ -547,6 +547,20 @@ func (r *KnowledgeBaseRepository) GetKnowledgeBaseListByUserId(ctx context.Conte
 				Pluck("kb_id", &kbIDs).Error; err != nil {
 				return nil, err
 			}
+			// Audience grants are dynamic: users need not be invited one by one.
+			var candidates []domain.KnowledgeBase
+			if err := r.db.WithContext(ctx).Select("id").Find(&candidates).Error; err != nil {
+				return nil, err
+			}
+			for _, candidate := range candidates {
+				management, err := documentManagementAccess(ctx, r.db, candidate.ID, user.ID)
+				if err != nil {
+					return nil, err
+				}
+				if management.HasAnyGrant() {
+					kbIDs = append(kbIDs, candidate.ID)
+				}
+			}
 			if len(kbIDs) > 0 {
 				if err := r.db.WithContext(ctx).
 					Model(&domain.KnowledgeBase{}).
@@ -922,6 +936,13 @@ func (r *KnowledgeBaseRepository) GetKBPermByUserId(ctx context.Context, kbId st
 			return consts.UserKBPermissionDocManage, nil
 		}
 		if user.Role == consts.UserRoleUser {
+			access, err := documentManagementAccess(ctx, r.db, kbId, user.ID)
+			if err != nil {
+				return "", err
+			}
+			if access.HasAnyGrant() {
+				return consts.UserKBPermissionDocManage, nil
+			}
 			return consts.UserKBPermissionNotNull, nil
 		}
 		kbUser, err := r.GetKBUser(ctx, kbId, authInfo.UserId)

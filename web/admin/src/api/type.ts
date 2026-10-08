@@ -188,6 +188,9 @@ export type UpdateNodeData = {
 };
 
 export interface ITreeItem {
+  can_create_document?: boolean;
+  can_create_folder?: boolean;
+  can_manage?: boolean;
   id: string;
   name: string;
   level: number;

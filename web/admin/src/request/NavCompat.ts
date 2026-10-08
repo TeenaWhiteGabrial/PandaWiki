@@ -2,6 +2,7 @@ import httpClient, { ContentType } from './httpClient';
 export interface NavEnterprisePermissions {
   scope_type?: string;
   min_permission_level_id?: string;
+  allowed_permission_level_ids?: string[];
   allowed_department_ids?: string[];
   allowed_user_ids?: string[];
 }

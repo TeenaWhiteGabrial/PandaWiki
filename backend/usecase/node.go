@@ -110,31 +110,9 @@ func (u *NodeUsecase) GetList(ctx context.Context, req *domain.GetNodeListReq) (
 		return nodes, nil
 	}
 
-	authInfo := domain.GetAuthInfoFromCtx(ctx)
-	if authInfo != nil && !authInfo.IsToken {
-		user, userErr := u.userRepo.GetUser(ctx, authInfo.UserId)
-		if userErr == nil && user.Role == consts.UserRoleManager {
-			access, accessErr := u.enterprise.GetUserAccessContext(ctx, authInfo.UserId)
-			if accessErr == nil {
-				filtered := make([]*domain.NodeListItemResp, 0, len(nodes))
-				for _, node := range nodes {
-					resolved := node.Permissions
-					if node.ParentID != "" {
-						parentNode, parentErr := u.nodeRepo.GetNodeByID(ctx, node.ParentID)
-						if parentErr == nil {
-							if parentResolved, resolveErr := u.enterprise.ResolveNodePermissions(ctx, parentNode); resolveErr == nil {
-								resolved = parentResolved
-							}
-						}
-					}
-					if u.enterprise.CanVisible(resolved, access) {
-						node.Permissions = resolved
-						filtered = append(filtered, node)
-					}
-				}
-				nodes = filtered
-			}
-		}
+	nodes, err = u.filterReadableManagedNodes(ctx, req.KBID, nodes)
+	if err != nil {
+		return nil, err
 	}
 
 	publisherMap, err := u.nodeRepo.GetNodeReleasePublisherMap(ctx, req.KBID)
@@ -156,6 +134,19 @@ func (u *NodeUsecase) GetNodeByKBID(ctx context.Context, id, kbId, format string
 	if err != nil {
 		return nil, err
 	}
+
+	allowed, err := u.canReadOrManageNode(ctx, kbId, id)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, fmt.Errorf("没有此文档的查阅权限")
+	}
+	access, err := u.managementAccess(ctx, kbId)
+	if err != nil {
+		return nil, err
+	}
+	node.CanManage = access.Global || access.CanManageNode(id)
 
 	nodeRelease, err := u.nodeRepo.GetLatestNodeReleaseWithPublishAccount(ctx, node.ID)
 	if err != nil {
@@ -220,10 +211,27 @@ func (u *NodeUsecase) Update(ctx context.Context, req *domain.UpdateNodeReq, use
 }
 
 func (u *NodeUsecase) GetNodeReleaseList(ctx context.Context, kbID, nodeID string) ([]*v1.NodeReleaseListItem, error) {
+	if allowed, err := u.canReadOrManageNode(ctx, kbID, nodeID); err != nil {
+		return nil, err
+	} else if !allowed {
+		return nil, fmt.Errorf("没有此文档的查阅权限")
+	}
 	return u.nodeRepo.GetNodeReleaseList(ctx, kbID, nodeID)
 }
 
 func (u *NodeUsecase) GetNodeReleaseDetail(ctx context.Context, kbID, releaseID string) (*v1.GetNodeReleaseDetailResp, error) {
+	release, err := u.nodeRepo.GetNodeReleaseByID(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	if release.KBID != kbID {
+		return nil, fmt.Errorf("文档不属于此知识库")
+	}
+	if allowed, err := u.canReadOrManageNode(ctx, kbID, release.NodeID); err != nil {
+		return nil, err
+	} else if !allowed {
+		return nil, fmt.Errorf("没有此文档的查阅权限")
+	}
 	return u.nodeRepo.GetNodeReleaseDetail(ctx, kbID, releaseID)
 }
 
@@ -662,25 +670,27 @@ func (u *NodeUsecase) ValidateNodePermissionsEdit(req v1.NodePermissionEditReq, 
 
 func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermissionEditReq) error {
 	if req.Permissions != nil {
-		updateMap := map[string]interface{}{
-			"permissions": req.Permissions,
-		}
-
-		if config.PermissionLevelsDisabled() {
-			for _, id := range req.IDs {
-				node, err := u.nodeRepo.GetNodeByID(ctx, id)
+		for _, id := range req.IDs {
+			node, err := u.nodeRepo.GetByID(ctx, id, req.KbId)
+			if err != nil {
+				return err
+			}
+			permissions := *req.Permissions
+			// Reading settings cannot accidentally remove or forge management grants.
+			permissions.ManagementGrants = node.Permissions.ManagementGrants
+			if config.PermissionLevelsDisabled() {
+				permissions.MinPermissionLevelID = node.Permissions.MinPermissionLevelID
+				permissions.MinPermissionLevelRank = node.Permissions.MinPermissionLevelRank
+				permissions.AllowedPermissionLevelIDs = node.Permissions.AllowedPermissionLevelIDs
+			} else {
+				permissions, err = u.enterprise.NormalizeNodePermissions(ctx, permissions)
 				if err != nil {
 					return err
 				}
-				preserved := *req.Permissions
-				preserved.MinPermissionLevelID = node.Permissions.MinPermissionLevelID
-				preserved.MinPermissionLevelRank = node.Permissions.MinPermissionLevelRank
-				if err := u.nodeRepo.UpdateNodesByKbID(ctx, []string{id}, req.KbId, map[string]interface{}{"permissions": preserved}); err != nil {
-					return err
-				}
 			}
-		} else if err := u.nodeRepo.UpdateNodesByKbID(ctx, req.IDs, req.KbId, updateMap); err != nil {
-			return err
+			if err := u.nodeRepo.UpdateNodesByKbID(ctx, []string{id}, req.KbId, map[string]interface{}{"permissions": permissions}); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -732,24 +742,35 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 
 		chunks := lo.Chunk(docIds, ragSyncChunkSize)
 		for _, chunk := range chunks {
-			docs, err := u.rAGService.ListDocuments(ctx, kb.DatasetID, chunk)
-			if err != nil {
-				u.logger.Error("list documents from RAG failed",
-					log.String("kb_id", kb.ID),
-					log.String("dataset_id", kb.DatasetID),
-					log.Error(err))
-				continue
-			}
-
-			if len(docs) == 0 {
-				continue
-			}
-
 			docToReleaseMap, err := u.nodeRepo.GetNodeReleasesByDocIDs(ctx, chunk)
 			if err != nil {
-				u.logger.Error("get node releases by doc ids failed",
-					log.String("kb_id", kb.ID),
-					log.Error(err))
+				u.logger.Error("get node releases by doc ids failed", log.Error(err))
+				continue
+			}
+			docs, listErr := u.rAGService.ListDocuments(ctx, kb.DatasetID, chunk)
+			found := make(map[string]bool, len(docs))
+			for _, doc := range docs {
+				found[doc.ID] = true
+			}
+			for docID, release := range docToReleaseMap {
+				checkError := ""
+				if listErr != nil {
+					checkError = "查询 RAGLite 状态失败：" + listErr.Error()
+				} else if !found[docID] {
+					checkError = "RAGLite 未返回该文档，请检查文档是否存在或已被删除"
+				}
+				if checkError == "" {
+					continue
+				}
+				task, err := u.nodeRepo.GetLatestNodeLearningTaskByDocID(ctx, docID)
+				if err == nil {
+					if err := u.nodeRepo.ObserveNodeLearningRAG(ctx, kb.ID, release.NodeID, task.ID, kb.DatasetID, docID, "", "", "poll", checkError); err != nil {
+						u.logger.Error("record RAG status check failure failed", log.Error(err))
+					}
+				}
+			}
+			if listErr != nil {
+				u.logger.Error("list documents from RAG failed", log.String("kb_id", kb.ID), log.Error(listErr))
 				continue
 			}
 
@@ -803,6 +824,15 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 				}
 
 				status := consts.NodeRagInfoStatus(strings.ToUpper(doc.Status))
+				observedTask := activeTask
+				if observedTask == nil {
+					observedTask = latestTask
+				}
+				if observedTask != nil {
+					if err := u.nodeRepo.ObserveNodeLearningRAG(ctx, kb.ID, nodeID, observedTask.ID, kb.DatasetID, doc.ID, string(status), nodeLearningRagStatusMessage(status, doc.ProgressMsg), "poll", ""); err != nil {
+						u.logger.Error("record RAG status observation failed", log.Error(err))
+					}
+				}
 				ragInfo := node.RagInfo
 				if activeTask != nil {
 					ragInfo.TaskID = activeTask.ID
@@ -954,6 +984,9 @@ func (u *NodeUsecase) dispatchNodeLearningTask(ctx context.Context, task *domain
 	if err := u.nodeRepo.UpdateNodeRagInfo(ctx, task.KBID, task.NodeID, ragInfo); err != nil {
 		_ = u.nodeRepo.FinishNodeLearningTask(ctx, task.ID, consts.NodeLearningTaskFailed, task.DocID, err.Error())
 		return err
+	}
+	if err := u.nodeRepo.RecordNodeLearningStage(ctx, task.KBID, task.NodeID, task.ID, "mq_waiting", "任务已调度，提交消息队列并等待后台消费者取走"); err != nil {
+		u.logger.Error("record queued learning stage failed", log.Error(err))
 	}
 	if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, []*domain.NodeReleaseVectorRequest{
 		{
@@ -1268,42 +1301,27 @@ func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeList
 		navsReleasedMap[nr.ID] = &nr
 	}
 
-	authInfo := domain.GetAuthInfoFromCtx(ctx)
-	if authInfo != nil && !authInfo.IsToken {
-		user, userErr := u.userRepo.GetUser(ctx, authInfo.UserId)
-		if userErr == nil && user.Role != consts.UserRoleAdmin {
-			access, accessErr := u.enterprise.GetUserAccessContext(ctx, authInfo.UserId)
-			if accessErr == nil {
-				filteredNavs := make([]navV1.NavListResp, 0, len(navs))
-				for _, nav := range navs {
-					if u.enterprise.CanVisible(nav.Permissions, access) {
-						filteredNavs = append(filteredNavs, nav)
-					}
-				}
-				navs = filteredNavs
-
-				filteredNodes := make([]*domain.NodeListItemResp, 0, len(nodes))
-				for _, node := range nodes {
-					resolved := node.Permissions
-					if resolveErr := func() error {
-						nodeForResolve := &domain.Node{
-							ID:          node.ID,
-							ParentID:    node.ParentID,
-							Permissions: node.Permissions,
-						}
-						var err error
-						resolved, err = u.enterprise.ResolveNodePermissions(ctx, nodeForResolve)
-						return err
-					}(); resolveErr == nil {
-						node.Permissions = resolved
-					}
-					if u.enterprise.CanVisible(node.Permissions, access) {
-						filteredNodes = append(filteredNodes, node)
-					}
-				}
-				nodes = filteredNodes
+	nodes, err = u.filterReadableManagedNodes(ctx, req.KbId, nodes)
+	if err != nil {
+		return nil, err
+	}
+	// Keep navigation roots for readable or manageable descendants.
+	visibleNavs := map[string]bool{}
+	for _, node := range nodes {
+		visibleNavs[node.NavId] = true
+	}
+	management, err := u.managementAccess(ctx, req.KbId)
+	if err != nil {
+		return nil, err
+	}
+	if !management.Global {
+		filtered := navs[:0]
+		for _, nav := range navs {
+			if visibleNavs[nav.ID] || management.CanManageNav(nav.ID) {
+				filtered = append(filtered, nav)
 			}
 		}
+		navs = filtered
 	}
 
 	// 按 position 顺序预建分组，用 map 做 O(1) 索引
@@ -1313,11 +1331,15 @@ func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeList
 		release, found := navsReleasedMap[nav.ID]
 		navIndexMap[nav.ID] = len(result)
 		result = append(result, &v1.NodeListGroupNavResp{
-			NavID:      nav.ID,
-			NavName:    nav.Name,
-			Position:   nav.Position,
-			IsReleased: found && release.Position == nav.Position && release.Name == nav.Name,
-			List:       []domain.NodeListItemResp{},
+			NavID:             nav.ID,
+			CanManage:         management.Global || management.CanManageNav(nav.ID),
+			CanCreateDocument: management.Global || management.CanCreateInNav("", nav.ID, domain.NodeTypeDocument),
+			CanCreateFolder:   management.Global || management.CanCreateInNav("", nav.ID, domain.NodeTypeFolder),
+			CanConfigure:      management.Global,
+			NavName:           nav.Name,
+			Position:          nav.Position,
+			IsReleased:        found && release.Position == nav.Position && release.Name == nav.Name,
+			List:              []domain.NodeListItemResp{},
 		})
 	}
 

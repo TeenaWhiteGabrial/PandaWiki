@@ -2,7 +2,9 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 
 	"github.com/google/uuid"
@@ -60,6 +62,9 @@ func NewUserHandler(e *echo.Echo, baseHandler *handler.BaseHandler, logger *log.
 	}
 	group := e.Group("/api/v1/user")
 	group.POST("/login", h.Login)
+	// User-facing account login remains available to ordinary readers.
+	e.POST("/share/v1/auth/login/account", h.ReaderLogin, h.ShareAuthMiddleware.CheckForbidden)
+	e.GET("/share/v1/auth/user", h.ReaderUserInfo, h.ShareAuthMiddleware.Authorize)
 
 	group.GET("", h.GetUserInfo, h.auth.Authorize)
 	group.GET("/list", h.ListUsers, h.auth.Authorize)
@@ -128,6 +133,14 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 //	@Success		200		{object}	v1.LoginResp
 //	@Router			/api/v1/user/login [post]
 func (h *UserHandler) Login(c echo.Context) error {
+	return h.login(c, true)
+}
+
+func (h *UserHandler) ReaderLogin(c echo.Context) error {
+	return h.login(c, false)
+}
+
+func (h *UserHandler) login(c echo.Context, administratorOnly bool) error {
 	var req v1.LoginReq
 	if err := c.Bind(&req); err != nil {
 		return h.NewResponseWithError(c, "invalid request", err)
@@ -145,8 +158,17 @@ func (h *UserHandler) Login(c echo.Context) error {
 		return h.NewResponseWithError(c, fmt.Sprintf("账号已被锁定，请 %s 后重试", remaining.String()), nil)
 	}
 
-	token, err := h.usecase.VerifyUserAndGenerateToken(ctx, req)
+	var token string
+	var err error
+	if administratorOnly {
+		token, err = h.usecase.VerifyUserAndGenerateToken(ctx, req)
+	} else {
+		token, err = h.usecase.VerifyReaderAndGenerateToken(ctx, req)
+	}
 	if err != nil {
+		if errors.Is(err, usecase.ErrAdministratorOnly) {
+			return c.JSON(http.StatusForbidden, domain.PWResponse{Success: false, Message: err.Error(), Code: domain.AdministratorOnlyCode})
+		}
 		h.rateLimiter.LockAttempt(ctx, ip)
 		return h.NewResponseWithError(c, "用户名或密码错误", err)
 	}
@@ -158,6 +180,13 @@ func (h *UserHandler) Login(c echo.Context) error {
 	}()
 
 	return h.NewResponseWithData(c, v1.LoginResp{Token: token})
+}
+
+func (h *UserHandler) ReaderUserInfo(c echo.Context) error {
+	if domain.GetAuthInfoFromCtx(c.Request().Context()) == nil {
+		return c.JSON(http.StatusUnauthorized, domain.PWResponse{Success: false, Message: "请先登录"})
+	}
+	return h.GetUserInfo(c)
 }
 
 // GetUserInfo

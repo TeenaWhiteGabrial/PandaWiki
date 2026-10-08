@@ -46,6 +46,8 @@ func NewNodeHandler(
 	readGroup.GET("/detail", h.GetNodeDetail)
 	readGroup.GET("/recommend_nodes", h.RecommendNodes)
 	readGroup.GET("/permission", h.NodePermission)
+	readGroup.GET("/management", h.GetNodeManagement)
+	group.GET("/permission/options", h.NodePermissionOptions, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	readGroup.GET("/release/list", h.GetNodeReleaseList)
 	readGroup.GET("/release/detail", h.GetNodeReleaseDetail)
 
@@ -61,6 +63,7 @@ func NewNodeHandler(
 	writeGroup.POST("/restudy", h.NodeRestudy)
 	writeGroup.POST("/learning/cancel", h.NodeLearningCancel)
 	writeGroup.PATCH("/permission/edit", h.NodePermissionEdit)
+	writeGroup.PATCH("/management", h.EditNodeManagement)
 	writeGroup.POST("/release/restore", h.RestoreNodeRelease)
 
 	return h

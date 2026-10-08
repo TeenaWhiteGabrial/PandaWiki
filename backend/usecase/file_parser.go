@@ -48,6 +48,7 @@ func (u *BatchImportUsecase) extractFileContentDirect(ctx context.Context, fileK
 	if u.fileUsecase == nil {
 		return directParseResult{Message: "文件服务未初始化"}
 	}
+	reportLearningStage(ctx, "file_info", "读取源文件大小和访问权限")
 	info, err := u.fileUsecase.StatObject(ctx, fileKey)
 	if err != nil {
 		return directParseResult{Message: "读取文件信息失败：" + err.Error()}
@@ -59,6 +60,7 @@ func (u *BatchImportUsecase) extractFileContentDirect(ctx context.Context, fileK
 		return directParseResult{Message: fmt.Sprintf("文件超过 %d MB，已跳过正文解析", directParseMaxObjectSize/(1024*1024)), SkipCrawler: true}
 	}
 
+	reportLearningStage(ctx, "download", fmt.Sprintf("下载源文件（%.1f MB）", float64(info.Size)/(1024*1024)))
 	tmp, _, err := u.fileUsecase.DownloadObjectToTemp(ctx, fileKey)
 	if err != nil {
 		return directParseResult{Message: "下载文件到临时目录失败：" + err.Error()}
@@ -68,6 +70,7 @@ func (u *BatchImportUsecase) extractFileContentDirect(ctx context.Context, fileK
 		_ = os.Remove(tmp.Name())
 	}()
 
+	reportLearningStage(ctx, "parse", "本地提取正文："+filename)
 	content, err := parseLocalFileToMarkdown(ctx, tmp.Name(), filename)
 	if err != nil {
 		return directParseResult{Message: err.Error()}

@@ -18,9 +18,10 @@ type User struct {
 }
 
 type UserSummary struct {
-	ID      string `json:"id"`
-	Account string `json:"account"`
-	Name    string `json:"name"`
+	ID      string          `json:"id"`
+	Account string          `json:"account"`
+	Name    string          `json:"name"`
+	Role    consts.UserRole `json:"role,omitempty"`
 }
 
 // KBUsers 知识库用户关联表（多对多关系）

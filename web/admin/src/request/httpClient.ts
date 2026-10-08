@@ -108,8 +108,19 @@ export class HttpClient<SecurityDataType = unknown> {
           window.location.href = window.__BASENAME__ + "/login";
           localStorage.removeItem("panda_wiki_token");
         }
+        if (
+          error.response?.status === 403 &&
+          error.response?.data?.code === 40301
+        ) {
+          localStorage.removeItem("panda_wiki_token");
+          if (location.pathname !== "/login") redirectToLogin();
+        }
         if (error.code !== "ERR_CANCELED") {
-          message.error(error.response?.statusText || "网络异常");
+          message.error(
+            error.response?.data?.message ||
+              error.response?.statusText ||
+              "网络异常",
+          );
         }
         return Promise.reject(error.response);
       },

@@ -171,22 +171,19 @@ func (r *EnterpriseRepository) GetUserAccessContext(ctx context.Context, userID 
 		PrincipalID: userID,
 	}
 
-	if !config.PermissionLevelsDisabled() {
-		if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {
-			level, err := r.GetPermissionLevelByID(ctx, *user.PermissionLevelID)
-			if err != nil {
-				return nil, err
-			}
+	if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {
+		level, err := r.GetPermissionLevelByID(ctx, *user.PermissionLevelID)
+		if err != nil {
+			return nil, err
+		}
+		result.PermissionLevelID = level.ID
+		result.PermissionLevelRank = level.Rank
+	} else {
+		level, err := r.GetDefaultPermissionLevel(ctx)
+		if err == nil {
 			result.PermissionLevelID = level.ID
 			result.PermissionLevelRank = level.Rank
-		} else {
-			level, err := r.GetDefaultPermissionLevel(ctx)
-			if err == nil {
-				result.PermissionLevelID = level.ID
-				result.PermissionLevelRank = level.Rank
-			}
 		}
-
 	}
 	ids := make([]string, 0)
 	if err := r.db.WithContext(ctx).Model(&domain.UserDepartment{}).Where("user_id = ?", userID).Pluck("department_id", &ids).Error; err != nil {

@@ -61,6 +61,7 @@ interface DocPageFileManagerProps {
 
 type ExplorerItem = DomainNodeListItemResp & {
   explorerKind?: 'nav';
+  can_configure?: boolean;
 };
 
 const NAV_PATH_PREFIX = 'nav:';
@@ -151,6 +152,10 @@ const DocPageFileManager = ({
           type: 1,
           kind: 'nav' as const,
           explorerKind: 'nav' as const,
+          can_manage: group.can_manage,
+          can_create_document: group.can_create_document,
+          can_create_folder: group.can_create_folder,
+          can_configure: group.can_configure,
         }))
         .filter(item => item.nav_id);
     }
@@ -234,6 +239,15 @@ const DocPageFileManager = ({
     return current.nav_id ? `${NAV_PATH_PREFIX}${current.nav_id}` : '';
   }, [folderId, isNavPath, nodeMap]);
 
+  const canManageRoots =
+    groups.length === 0 || groups.some(group => group.can_configure !== false);
+  const activeGroup = groups.find(group => group.nav_id === activeNavId);
+  const currentFolderCanCreate = isNavPath
+    ? activeGroup?.can_create_document !== false
+    : nodeMap.get(folderId)?.can_create_document !== false;
+  const currentFolderCanCreateFolder = isNavPath
+    ? activeGroup?.can_create_folder !== false
+    : nodeMap.get(folderId)?.can_create_folder !== false;
   const currentFolderParentId = isNavPath ? null : folderId || null;
   const currentFolderName =
     breadcrumbs
@@ -349,72 +363,75 @@ const DocPageFileManager = ({
               ))}
             </Breadcrumbs>
           </Stack>
-          {!readOnlyUser && (
-            <Stack direction='row' alignItems='center' gap={1} flexShrink={0}>
-              {!folderId ? (
-                <Button
-                  size='small'
-                  variant='outlined'
-                  startIcon={
-                    <IconJiahao sx={{ fontSize: '10px !important' }} />
-                  }
-                  onClick={() => setAddNavOpen(true)}
-                >
-                  新建目录
-                </Button>
-              ) : (
-                <>
+          {!readOnlyUser &&
+            (folderId ? currentFolderCanCreate : canManageRoots) && (
+              <Stack direction='row' alignItems='center' gap={1} flexShrink={0}>
+                {!folderId ? (
                   <Button
                     size='small'
                     variant='outlined'
-                    onClick={() => {
-                      setCreateParentId(currentFolderParentId);
-                      setCreateNavId(activeNavId || null);
-                      setCreateType(1);
-                    }}
+                    startIcon={
+                      <IconJiahao sx={{ fontSize: '10px !important' }} />
+                    }
+                    onClick={() => setAddNavOpen(true)}
                   >
-                    新建文件夹
+                    新建目录
                   </Button>
-                  <Button
-                    size='small'
-                    variant='outlined'
-                    onClick={() => {
-                      setCreateParentId(currentFolderParentId);
-                      setCreateNavId(activeNavId || null);
-                      setCreateType(2);
-                    }}
-                  >
-                    新建文档
-                  </Button>
-                  <Button
-                    size='small'
-                    variant='outlined'
-                    onClick={() => {
-                      setDocImportTarget({
-                        parentId: currentFolderParentId,
-                        navId: activeNavId || null,
-                      });
-                      setDocImportOpen(true);
-                    }}
-                  >
-                    导入文档
-                  </Button>
-                  <Button
-                    size='small'
-                    variant='contained'
-                    onClick={() => {
-                      setBatchImportParentId(currentFolderParentId);
-                      setBatchImportParentName(currentFolderName);
-                      setBatchImportNavId(activeNavId || null);
-                      setBatchImportOpen(true);
-                    }}
-                  >
-                    批量导入 ZIP
-                  </Button>
-                </>
-              )}
-            </Stack>
-          )}
+                ) : (
+                  <>
+                    <Button
+                      size='small'
+                      disabled={!currentFolderCanCreateFolder}
+                      variant='outlined'
+                      onClick={() => {
+                        setCreateParentId(currentFolderParentId);
+                        setCreateNavId(activeNavId || null);
+                        setCreateType(1);
+                      }}
+                    >
+                      新建文件夹
+                    </Button>
+                    <Button
+                      size='small'
+                      variant='outlined'
+                      onClick={() => {
+                        setCreateParentId(currentFolderParentId);
+                        setCreateNavId(activeNavId || null);
+                        setCreateType(2);
+                      }}
+                    >
+                      新建文档
+                    </Button>
+                    <Button
+                      size='small'
+                      variant='outlined'
+                      onClick={() => {
+                        setDocImportTarget({
+                          parentId: currentFolderParentId,
+                          navId: activeNavId || null,
+                        });
+                        setDocImportOpen(true);
+                      }}
+                    >
+                      导入文档
+                    </Button>
+                    <Button
+                      size='small'
+                      variant='contained'
+                      disabled={!currentFolderCanCreateFolder}
+                      onClick={() => {
+                        setBatchImportParentId(currentFolderParentId);
+                        setBatchImportParentName(currentFolderName);
+                        setBatchImportNavId(activeNavId || null);
+                        setBatchImportOpen(true);
+                      }}
+                    >
+                      批量导入 ZIP
+                    </Button>
+                  </>
+                )}
+              </Stack>
+            )}
         </Stack>
         <Divider />
         <Stack
@@ -497,6 +514,7 @@ const DocPageFileManager = ({
             <Stack gap={0.5}>
               {currentItems.map(item => {
                 const isFolder = item.type === 1;
+                const itemReadOnly = readOnlyUser || item.can_manage === false;
                 const treeItem: ITreeItem = {
                   ...(item as unknown as ITreeItem),
                   id: item.id || '',
@@ -508,7 +526,7 @@ const DocPageFileManager = ({
                   kind: item.explorerKind ? 'nav' : undefined,
                 };
                 const actionMenu: TreeMenuItem[] = item.explorerKind
-                  ? !readOnlyUser
+                  ? !itemReadOnly
                     ? [
                         {
                           key: 'folder',
@@ -607,62 +625,59 @@ const DocPageFileManager = ({
                         },
                         isEditing: editingId === item.id,
                         removeItem: () => undefined,
-                      }).map(action => {
-                        if (
-                          action.key === ConstsCrawlerSource.CrawlerSourceFile
-                        ) {
-                          return {
-                            ...action,
-                            onClick: () => {
-                              setDocImportTarget({
-                                parentId: item.id || null,
-                                navId: item.nav_id || activeNavId || null,
-                              });
-                              setDocImportOpen(true);
-                            },
-                          };
-                        }
-                        if (action.key === 'batch-import-zip') {
-                          return {
-                            ...action,
-                            onClick: () => {
-                              setBatchImportParentId(
-                                item.explorerKind ? null : item.id || null,
-                              );
-                              setBatchImportParentName(
-                                [
-                                  ...breadcrumbs.map(crumb => crumb.name),
-                                  item.name,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' > ') || '根目录',
-                              );
-                              setBatchImportNavId(
-                                item.nav_id || activeNavId || null,
-                              );
-                              setBatchImportOpen(true);
-                            },
-                          };
-                        }
-                        if (action.key === 'folder') {
-                          return {
-                            ...action,
-                            onClick: () => {
-                              setCreateParentId(
-                                item.explorerKind ? null : item.id || null,
-                              );
-                              setCreateNavId(
-                                item.nav_id || activeNavId || null,
-                              );
-                              setCreateType(1);
-                            },
-                          };
-                        }
-                        if (action.key === 'doc') {
-                          return {
-                            ...action,
-                            children: action.children?.map(child => ({
-                              ...child,
+                      })
+                        .filter(
+                          action =>
+                            !(
+                              ['folder', 'batch-import-zip'].includes(
+                                action.key,
+                              ) && item.can_create_folder === false
+                            ) &&
+                            !(
+                              action.key === 'doc' &&
+                              item.can_create_document === false
+                            ),
+                        )
+                        .map(action => {
+                          if (
+                            action.key === ConstsCrawlerSource.CrawlerSourceFile
+                          ) {
+                            return {
+                              ...action,
+                              onClick: () => {
+                                setDocImportTarget({
+                                  parentId: item.id || null,
+                                  navId: item.nav_id || activeNavId || null,
+                                });
+                                setDocImportOpen(true);
+                              },
+                            };
+                          }
+                          if (action.key === 'batch-import-zip') {
+                            return {
+                              ...action,
+                              onClick: () => {
+                                setBatchImportParentId(
+                                  item.explorerKind ? null : item.id || null,
+                                );
+                                setBatchImportParentName(
+                                  [
+                                    ...breadcrumbs.map(crumb => crumb.name),
+                                    item.name,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' > ') || '根目录',
+                                );
+                                setBatchImportNavId(
+                                  item.nav_id || activeNavId || null,
+                                );
+                                setBatchImportOpen(true);
+                              },
+                            };
+                          }
+                          if (action.key === 'folder') {
+                            return {
+                              ...action,
                               onClick: () => {
                                 setCreateParentId(
                                   item.explorerKind ? null : item.id || null,
@@ -670,18 +685,45 @@ const DocPageFileManager = ({
                                 setCreateNavId(
                                   item.nav_id || activeNavId || null,
                                 );
-                                setCreateType(2);
+                                setCreateType(1);
                               },
-                            })),
-                          };
-                        }
-                        return action;
-                      })
+                            };
+                          }
+                          if (action.key === 'doc') {
+                            return {
+                              ...action,
+                              children: action.children?.map(child => ({
+                                ...child,
+                                onClick: () => {
+                                  setCreateParentId(
+                                    item.explorerKind ? null : item.id || null,
+                                  );
+                                  setCreateNavId(
+                                    item.nav_id || activeNavId || null,
+                                  );
+                                  setCreateType(2);
+                                },
+                              })),
+                            };
+                          }
+                          return action;
+                        })
                     : [];
                 const resolvedActionMenu =
-                  !item.explorerKind && !readOnlyUser
+                  !item.explorerKind && !itemReadOnly
                     ? withMoveAction(actionMenu, item)
-                    : actionMenu;
+                    : actionMenu.filter(
+                        action =>
+                          !(
+                            ['folder', 'batch-import-zip'].includes(
+                              action.key,
+                            ) && item.can_create_folder === false
+                          ) &&
+                          !(
+                            action.key === 'doc' &&
+                            item.can_create_document === false
+                          ),
+                      );
                 const ragStatusMeta = getRagStatusMeta(item);
                 const publishStatusMeta =
                   item.status === 2
@@ -815,7 +857,7 @@ const DocPageFileManager = ({
                         </Typography>
                       )}
                     </Box>
-                    {isFolder && !item.explorerKind && !readOnlyUser && (
+                    {isFolder && !item.explorerKind && !itemReadOnly && (
                       <AddDocBtn
                         parentId={item.id}
                         navId={item.nav_id}

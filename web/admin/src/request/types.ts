@@ -1080,6 +1080,9 @@ export interface DomainNodeGroupDetail {
 }
 
 export interface DomainNodeListItemResp {
+  can_create_document?: boolean;
+  can_create_folder?: boolean;
+  can_manage?: boolean;
   content_type?: string;
   created_at?: string;
   creator?: string;
@@ -1120,7 +1123,15 @@ export interface DomainNodeAttachmentMeta {
   preview_key?: string;
 }
 
+export interface DomainDocumentManagementGrant {
+  subject_type: 'permission_level' | 'department' | 'user';
+  subject_ids: string[];
+  directory_scope: 'current_and_descendants' | 'current';
+}
+
 export interface DomainNodePermissions {
+  allowed_permission_level_ids?: string[];
+  management_grants?: DomainDocumentManagementGrant[];
   allowed_department_ids?: string[];
   allowed_user_ids?: string[];
   /** 可被问答 */
@@ -1276,7 +1287,28 @@ export interface DomainQuestionConfig {
   type?: string;
 }
 
+export interface DomainLearningStage {
+  key: string;
+  message: string;
+  started_at: string;
+  finished_at?: string;
+}
+
+export interface DomainLearningProgress {
+  started_at: string;
+  finished_at?: string;
+  last_progress_at: string;
+  last_checked_at?: string;
+  check_error?: string;
+  rag_status?: string;
+  source?: string;
+  doc_id?: string;
+  dataset_id?: string;
+  stages?: DomainLearningStage[];
+}
+
 export interface DomainRagInfo {
+  learning_progress?: DomainLearningProgress;
   active_doc_id?: string;
   active_release_id?: string;
   message?: string;
@@ -1575,6 +1607,10 @@ export interface GithubComChaitinPandaWikiApiAuthV1AuthGetResp {
 }
 
 export interface GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp {
+  can_create_document?: boolean;
+  can_create_folder?: boolean;
+  can_configure?: boolean;
+  can_manage?: boolean;
   count?: number;
   is_released?: boolean;
   list?: DomainNodeListItemResp[];
@@ -1813,6 +1849,10 @@ export interface V1NavAddReq {
 }
 
 export interface V1NavListResp {
+  can_create_document?: boolean;
+  can_create_folder?: boolean;
+  can_configure?: boolean;
+  can_manage?: boolean;
   created_at?: string;
   id?: string;
   name?: string;
@@ -1834,6 +1874,7 @@ export interface V1NavUpdateReq {
 }
 
 export interface V1NodeDetailResp {
+  can_manage?: boolean;
   content?: string;
   created_at?: string;
   creator_account?: string;

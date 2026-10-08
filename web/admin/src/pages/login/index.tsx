@@ -127,6 +127,7 @@ const Login = () => {
         navigate(redirect);
         message.success('登录成功');
       })
+      .catch(() => undefined)
       .finally(() => {
         setLoading(false);
       });
@@ -204,7 +205,9 @@ const Login = () => {
                 color: 'text.secondary',
               }}
             >
-              支持保存多个登录账号，选择后可直接带出密码
+              仅管理员和超级管理员可登录
+              <br />
+              普通用户请使用用户端查阅文档
             </Typography>
             <AutoComplete
               style={{ width: '100%', marginBottom: 24 }}

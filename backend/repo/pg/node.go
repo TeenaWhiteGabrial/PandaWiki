@@ -1110,12 +1110,29 @@ func (r *NodeRepository) UpdateNodeStatus(ctx context.Context, kbID, nodeID stri
 }
 
 func (r *NodeRepository) UpdateNodeRagInfo(ctx context.Context, kbID, nodeID string, ragInfo domain.RagInfo) error {
-	return r.db.WithContext(ctx).
-		Model(&domain.Node{}).
-		Where("kb_id = ? AND id = ?", kbID, nodeID).
-		Updates(map[string]any{
-			"rag_info": ragInfo,
-		}).Error
+	// Preserve concurrent stage reports when callers update a status snapshot.
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var node domain.Node
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("kb_id = ? AND id = ?", kbID, nodeID).First(&node).Error; err != nil {
+			return err
+		}
+		if node.RagInfo.TaskID == ragInfo.TaskID {
+			ragInfo.LearningProgress = node.RagInfo.LearningProgress
+		} else {
+			ragInfo.LearningProgress = nil
+		}
+		if ragInfo.TaskStatus == consts.NodeLearningTaskWaiting && ragInfo.LearningProgress == nil {
+			ragInfo.LearningProgress = &domain.LearningProgress{}
+			ragInfo.LearningProgress.Advance("waiting", "等待调度：知识库并发名额有限，前面的任务完成后开始", time.Now())
+		}
+		if ragInfo.LearningProgress != nil {
+			switch ragInfo.TaskStatus {
+			case consts.NodeLearningTaskSucceeded, consts.NodeLearningTaskFailed, consts.NodeLearningTaskCanceled, consts.NodeLearningTaskSkipped:
+				ragInfo.LearningProgress.Finish(time.Now())
+			}
+		}
+		return tx.Model(&domain.Node{}).Where("kb_id = ? AND id = ?", kbID, nodeID).UpdateColumn("rag_info", &ragInfo).Error
+	})
 }
 
 func (r *NodeRepository) CreateNodeLearningTaskIfNotActive(ctx context.Context, task *domain.NodeLearningTask) (*domain.NodeLearningTask, bool, error) {

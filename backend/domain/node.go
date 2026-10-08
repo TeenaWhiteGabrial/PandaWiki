@@ -89,15 +89,16 @@ func (Node) TableName() string {
 }
 
 type RagInfo struct {
-	Status          consts.NodeRagInfoStatus      `json:"status"`
-	Message         string                        `json:"message"`
-	SyncedAt        time.Time                     `json:"synced_at"`
-	TaskStatus      consts.NodeLearningTaskStatus `json:"task_status,omitempty"`
-	TaskID          string                        `json:"task_id,omitempty"`
-	TaskAction      consts.NodeLearningTaskAction `json:"task_action,omitempty"`
-	TaskMessage     string                        `json:"task_message,omitempty"`
-	ActiveDocID     string                        `json:"active_doc_id,omitempty"`
-	ActiveReleaseID string                        `json:"active_release_id,omitempty"`
+	LearningProgress *LearningProgress             `json:"learning_progress,omitempty"`
+	Status           consts.NodeRagInfoStatus      `json:"status"`
+	Message          string                        `json:"message"`
+	SyncedAt         time.Time                     `json:"synced_at"`
+	TaskStatus       consts.NodeLearningTaskStatus `json:"task_status,omitempty"`
+	TaskID           string                        `json:"task_id,omitempty"`
+	TaskAction       consts.NodeLearningTaskAction `json:"task_action,omitempty"`
+	TaskMessage      string                        `json:"task_message,omitempty"`
+	ActiveDocID      string                        `json:"active_doc_id,omitempty"`
+	ActiveReleaseID  string                        `json:"active_release_id,omitempty"`
 }
 
 func (d *RagInfo) Value() (driver.Value, error) {
@@ -117,17 +118,20 @@ func (d RagInfo) HasAvailableIndex() bool {
 }
 
 type NodePermissions struct {
-	Answerable             consts.NodeAccessPerm `json:"answerable"`           // 兼容旧字段，不再单独作为权限入口
-	Visitable              consts.NodeAccessPerm `json:"visitable"`            // 兼容旧字段，不再单独作为权限入口
-	Visible                consts.NodeAccessPerm `json:"visible"`              // 兼容旧字段，不再单独作为权限入口
-	ScopeType              string                `json:"scope_type,omitempty"` // public / custom / department(legacy)
-	Inherit                *bool                 `json:"inherit,omitempty"`    // 目录默认继承父级，可显式覆盖
-	MinPermissionLevelID   string                `json:"min_permission_level_id,omitempty"`
-	MinPermissionLevelRank int                   `json:"min_permission_level_rank,omitempty"`
-	AllowedDepartmentIDs   []string              `json:"allowed_department_ids,omitempty"`
-	AllowedUserIDs         []string              `json:"allowed_user_ids,omitempty"`
-	DeniedDepartmentIDs    []string              `json:"denied_department_ids,omitempty"`
-	DeniedUserIDs          []string              `json:"denied_user_ids,omitempty"`
+	Constraints               []NodePermissions         `json:"constraints,omitempty"`
+	ManagementGrants          []DocumentManagementGrant `json:"management_grants,omitempty"`
+	AllowedPermissionLevelIDs []string                  `json:"allowed_permission_level_ids,omitempty"`
+	Answerable                consts.NodeAccessPerm     `json:"answerable"`           // 兼容旧字段，不再单独作为权限入口
+	Visitable                 consts.NodeAccessPerm     `json:"visitable"`            // 兼容旧字段，不再单独作为权限入口
+	Visible                   consts.NodeAccessPerm     `json:"visible"`              // 兼容旧字段，不再单独作为权限入口
+	ScopeType                 string                    `json:"scope_type,omitempty"` // public / custom / department(legacy)
+	Inherit                   *bool                     `json:"inherit,omitempty"`    // 目录默认继承父级，可显式覆盖
+	MinPermissionLevelID      string                    `json:"min_permission_level_id,omitempty"`
+	MinPermissionLevelRank    int                       `json:"min_permission_level_rank,omitempty"`
+	AllowedDepartmentIDs      []string                  `json:"allowed_department_ids,omitempty"`
+	AllowedUserIDs            []string                  `json:"allowed_user_ids,omitempty"`
+	DeniedDepartmentIDs       []string                  `json:"denied_department_ids,omitempty"`
+	DeniedUserIDs             []string                  `json:"denied_user_ids,omitempty"`
 }
 
 const (
@@ -137,8 +141,9 @@ const (
 )
 
 func (s NodePermissions) HasEnterpriseRule() bool {
-	return s.ScopeType != "" ||
+	return len(s.Constraints) > 0 || s.ScopeType != "" ||
 		s.Inherit != nil ||
+		len(s.AllowedPermissionLevelIDs) > 0 ||
 		s.MinPermissionLevelID != "" ||
 		s.MinPermissionLevelRank > 0 ||
 		len(s.AllowedDepartmentIDs) > 0 ||
@@ -241,25 +246,28 @@ type GetNodeListReq struct {
 }
 
 type NodeListItemResp struct {
-	ID          string          `json:"id"`
-	NavId       string          `json:"nav_id"`
-	Type        NodeType        `json:"type"`
-	Status      NodeStatus      `json:"status"`
-	RagInfo     RagInfo         `json:"rag_info"`
-	Name        string          `json:"name"`
-	Summary     string          `json:"summary"`
-	Emoji       string          `json:"emoji"`
-	ContentType string          `json:"content_type"`
-	Position    float64         `json:"position"`
-	ParentID    string          `json:"parent_id"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
-	CreatorId   string          `json:"creator_id"`
-	EditorId    string          `json:"editor_id"`
-	Creator     string          `json:"creator"`
-	Editor      string          `json:"editor"`
-	PublisherId string          `json:"publisher_id" gorm:"-"`
-	Permissions NodePermissions `json:"permissions" gorm:"type:jsonb"`
+	CanCreateDocument bool            `json:"can_create_document" gorm:"-"`
+	CanCreateFolder   bool            `json:"can_create_folder" gorm:"-"`
+	CanManage         bool            `json:"can_manage" gorm:"-"`
+	ID                string          `json:"id"`
+	NavId             string          `json:"nav_id"`
+	Type              NodeType        `json:"type"`
+	Status            NodeStatus      `json:"status"`
+	RagInfo           RagInfo         `json:"rag_info"`
+	Name              string          `json:"name"`
+	Summary           string          `json:"summary"`
+	Emoji             string          `json:"emoji"`
+	ContentType       string          `json:"content_type"`
+	Position          float64         `json:"position"`
+	ParentID          string          `json:"parent_id"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	CreatorId         string          `json:"creator_id"`
+	EditorId          string          `json:"editor_id"`
+	Creator           string          `json:"creator"`
+	Editor            string          `json:"editor"`
+	PublisherId       string          `json:"publisher_id" gorm:"-"`
+	Permissions       NodePermissions `json:"permissions" gorm:"type:jsonb"`
 }
 
 type NodeContentChunk struct {

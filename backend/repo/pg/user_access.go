@@ -125,6 +125,9 @@ func (r *UserAccessRepository) ValidateKBPerm(kbId, userId string, perm consts.U
 	if err := r.db.Model(&domain.User{}).Where("id = ?", userId).First(&user).Error; err != nil {
 		return false, fmt.Errorf("get user failed %s", err)
 	}
+	if perm == consts.UserKBPermissionDocManage && !consts.IsAdministrator(user.Role) {
+		return false, nil
+	}
 
 	if user.Role == consts.UserRoleAdmin {
 		return true, nil
@@ -136,7 +139,10 @@ func (r *UserAccessRepository) ValidateKBPerm(kbId, userId string, perm consts.U
 		return false, nil
 	}
 	if user.Role == consts.UserRoleUser {
-		return perm == consts.UserKBPermissionNotNull, nil
+		if perm == consts.UserKBPermissionNotNull {
+			return true, nil
+		}
+		return false, nil
 	}
 
 	var kbUser domain.KBUsers

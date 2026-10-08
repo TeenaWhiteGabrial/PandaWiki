@@ -17,3 +17,7 @@ const (
 	UserRoleManager UserRole = "manager" // 管理员
 	UserRoleUser    UserRole = "user"    // 普通用户
 )
+
+func IsAdministrator(role UserRole) bool {
+	return role == UserRoleAdmin || role == UserRoleManager
+}

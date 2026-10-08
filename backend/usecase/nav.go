@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/chaitin/panda-wiki/config"
 
 	"github.com/google/uuid"
@@ -47,15 +46,44 @@ func (u *NavUsecase) GetList(ctx context.Context, kbID string) ([]v1.NavListResp
 	}
 	authInfo := domain.GetAuthInfoFromCtx(ctx)
 	if authInfo == nil || authInfo.IsToken {
+		for i := range navs {
+			navs[i].CanManage = authInfo != nil && (authInfo.Permission == consts.UserKBPermissionDocManage || authInfo.Permission == consts.UserKBPermissionFullControl)
+			navs[i].CanCreateDocument = navs[i].CanManage
+			navs[i].CanCreateFolder = navs[i].CanManage
+			navs[i].CanConfigure = navs[i].CanManage
+		}
+		return navs, nil
+	}
+	management, err := u.enterprise.ManagementAccess(ctx, kbID)
+	if err != nil {
+		return nil, err
+	}
+	if management.Global {
+		for i := range navs {
+			navs[i].CanManage = true
+			navs[i].CanCreateDocument = true
+			navs[i].CanCreateFolder = true
+			navs[i].CanConfigure = true
+		}
 		return navs, nil
 	}
 	access, err := u.enterprise.GetUserAccessContext(ctx, authInfo.UserId)
 	if err != nil {
-		return navs, nil
+		return nil, err
 	}
 	filtered := make([]v1.NavListResp, 0, len(navs))
 	for _, nav := range navs {
-		if u.enterprise.CanVisible(nav.Permissions, access) {
+		nav.CanManage = management.CanManageNav(nav.ID)
+		nav.CanCreateDocument = management.CanCreateInNav("", nav.ID, domain.NodeTypeDocument)
+		nav.CanCreateFolder = management.CanCreateInNav("", nav.ID, domain.NodeTypeFolder)
+		manageable := nav.CanManage
+		for id, node := range management.Nodes {
+			if node.NavId == nav.ID && management.CanManageNode(id) {
+				manageable = true
+				break
+			}
+		}
+		if manageable || u.enterprise.CanVisible(nav.Permissions, access) {
 			filtered = append(filtered, nav)
 		}
 	}
@@ -71,7 +99,7 @@ func (u *NavUsecase) GetReleaseList(ctx context.Context, kbID string) ([]v1.NavL
 }
 
 func (u *NavUsecase) GetPermission(ctx context.Context, kbID, id string) (*v1.NavPermissionResp, error) {
-	nav, err := u.navRepo.GetById(ctx, id)
+	nav, err := u.navRepo.GetByKBID(ctx, kbID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -139,44 +167,25 @@ func (u *NavUsecase) UpdatePermission(ctx context.Context, req *v1.NavPermission
 	if req.Permissions == nil {
 		return nil
 	}
+	nav, err := u.navRepo.GetByKBID(ctx, req.KbId, req.ID)
+	if err != nil {
+		return err
+	}
+	req.Permissions.ManagementGrants = nav.Permissions.ManagementGrants
 	if config.PermissionLevelsDisabled() {
-		nav, err := u.navRepo.GetById(ctx, req.ID)
-		if err != nil {
-			return err
-		}
+		req.Permissions.AllowedPermissionLevelIDs = nav.Permissions.AllowedPermissionLevelIDs
 		req.Permissions.MinPermissionLevelID = nav.Permissions.MinPermissionLevelID
 		req.Permissions.MinPermissionLevelRank = nav.Permissions.MinPermissionLevelRank
 	}
+	if !config.PermissionLevelsDisabled() {
+		permissions, err := u.enterprise.NormalizeNodePermissions(ctx, *req.Permissions)
+		if err != nil {
+			return err
+		}
+		req.Permissions = &permissions
+	}
 	if err := u.navRepo.UpdatePermissions(ctx, req.KbId, req.ID, *req.Permissions); err != nil {
 		return err
-	}
-
-	nodeIDs, err := u.nodeRepo.GetNodeIDsByNavId(ctx, req.KbId, req.ID)
-	if err != nil {
-		return fmt.Errorf("get node ids by nav id failed: %w", err)
-	}
-	if len(nodeIDs) == 0 {
-		return nil
-	}
-
-	nodesMap, err := u.nodeRepo.GetNodesByIDs(ctx, nodeIDs)
-	if err != nil {
-		return fmt.Errorf("get nodes by ids failed: %w", err)
-	}
-
-	for _, nodeID := range nodeIDs {
-		node, ok := nodesMap[nodeID]
-		if !ok {
-			continue
-		}
-		permissions := node.Permissions
-		permissions.ScopeType = req.Permissions.ScopeType
-		updateMap := map[string]interface{}{
-			"permissions": permissions,
-		}
-		if err := u.nodeRepo.UpdateNodesByKbID(ctx, []string{nodeID}, req.KbId, updateMap); err != nil {
-			return fmt.Errorf("sync node permission scope type failed: %w", err)
-		}
 	}
 
 	return nil

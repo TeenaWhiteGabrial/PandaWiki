@@ -35,6 +35,8 @@ func NewNavHandler(
 	group := echo.Group("/api/v1/nav", h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.GET("/list", h.NavList)
 	group.GET("/permission", h.NavPermission)
+	group.GET("/management", h.GetNavManagement)
+	group.PATCH("/management", h.EditNavManagement)
 	group.POST("/add", h.NavAdd)
 	group.DELETE("/delete", h.NavDelete)
 	group.PATCH("/update", h.NavUpdate)

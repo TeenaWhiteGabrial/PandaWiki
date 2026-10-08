@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"gorm.io/gorm"
@@ -180,10 +181,14 @@ func (r *NavRepository) Update(ctx context.Context, kbId, id, name string) error
 }
 
 func (r *NavRepository) UpdatePermissions(ctx context.Context, kbId, id string, permissions domain.NodePermissions) error {
+	encoded, err := json.Marshal(permissions)
+	if err != nil {
+		return err
+	}
 	return r.db.WithContext(ctx).
 		Model(&domain.Nav{}).
 		Where("id = ? AND kb_id = ?", id, kbId).
-		Update("permissions", permissions).Error
+		Update("permissions", gorm.Expr("jsonb_set(?::jsonb - 'management_grants', '{management_grants}', COALESCE(permissions->'management_grants', '[]'::jsonb), true)", string(encoded))).Error
 }
 
 func (r *NavRepository) GetReleaseList(ctx context.Context, kbId string) ([]v1.NavListResp, error) {
@@ -204,8 +209,9 @@ func (r *NavRepository) GetReleaseList(ctx context.Context, kbId string) ([]v1.N
 	if err := r.db.WithContext(ctx).
 		Model(&domain.NavRelease{}).
 		Where("release_id = ?", kbRelease.ID).
-		Select("nav_id as id, name, position, permissions").
-		Order("position ASC").
+		Joins("LEFT JOIN navs ON navs.id = nav_releases.nav_id AND navs.kb_id = nav_releases.kb_id").
+		Select("nav_releases.nav_id as id, nav_releases.name, nav_releases.position, COALESCE(navs.permissions, nav_releases.permissions) as permissions").
+		Order("nav_releases.position ASC").
 		Find(&navs).Error; err != nil {
 		return nil, err
 	}

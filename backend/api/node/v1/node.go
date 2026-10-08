@@ -13,6 +13,7 @@ type GetNodeDetailReq struct {
 }
 
 type NodeDetailResp struct {
+	CanManage        bool                   `json:"can_manage" gorm:"-"`
 	ID               string                 `json:"id"`
 	KbID             string                 `json:"kb_id"`
 	NavId            string                 `json:"nav_id"`
@@ -104,12 +105,16 @@ type NodeListGroupNavReq struct {
 }
 
 type NodeListGroupNavResp struct {
-	NavName    string                    `json:"nav_name"`
-	NavID      string                    `json:"nav_id"`
-	Position   float64                   `json:"position"`
-	Count      int64                     `json:"count"`
-	IsReleased bool                      `json:"is_released"`
-	List       []domain.NodeListItemResp `json:"list"`
+	CanCreateDocument bool                      `json:"can_create_document"`
+	CanCreateFolder   bool                      `json:"can_create_folder"`
+	CanConfigure      bool                      `json:"can_configure"`
+	CanManage         bool                      `json:"can_manage"`
+	NavName           string                    `json:"nav_name"`
+	NavID             string                    `json:"nav_id"`
+	Position          float64                   `json:"position"`
+	Count             int64                     `json:"count"`
+	IsReleased        bool                      `json:"is_released"`
+	List              []domain.NodeListItemResp `json:"list"`
 }
 
 type GetNodeReleaseListReq struct {
@@ -159,4 +164,17 @@ type GetNodeReleaseDetailResp struct {
 	EditorAccount    string          `json:"editor_account"`
 	CreatorID        string          `json:"creator_id"`
 	CreatorAccount   string          `json:"creator_account"`
+}
+
+// NodeManagementEditReq configures management independently of reading rules.
+type NodeManagementEditReq struct {
+	KBID   string                           `json:"kb_id" validate:"required"`
+	IDs    []string                         `json:"ids" validate:"required,min=1"`
+	Grants []domain.DocumentManagementGrant `json:"grants"`
+}
+
+type NodeManagementResp struct {
+	ID           string                           `json:"id"`
+	Grants       []domain.DocumentManagementGrant `json:"grants"`
+	CanConfigure bool                             `json:"can_configure"`
 }

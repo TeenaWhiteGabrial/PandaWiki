@@ -24,6 +24,8 @@ type UserUsecase struct {
 	config         *config.Config
 }
 
+var ErrAdministratorOnly = errors.New("仅管理员可登录管理后台，请使用用户端查阅文档")
+
 func NewUserUsecase(repo *pg.UserRepository, enterpriseRepo *pg.EnterpriseRepository, logger *log.Logger, config *config.Config) (*UserUsecase, error) {
 	if config.AdminPassword != "" {
 		if err := repo.UpsertDefaultUser(context.Background(), &domain.User{
@@ -55,11 +57,27 @@ func (u *UserUsecase) CreateUser(ctx context.Context, user *domain.User, departm
 }
 
 func (u *UserUsecase) VerifyUserAndGenerateToken(ctx context.Context, req v1.LoginReq) (string, error) {
+	return u.verifyUserAndGenerateToken(ctx, req, true)
+}
+
+// Reader login shares account credentials, but never grants administration.
+// All management APIs independently check the current administrator role.
+func (u *UserUsecase) VerifyReaderAndGenerateToken(ctx context.Context, req v1.LoginReq) (string, error) {
+	return u.verifyUserAndGenerateToken(ctx, req, false)
+}
+
+func (u *UserUsecase) verifyUserAndGenerateToken(ctx context.Context, req v1.LoginReq, administratorOnly bool) (string, error) {
 	var user *domain.User
 	var err error
 	user, err = u.repo.VerifyUser(ctx, req.Account, req.Password)
 	if err != nil {
 		return "", err
+	}
+	if administratorOnly && !consts.IsAdministrator(user.Role) {
+		return "", ErrAdministratorOnly
+	}
+	if !consts.IsAdministrator(user.Role) && user.Role != consts.UserRoleUser {
+		return "", fmt.Errorf("账号角色无效")
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"id":  user.ID,

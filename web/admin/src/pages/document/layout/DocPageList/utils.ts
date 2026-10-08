@@ -139,6 +139,7 @@ export function findItemInTree(
         name: item.name,
         emoji: item.emoji,
         parent_id: item.parentId,
+        nav_id: item.nav_id,
         summary: item.summary,
         type: item.type,
         status: item.status,
