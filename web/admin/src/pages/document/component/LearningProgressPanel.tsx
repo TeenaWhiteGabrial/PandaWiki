@@ -707,6 +707,27 @@ const LearningProgressPanel = ({
                         : '-'}
                     </Box>
                     <Stack sx={{ flex: 1.4, minWidth: 0 }} gap={0.5}>
+                      {item.rag_info?.learning_progress?.extraction && (
+                        <Typography
+                          fontSize={12}
+                          color={
+                            item.rag_info.learning_progress.extraction.scope ===
+                            'full'
+                              ? 'text.secondary'
+                              : 'warning.main'
+                          }
+                        >
+                          索引内容：
+                          {
+                            {
+                              full: '完整正文',
+                              partial: '部分正文',
+                              metadata: '仅名称和元信息',
+                              unknown: '正文覆盖待核验',
+                            }[item.rag_info.learning_progress.extraction.scope]
+                          }
+                        </Typography>
+                      )}
                       {item.rag_info?.learning_progress?.stages?.at(-1) &&
                         (() => {
                           const stage =

@@ -1295,6 +1295,7 @@ export interface DomainLearningStage {
 }
 
 export interface DomainLearningProgress {
+  extraction?: DomainFileExtraction;
   started_at: string;
   finished_at?: string;
   last_progress_at: string;
@@ -1305,6 +1306,18 @@ export interface DomainLearningProgress {
   doc_id?: string;
   dataset_id?: string;
   stages?: DomainLearningStage[];
+}
+
+export interface DomainFileExtraction {
+  scope: 'full' | 'partial' | 'metadata' | 'unknown';
+  parser?: string;
+  page_count?: number;
+  extracted_pages?: number;
+  ocr_pages?: number;
+  repaired?: boolean;
+  truncated?: boolean;
+  message?: string;
+  warnings?: string[];
 }
 
 export interface DomainRagInfo {

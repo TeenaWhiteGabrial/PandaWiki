@@ -536,6 +536,13 @@ func (r *NodeRepository) UpdateNodeReleaseContent(ctx context.Context, id, conte
 		Update("content", content).Error
 }
 
+func (r *NodeRepository) UpdateNodeReleaseExtractedContent(ctx context.Context, id, content string, meta domain.NodeMeta) error {
+	writeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return r.db.WithContext(writeCtx).Model(&domain.NodeRelease{}).Where("id = ?", id).
+		Updates(map[string]any{"content": content, "meta": meta}).Error
+}
+
 func (r *NodeRepository) GetLatestNodeReleaseByNodeID(ctx context.Context, nodeID string) (*domain.NodeRelease, error) {
 	var nodeRelease *domain.NodeRelease
 	if err := r.db.WithContext(ctx).

@@ -1,6 +1,21 @@
 package usecase
 
-import "context"
+import (
+	"context"
+	"github.com/chaitin/panda-wiki/domain"
+)
+
+type fileExtractionReporterKey struct{}
+
+func WithFileExtractionReporter(ctx context.Context, report func(*domain.FileExtraction)) context.Context {
+	return context.WithValue(ctx, fileExtractionReporterKey{}, report)
+}
+
+func reportFileExtraction(ctx context.Context, result *domain.FileExtraction) {
+	if report, ok := ctx.Value(fileExtractionReporterKey{}).(func(*domain.FileExtraction)); ok {
+		report(result)
+	}
+}
 
 type learningStageReporterKey struct{}
 

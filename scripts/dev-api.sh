@@ -17,6 +17,8 @@ env \
   GOPROXY="https://goproxy.cn,direct" \
   ENV="local" \
   SERVICE_NAME="api" \
+  PDF_PARSER_URL="http://127.0.0.1:18090" \
+  PDF_PARSER_TOKEN="${PDF_PARSER_TOKEN:-}" \
   LOG_LEVEL="-4" \
   LOG_STORE_URL="http://127.0.0.1:13100" \
   ADMIN_PASSWORD="admin123" \

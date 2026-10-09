@@ -5,6 +5,7 @@ import "time"
 // LearningProgress is an observed timeline, not an estimated percentage.
 // Old tasks begin at the first observation after this feature is deployed.
 type LearningProgress struct {
+	Extraction     *FileExtraction `json:"extraction,omitempty"`
 	StartedAt      time.Time       `json:"started_at"`
 	FinishedAt     *time.Time      `json:"finished_at,omitempty"`
 	LastProgressAt time.Time       `json:"last_progress_at"`
@@ -15,6 +16,19 @@ type LearningProgress struct {
 	DocID          string          `json:"doc_id,omitempty"`
 	DatasetID      string          `json:"dataset_id,omitempty"`
 	Stages         []LearningStage `json:"stages"`
+}
+
+// FileExtraction describes what is actually indexed, independently of RAG status.
+type FileExtraction struct {
+	Scope          string   `json:"scope"`
+	Parser         string   `json:"parser,omitempty"`
+	PageCount      int      `json:"page_count,omitempty"`
+	ExtractedPages int      `json:"extracted_pages,omitempty"`
+	OCRPages       int      `json:"ocr_pages,omitempty"`
+	Repaired       bool     `json:"repaired,omitempty"`
+	Truncated      bool     `json:"truncated,omitempty"`
+	Message        string   `json:"message,omitempty"`
+	Warnings       []string `json:"warnings,omitempty"`
 }
 
 type LearningStage struct {

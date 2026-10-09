@@ -9,7 +9,7 @@ load_external_oss_env
 ensure_command docker "请先安装并启动 Docker Desktop。"
 
 echo "==> 启动 Docker 基础依赖"
-echo "    postgres redis nats qdrant crawler raglite loki alloy"
+echo "    pdf-parser postgres redis nats qdrant crawler raglite loki alloy"
 
 cd "${PANDA_WIKI_ROOT_DIR}"
 docker compose -f "${PANDA_WIKI_COMPOSE_FILE}" up -d --wait --remove-orphans "${PANDA_WIKI_DEPENDENCY_SERVICES[@]}"

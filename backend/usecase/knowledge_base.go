@@ -367,12 +367,17 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 		if release.Type == domain.NodeTypeFolder {
 			continue
 		}
-		if strings.TrimSpace(release.Content) == "" && release.Meta.FileKey != "" {
+		if ShouldRefreshFileContent(release) {
+			ctx := WithFileExtractionReporter(ctx, func(result *domain.FileExtraction) { release.Meta.Extraction = result })
 			content := ""
 			contentOK := false
 			contentMessage := ""
 			if u.batchImport != nil && ShouldExtractReleaseFileContent(release) {
-				content, contentOK, contentMessage = u.batchImport.extractFileContent(ctx, kbID, release.Meta.FileKey, release.Name)
+				filename := release.Meta.FileName
+				if filename == "" {
+					filename = release.Name
+				}
+				content, contentOK, contentMessage = u.batchImport.extractFileContent(ctx, kbID, release.Meta.FileKey, filename)
 			} else {
 				contentMessage = "该文件类型不解析正文，仅索引文件元信息"
 			}
@@ -381,10 +386,11 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 					contentMessage = "内容解析未返回有效文本，仅索引文件元信息"
 				}
 				content = BuildFileMetadataLearningContent(release, contentMessage)
+				release.Meta.Extraction = &domain.FileExtraction{Scope: "metadata", Message: contentMessage}
 				u.logger.Warn("publication content extraction fallback to file metadata", log.String("kb_id", kbID), log.String("node_id", release.NodeID), log.String("node_release_id", release.ID), log.String("stage", "learning"), log.String("document", release.Name), log.String("reason", contentMessage))
 			}
 			release.Content = content
-			if err := u.nodeRepo.UpdateNodeReleaseContent(ctx, release.ID, content); err != nil {
+			if err := u.nodeRepo.UpdateNodeReleaseExtractedContent(ctx, release.ID, content, release.Meta); err != nil {
 				return learned, kb.DatasetID, fmt.Errorf("保存文档“%s”解析内容失败: %w", release.Name, err)
 			}
 		}
@@ -528,6 +534,25 @@ func ShouldExtractReleaseFileContent(release *domain.NodeReleaseWithDirPath) boo
 		}
 	}
 	return true
+}
+
+func ShouldRefreshFileContent(release *domain.NodeReleaseWithDirPath) bool {
+	if release == nil || release.Meta.FileKey == "" {
+		return false
+	}
+	if strings.TrimSpace(release.Content) == "" {
+		return true
+	}
+	if !ShouldExtractReleaseFileContent(release) {
+		return false
+	}
+	if result := release.Meta.Extraction; result != nil {
+		return result.Scope == "metadata" || result.Scope == "partial"
+	}
+	if strings.EqualFold(filepath.Ext(release.Name), ".pdf") || strings.EqualFold(filepath.Ext(release.Meta.FileName), ".pdf") {
+		return true
+	}
+	return strings.Contains(release.Content, "这是一个文件型文档。系统当前已索引该文件的基础元信息，可用于按名称、路径、类型检索。")
 }
 
 func normalizeReleaseFileType(release *domain.NodeReleaseWithDirPath) string {

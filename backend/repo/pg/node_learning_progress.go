@@ -35,6 +35,10 @@ func (r *NodeRepository) RecordNodeLearningStage(ctx context.Context, kbID, node
 	return r.updateLearningProgress(ctx, kbID, nodeID, taskID, func(p *domain.LearningProgress) { p.Advance(stage, message, time.Now()) })
 }
 
+func (r *NodeRepository) RecordNodeLearningExtraction(ctx context.Context, kbID, nodeID, taskID string, result *domain.FileExtraction) error {
+	return r.updateLearningProgress(ctx, kbID, nodeID, taskID, func(p *domain.LearningProgress) { p.Extraction = result })
+}
+
 // ObserveNodeLearningRAG records successful checks separately from real progress.
 // API failures and missing documents remain visible instead of masquerading as work.
 func (r *NodeRepository) ObserveNodeLearningRAG(ctx context.Context, kbID, nodeID, taskID, datasetID, docID, status, message, source, checkError string) error {

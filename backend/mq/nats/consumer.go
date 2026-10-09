@@ -3,6 +3,7 @@ package nats
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/nats-io/nats.go"
 
@@ -105,6 +106,8 @@ func (c *MQConsumer) registerJetStreamHandler(topic string, handler func(ctx con
 	}
 
 	sub, err := c.js.Subscribe(topic, func(msg *nats.Msg) {
+		stopHeartbeat := keepMessageInProgress(msg, 10*time.Second)
+		defer stopHeartbeat()
 		c.logger.Debug("received message via JetStream",
 			log.String("topic", topic),
 			log.Int("data_size", len(msg.Data)))
@@ -121,7 +124,7 @@ func (c *MQConsumer) registerJetStreamHandler(topic string, handler func(ctx con
 				log.String("topic", topic),
 				log.Error(err))
 		}
-	}, deliverPolicy, nats.AckExplicit(), nats.Durable(consumerName), nats.ConsumerName(consumerName))
+	}, deliverPolicy, nats.ManualAck(), nats.AckExplicit(), nats.Durable(consumerName), nats.ConsumerName(consumerName))
 	if err != nil {
 		c.logger.Error("failed to subscribe to topic via JetStream",
 			log.String("topic", topic),
@@ -132,6 +135,26 @@ func (c *MQConsumer) registerJetStreamHandler(topic string, handler func(ctx con
 	c.logger.Info("successfully subscribed to topic via JetStream", log.String("topic", topic))
 	c.handlers[topic] = sub
 	return nil
+}
+
+// OCR can exceed JetStream's acknowledgement window. Renew only while the
+// handler is active; errors remain unacknowledged and can be retried.
+func keepMessageInProgress(msg *nats.Msg, interval time.Duration) func() {
+	done := make(chan struct{})
+	_ = msg.InProgress()
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				_ = msg.InProgress()
+			}
+		}
+	}()
+	return func() { close(done) }
 }
 
 func (c *MQConsumer) StartConsumerHandlers(ctx context.Context) error {

@@ -2,11 +2,75 @@ package usecase
 
 import (
 	"archive/zip"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestParsePDFRecoversBrokenObjectReference(t *testing.T) {
+	filePath := writeTestPDF(t, true)
+	content, err := parseLocalFileToMarkdown(t.Context(), filePath, "broken.pdf")
+	if err == nil || !strings.Contains(err.Error(), "PDF 正文解析异常") ||
+		!strings.Contains(err.Error(), "loading {2 0}: found {3 0}") {
+		t.Fatalf("expected recovered PDF object-reference error, got content=%q err=%v", content, err)
+	}
+	if content != "" {
+		t.Fatalf("broken PDF must not return partial content: %q", content)
+	}
+
+	// A bad document must not stop subsequent documents from being parsed.
+	content, err = parseLocalFileToMarkdown(t.Context(), writeTestPDF(t, false), "healthy.pdf")
+	if err != nil || !strings.Contains(content, "Healthy PDF") {
+		t.Fatalf("parse healthy PDF after broken PDF: content=%q err=%v", content, err)
+	}
+}
+
+func TestParsePDFReadableAndMissingFiles(t *testing.T) {
+	content, err := parsePDFFile(writeTestPDF(t, false), "healthy.pdf")
+	if err != nil || !strings.Contains(content, "Healthy PDF") {
+		t.Fatalf("parse healthy PDF: content=%q err=%v", content, err)
+	}
+	content, err = parsePDFFile(filepath.Join(t.TempDir(), "missing.pdf"), "missing.pdf")
+	if err == nil || !strings.Contains(err.Error(), "PDF 打开失败") || content != "" {
+		t.Fatalf("expected normal file-open error: content=%q err=%v", content, err)
+	}
+}
+
+func writeTestPDF(t *testing.T, brokenPagesReference bool) string {
+	t.Helper()
+	stream := "BT /F1 12 Tf 72 720 Td (Healthy PDF) Tj ET\n"
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(stream), stream),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	}
+	var document strings.Builder
+	document.WriteString("%PDF-1.4\n")
+	offsets := make([]int, len(objects))
+	for i, object := range objects {
+		offsets[i] = document.Len()
+		fmt.Fprintf(&document, "%d 0 obj\n%s\nendobj\n", i+1, object)
+	}
+	// Match the production crash: an xref entry points at a different object.
+	if brokenPagesReference {
+		offsets[1] = offsets[2]
+	}
+	xrefOffset := document.Len()
+	fmt.Fprintf(&document, "xref\n0 %d\n0000000000 65535 f \n", len(objects)+1)
+	for _, offset := range offsets {
+		fmt.Fprintf(&document, "%010d 00000 n \n", offset)
+	}
+	fmt.Fprintf(&document, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xrefOffset)
+	filePath := filepath.Join(t.TempDir(), "fixture.pdf")
+	if err := os.WriteFile(filePath, []byte(document.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return filePath
+}
 
 func TestParseLocalOfficeFilesToMarkdown(t *testing.T) {
 	dir := t.TempDir()

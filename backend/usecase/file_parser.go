@@ -21,6 +21,7 @@ import (
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
+	"github.com/chaitin/panda-wiki/domain"
 	"github.com/ledongthuc/pdf"
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
@@ -33,10 +34,11 @@ const (
 )
 
 type directParseResult struct {
-	Content   string
-	OK        bool
-	Message   string
-	Truncated bool
+	Extraction *domain.FileExtraction
+	Content    string
+	OK         bool
+	Message    string
+	Truncated  bool
 	// SkipCrawler means the local parser made an intentional decision not to
 	// parse the source, usually because the file is too large. In that case,
 	// falling back to crawler would reintroduce the same large URL/file transfer
@@ -71,6 +73,9 @@ func (u *BatchImportUsecase) extractFileContentDirect(ctx context.Context, fileK
 	}()
 
 	reportLearningStage(ctx, "parse", "本地提取正文："+filename)
+	if strings.EqualFold(filepath.Ext(filename), ".pdf") {
+		return parsePDFWithService(ctx, tmp.Name(), filename)
+	}
 	content, err := parseLocalFileToMarkdown(ctx, tmp.Name(), filename)
 	if err != nil {
 		return directParseResult{Message: err.Error()}
@@ -153,7 +158,17 @@ func parseHTMLFile(filePath, filename string) (string, error) {
 	return withDocumentTitle(filename, md), nil
 }
 
-func parsePDFFile(filePath, filename string) (string, error) {
+func parsePDFFile(filePath, filename string) (content string, err error) {
+	// The PDF library can panic while resolving malformed object references.
+	// Keep that failure within this document so the caller can use its existing
+	// crawler/metadata fallback instead of crashing the entire consumer.
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			content = ""
+			err = fmt.Errorf("PDF 正文解析异常：%v", recovered)
+		}
+	}()
+
 	f, r, err := pdf.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("PDF 打开失败：%w", err)

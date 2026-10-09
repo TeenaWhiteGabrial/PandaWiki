@@ -119,6 +119,23 @@ services:
       nats:
         condition: service_started
 
+  pdf-parser:
+    build:
+      context: ../../services/pdf-parser
+      args:
+        PDF_PARSER_BASE_IMAGE: ${PDF_PARSER_BASE_IMAGE:-python:3.12-slim-bookworm}
+        PDF_PARSER_APT_MIRROR: ${PDF_PARSER_APT_MIRROR:-https://deb.debian.org}
+    container_name: ${PROJECT_NAME}-pdf-parser
+    restart: unless-stopped
+    labels: *pandawiki-log-labels
+    mem_limit: 2g
+    pids_limit: 128
+    environment:
+      PDF_PARSER_TOKEN: ${PDF_PARSER_TOKEN:-}
+      PDF_PARSER_WORKERS: ${PDF_PARSER_WORKERS:-1}
+      PDF_PARSER_MAX_PAGES: ${PDF_PARSER_MAX_PAGES:-500}
+      PDF_PARSER_JOB_TIMEOUT_SECONDS: ${PDF_PARSER_JOB_TIMEOUT_SECONDS:-900}
+
   api:
     build:
       context: ../../backend
@@ -131,6 +148,9 @@ services:
     environment:
       ENV: production
       SERVICE_NAME: api
+      PDF_PARSER_URL: http://pdf-parser:8090
+      PDF_PARSER_TOKEN: ${PDF_PARSER_TOKEN:-}
+      ANYDOC_CRAWLER_BASE_URL: ${ANYDOC_CRAWLER_BASE_URL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       PG_DSN: host=${PROJECT_NAME}-postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable TimeZone=Asia/Shanghai
@@ -153,6 +173,8 @@ services:
     ports:
       - '${API_PORT}:8000'
     depends_on:
+      pdf-parser:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -176,6 +198,9 @@ services:
     environment:
       ENV: production
       SERVICE_NAME: consumer
+      PDF_PARSER_URL: http://pdf-parser:8090
+      PDF_PARSER_TOKEN: ${PDF_PARSER_TOKEN:-}
+      ANYDOC_CRAWLER_BASE_URL: ${ANYDOC_CRAWLER_BASE_URL:-}
       PG_DSN: host=${PROJECT_NAME}-postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable TimeZone=Asia/Shanghai
       MQ_NATS_SERVER: nats://${PROJECT_NAME}-nats:4222
       REDIS_ADDR: ${PROJECT_NAME}-redis:6379

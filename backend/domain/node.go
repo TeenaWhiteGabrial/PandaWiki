@@ -186,14 +186,15 @@ type NodeGroupDetail struct {
 }
 
 type NodeMeta struct {
-	Summary      string `json:"summary"`
-	Emoji        string `json:"emoji"`
-	ContentType  string `json:"content_type"`
-	FileKey      string `json:"file_key,omitempty"`
-	FileName     string `json:"file_name,omitempty"`
-	FileType     string `json:"file_type,omitempty"`
-	PreviewKey   string `json:"preview_key,omitempty"`
-	FileReadonly bool   `json:"file_readonly,omitempty"`
+	Extraction   *FileExtraction `json:"extraction,omitempty"`
+	Summary      string          `json:"summary"`
+	Emoji        string          `json:"emoji"`
+	ContentType  string          `json:"content_type"`
+	FileKey      string          `json:"file_key,omitempty"`
+	FileName     string          `json:"file_name,omitempty"`
+	FileType     string          `json:"file_type,omitempty"`
+	PreviewKey   string          `json:"preview_key,omitempty"`
+	FileReadonly bool            `json:"file_readonly,omitempty"`
 	// ArchivePending marks a ZIP source that is uploaded but intentionally not
 	// expanded until the user publishes it.
 	ArchivePending bool                 `json:"archive_pending,omitempty"`

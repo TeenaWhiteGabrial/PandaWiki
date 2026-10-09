@@ -486,20 +486,36 @@ func (u *BatchImportUsecase) ExtractFileContent(ctx context.Context, kbID, fileK
 }
 
 func (u *BatchImportUsecase) extractFileContent(ctx context.Context, kbID, fileKey, filename string) (string, bool, string) {
-	extractCtx, cancelExtract := context.WithTimeout(ctx, batchImportExtractTimeout)
+	extractTimeout := batchImportExtractTimeout
+	if strings.EqualFold(path.Ext(filename), ".pdf") {
+		extractTimeout = 20 * time.Minute
+	}
+	extractCtx, cancelExtract := context.WithTimeout(ctx, extractTimeout)
 	defer cancelExtract()
 
 	direct := u.extractFileContentDirect(extractCtx, fileKey, filename)
 	if direct.OK {
+		extraction := direct.Extraction
+		if extraction == nil {
+			extraction = &domain.FileExtraction{Scope: "full", Parser: "本地解析", Message: direct.Message, Truncated: direct.Truncated}
+			if direct.Truncated {
+				extraction.Scope = "partial"
+			}
+		}
+		reportFileExtraction(ctx, extraction)
 		return direct.Content, true, direct.Message
 	}
 	if direct.SkipCrawler {
 		return "", false, direct.Message
 	}
+	if strings.EqualFold(path.Ext(filename), ".pdf") && os.Getenv("ANYDOC_CRAWLER_BASE_URL") == "" && os.Getenv("ANYDOC_BASE_URL") == "" {
+		return "", false, direct.Message + "；未配置备用 crawler 服务"
+	}
 
 	reportLearningStage(extractCtx, "crawler", "使用解析服务提取正文；本地解析结果："+direct.Message)
 	content, ok, crawlerMessage := u.extractFileContentViaCrawler(extractCtx, kbID, fileKey, filename)
 	if ok {
+		reportFileExtraction(ctx, &domain.FileExtraction{Scope: "unknown", Parser: "crawler", Message: "备用解析服务已返回正文，页面覆盖尚未验证"})
 		return content, true, ""
 	}
 	if direct.Message != "" && crawlerMessage != "" {

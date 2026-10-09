@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/chaitin/panda-wiki/consts"
@@ -84,7 +85,9 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			}
 		}
 		report := func(stage, message string) {
-			if err := h.nodeRepo.RecordNodeLearningStage(ctx, request.KBID, request.NodeID, request.TaskID, stage, message); err != nil {
+			reportCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			if err := h.nodeRepo.RecordNodeLearningStage(reportCtx, request.KBID, request.NodeID, request.TaskID, stage, message); err != nil {
 				h.logger.Error("record node learning stage failed", log.String("task_id", request.TaskID), log.String("stage", stage), log.Error(err))
 			}
 		}
@@ -105,17 +108,34 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			}
 			return nil
 		}
+		if request.TaskID != "" {
+			taskCtx, cancelTask := context.WithCancel(ctx)
+			defer cancelTask()
+			ctx = taskCtx
+			go h.watchNodeLearningCancellation(ctx, cancelTask, request.TaskID)
+		}
 		kb, err := h.kbRepo.GetKnowledgeBaseByID(ctx, request.KBID)
 		if err != nil {
 			h.logger.Error("get kb failed", log.Error(err), log.String("kb_id", request.KBID))
 			return err
 		}
-		if strings.TrimSpace(nodeRelease.Content) == "" && nodeRelease.Meta.FileKey != "" {
+		if usecase.ShouldRefreshFileContent(nodeRelease) {
+			ctx = usecase.WithFileExtractionReporter(ctx, func(result *domain.FileExtraction) { nodeRelease.Meta.Extraction = result })
 			content := ""
 			ok := false
 			message := ""
 			if h.batchImport != nil && usecase.ShouldExtractReleaseFileContent(nodeRelease) {
-				content, ok, message = h.batchImport.ExtractFileContent(ctx, nodeRelease.KBID, nodeRelease.Meta.FileKey, nodeRelease.Name)
+				filename := nodeRelease.Meta.FileName
+				if filename == "" {
+					filename = nodeRelease.Name
+				}
+				h.logger.Info("start extracting node file content",
+					log.String("kb_id", nodeRelease.KBID),
+					log.String("node_id", nodeRelease.NodeID),
+					log.String("node_release_id", nodeRelease.ID),
+					log.String("task_id", request.TaskID),
+					log.String("filename", nodeRelease.Name))
+				content, ok, message = h.batchImport.ExtractFileContent(ctx, nodeRelease.KBID, nodeRelease.Meta.FileKey, filename)
 			} else {
 				message = "该文件类型不解析正文，仅索引文件元信息"
 			}
@@ -124,6 +144,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 					message = "内容解析未返回有效文本，仅索引文件元信息"
 				}
 				report("metadata", message)
+				nodeRelease.Meta.Extraction = &domain.FileExtraction{Scope: "metadata", Message: message}
 				content = usecase.BuildFileMetadataLearningContent(nodeRelease, message)
 				h.logger.Warn("extract node file content fallback to file metadata",
 					log.String("kb_id", nodeRelease.KBID),
@@ -133,7 +154,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			}
 			report("save_content", "保存已提取的正文或文件元信息")
 			nodeRelease.Content = content
-			if err := h.nodeRepo.UpdateNodeReleaseContent(ctx, nodeRelease.ID, content); err != nil {
+			if err := h.nodeRepo.UpdateNodeReleaseExtractedContent(ctx, nodeRelease.ID, content, nodeRelease.Meta); err != nil {
 				h.logger.Error("update node release extracted content failed",
 					log.String("node_release_id", nodeRelease.ID),
 					log.Error(err))
@@ -142,7 +163,15 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 		}
 
 		if nodeRelease.Meta.FileKey != "" && !usecase.ShouldExtractReleaseFileContent(nodeRelease) {
+			nodeRelease.Meta.Extraction = &domain.FileExtraction{Scope: "metadata", Message: "此文件仅索引名称、路径、类型；不解析正文"}
 			report("metadata", "此文件仅索引名称、路径、类型；已跳过源文件下载和正文解析")
+		}
+		if nodeRelease.Meta.Extraction != nil {
+			reportCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			if err := h.nodeRepo.RecordNodeLearningExtraction(reportCtx, request.KBID, request.NodeID, request.TaskID, nodeRelease.Meta.Extraction); err != nil {
+				h.logger.Error("record node file extraction result failed", log.String("task_id", request.TaskID), log.Error(err))
+			}
+			cancel()
 		}
 
 		report("submit", fmt.Sprintf("提交文本至 RAGLite（%d 字符）；等待上传接口响应", utf8.RuneCountInString(nodeRelease.Content)))
@@ -261,4 +290,26 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 	}
 
 	return nil
+}
+
+func (h *RAGMQHandler) watchNodeLearningCancellation(ctx context.Context, cancel context.CancelFunc, taskID string) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			checkCtx, stopCheck := context.WithTimeout(ctx, 2*time.Second)
+			task, err := h.nodeRepo.GetNodeLearningTaskByID(checkCtx, taskID)
+			stopCheck()
+			if err == nil {
+				switch task.Status {
+				case consts.NodeLearningTaskCanceled, consts.NodeLearningTaskCancelRequested, consts.NodeLearningTaskFailed:
+					cancel()
+					return
+				}
+			}
+		}
+	}
 }

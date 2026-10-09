@@ -26,6 +26,7 @@ SERVICES_BASE=(
 )
 
 SERVICES_BACKEND=(
+  pdf-parser
   api
   consumer
 )
@@ -36,6 +37,7 @@ SERVICES_FRONTEND=(
 )
 
 SERVICES_RUNTIME=(
+  pdf-parser
   api
   consumer
   admin
@@ -251,7 +253,7 @@ run_restart() {
   echo "==> 仅重启服务"
   # Docker Compose V1.29.2 在重建旧镜像容器时可能因缺少
   # ContainerConfig 字段失败。先移除应用容器再重建，不删除任何数据卷。
-  compose rm -sf api consumer admin app raglite qdrant loki alloy preview \
+  compose rm -sf pdf-parser api consumer admin app raglite qdrant loki alloy preview \
     admin-build app-build >/dev/null 2>&1 || true
   compose up -d "${SERVICES_BASE[@]}"
   compose up -d --build "${SERVICES_BACKEND[@]}"
@@ -311,9 +313,10 @@ cleanup_rollback_backups() {
 }
 
 wait_for_services() {
-  local service container state attempt
+  local service container state health attempt ready
 
   for attempt in $(seq 1 12); do
+    ready=true
     for service in "$@"; do
       container="$(project_name)-${service}"
       if ! docker inspect "${container}" >/dev/null 2>&1; then
@@ -323,15 +326,29 @@ wait_for_services() {
       state="$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null || true)"
       case "${state}" in
         running)
+          health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${container}")"
+          if [[ "${health}" == "unhealthy" ]]; then
+            echo "服务健康检查失败：${container}"
+            return 1
+          fi
+          [[ "${health}" == "starting" ]] && ready=false
           ;;
         restarting|exited|dead)
           echo "服务未正常运行：${container}（状态：${state}）"
           return 1
           ;;
+        *)
+          ready=false
+          ;;
       esac
     done
+    if [[ "${ready}" == true && "${attempt}" -ge 3 ]]; then
+      return 0
+    fi
     sleep 2
   done
+  echo "服务启动或健康检查超时"
+  return 1
 }
 
 rollback_upgrade() {
@@ -383,8 +400,8 @@ upgrade_services() {
       fi
       ;;
     backend)
-      services=(api consumer)
-      echo "==> 仅升级后端 API 和 Consumer"
+      services=(pdf-parser api consumer)
+      echo "==> 升级 PDF 解析服务、API 和 Consumer"
       snapshot_for_rollback "${services[@]}"
       ;;
     base)
@@ -393,7 +410,7 @@ upgrade_services() {
       snapshot_for_rollback "${services[@]}"
       ;;
     all)
-      services=("${SERVICES_BASE[@]}" api consumer admin app)
+      services=("${SERVICES_BASE[@]}" pdf-parser api consumer admin app)
       echo "==> 完整无损升级"
       snapshot_for_rollback "${services[@]}"
       ;;
@@ -434,8 +451,8 @@ upgrade_services() {
       ! compose up -d "${SERVICES_BASE[@]}" ||
       ! run_frontend_builds ||
       ! verify_frontend_artifacts ||
-      ! compose rm -sf api consumer admin app >/dev/null 2>&1 ||
-      ! compose up -d --build --no-deps api consumer ||
+      ! compose rm -sf pdf-parser api consumer admin app >/dev/null 2>&1 ||
+      ! compose up -d --build --no-deps pdf-parser api consumer ||
       ! compose up -d --build --no-deps admin app ||
       ! wait_for_services "${services[@]}"; then
       rollback_upgrade
@@ -529,7 +546,7 @@ run_status() {
 
 run_logs() {
   echo "==> 最近日志"
-  compose logs --tail=100 postgres redis nats qdrant raglite loki alloy api consumer admin app
+  compose logs --tail=100 postgres redis nats qdrant raglite pdf-parser loki alloy api consumer admin app
 }
 
 main() {
