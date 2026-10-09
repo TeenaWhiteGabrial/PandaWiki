@@ -16,7 +16,7 @@
 ## 前置要求
 
 - 已安装 Docker
-- 已安装 Docker Compose 插件
+- 已安装 Docker Compose 插件或 `docker-compose` v1.29.2
 - 服务器能访问你所配置的镜像源
 
 ## 使用步骤
@@ -42,6 +42,11 @@ cp .env.example .env
 部署脚本会读取 `OSS_ENDPOINT`、`OSS_ACCESS_KEY`、`OSS_SECRET_KEY`、
 `OSS_BUCKET_NAME`、`OSS_DOWNLOAD_URL` 和 `OSS_REGION`。生产环境不再启动 MinIO。
 
+PDF 解析基础镜像默认使用
+`registry.cn-hangzhou.aliyuncs.com/misaka-images/python:3.12-slim-bookworm`。
+私有仓库需在服务器执行 `docker login registry.cn-hangzhou.aliyuncs.com`。
+已有 `deploy/server/.env` 中的 `PDF_PARSER_BASE_IMAGE` 会覆盖默认值，需同步更新。
+
 说明：
 
 - `POSTGRES_DB` 是 PandaWiki 主应用数据库
@@ -64,6 +69,11 @@ cp .env.example .env
 cd deploy/server
 bash deploy.sh
 ```
+
+已有环境升级使用 `bash deploy.sh upgrade backend`（PDF 解析服务、API、Consumer），
+或 `bash deploy.sh upgrade app`（用户端）。脚本先完成目标镜像构建再切换容器；
+构建失败保留旧容器，切换失败只恢复原有服务且禁止重新构建。
+回滚未通过启动或状态检查时保留回滚镜像。镜像回滚不恢复数据库数据或迁移。
 
 ## 默认访问地址
 

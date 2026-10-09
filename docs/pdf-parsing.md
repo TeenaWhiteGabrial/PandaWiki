@@ -54,7 +54,7 @@ git apply /tmp/pandawiki-pdf-parser-update.patch
 在 `deploy/server/.env` 可配置以下非必填项：
 
 ```dotenv
-PDF_PARSER_BASE_IMAGE=python:3.12-slim-bookworm
+PDF_PARSER_BASE_IMAGE=registry.cn-hangzhou.aliyuncs.com/misaka-images/python:3.12-slim-bookworm
 PDF_PARSER_APT_MIRROR=https://deb.debian.org
 PDF_PARSER_TOKEN=
 PDF_PARSER_WORKERS=1
@@ -63,7 +63,7 @@ PDF_PARSER_JOB_TIMEOUT_SECONDS=900
 ANYDOC_CRAWLER_BASE_URL=
 ```
 
-建议用独立随机字符串设置 `PDF_PARSER_TOKEN`；部署会向 API、Consumer 和解析服务传入相同值。未设置时仅依赖不发布端口的内部网络隔离。已有 crawler 可填其内部地址；未部署则留空。Docker Hub 不可用时，将基础镜像改为组织可访问的等价 Debian Bookworm Python 镜像。首次构建还需要访问 Debian 软件包源，可通过 `PDF_PARSER_APT_MIRROR` 指定组织可访问且提供 Debian 和 Debian Security 的镜像站根地址。
+建议用独立随机字符串设置 `PDF_PARSER_TOKEN`；部署会向 API、Consumer 和解析服务传入相同值。未设置时仅依赖不发布端口的内部网络隔离。已有 crawler 可填其内部地址；未部署则留空。基础镜像默认使用已同步的阿里云 `misaka-images/python:3.12-slim-bookworm`；私有仓库需先在构建服务器上执行 `docker login registry.cn-hangzhou.aliyuncs.com`。已有 `.env` 若仍设置为 Docker Hub 地址，需要手动更新，修改模板不会覆盖已有配置。首次构建还需要访问 Debian 软件包源，可通过 `PDF_PARSER_APT_MIRROR` 指定组织可访问且提供 Debian 和 Debian Security 的镜像站根地址。
 
 ```bash
 cd /opt/WikiCode/PandaWiki/deploy/server
@@ -72,6 +72,8 @@ bash deploy.sh upgrade admin
 ```
 
 `upgrade backend` 现在包含 pdf-parser、API、Consumer，管理端需单独升级才能显示新阶段和覆盖范围。部署脚本继续读取项目根 `.env` 的 OSS 配置。不要执行 fresh-db 或删除数据卷。
+
+升级会先保留旧容器运行并构建全部目标镜像；构建失败时不停止旧服务。切换失败时仅恢复升级前已存在的服务，使用旧镜像且禁止隐式构建；回滚启动或健康检查失败时保留回滚镜像标签供人工恢复。镜像回滚不会撤销数据库迁移或业务写入，不代替数据备份。
 
 ```bash
 docker inspect --format '{{.State.Health.Status}}' pandawiki-pdf-parser

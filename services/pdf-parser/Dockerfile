@@ -1,4 +1,4 @@
-ARG PDF_PARSER_BASE_IMAGE=python:3.12-slim-bookworm
+ARG PDF_PARSER_BASE_IMAGE=registry.cn-hangzhou.aliyuncs.com/misaka-images/python:3.12-slim-bookworm
 FROM ${PDF_PARSER_BASE_IMAGE}
 ARG PDF_PARSER_APT_MIRROR=https://deb.debian.org
 RUN sed -i "s|http://deb.debian.org|${PDF_PARSER_APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \

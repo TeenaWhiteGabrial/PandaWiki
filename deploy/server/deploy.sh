@@ -116,7 +116,7 @@ usage() {
   bash deploy.sh restart
   bash deploy.sh upgrade admin    # 只升级管理端
   bash deploy.sh upgrade app      # 只升级用户端
-  bash deploy.sh upgrade backend  # 只升级 API 和 Consumer
+  bash deploy.sh upgrade backend  # 升级 PDF 解析服务、API 和 Consumer
   bash deploy.sh upgrade base     # 只重建基础服务容器，不删除数据卷
   bash deploy.sh upgrade all      # 完整升级（默认）
   bash deploy.sh fresh-db
@@ -264,8 +264,8 @@ run_restart() {
 run_frontend_builds() {
   echo "==> 构建前端产物"
   compose rm -f admin-build app-build >/dev/null 2>&1 || true
-  compose run --rm admin-build
-  compose run --rm app-build
+  compose run --rm admin-build || return 1
+  compose run --rm app-build || return 1
 }
 
 project_name() {
@@ -296,7 +296,10 @@ snapshot_for_rollback() {
 
     if [[ -n "${image_id}" && -n "${image_ref}" ]]; then
       backup_ref="${PROJECT_NAME:-$(project_name)}-rollback-${stamp}-${service}:latest"
-      docker tag "${image_id}" "${backup_ref}"
+      if ! docker tag "${image_id}" "${backup_ref}"; then
+        echo "保存 ${service} 回滚镜像失败，取消升级"
+        return 1
+      fi
       echo "已保存 ${service} 回滚镜像：${backup_ref}"
     fi
 
@@ -351,68 +354,97 @@ wait_for_services() {
   return 1
 }
 
-rollback_upgrade() {
-  local index service backup_ref image_ref
-
-  echo
-  echo "==> 升级失败，开始回滚本次涉及的服务"
-  compose rm -sf "${ROLLBACK_SERVICES[@]}" >/dev/null 2>&1 || true
-
+restore_rollback_image_tags() {
+  local index backup_ref image_ref
   for index in "${!ROLLBACK_SERVICES[@]}"; do
-    service="${ROLLBACK_SERVICES[$index]}"
     backup_ref="${ROLLBACK_BACKUPS[$index]}"
     image_ref="${ROLLBACK_IMAGE_REFS[$index]}"
     if [[ -n "${backup_ref}" && -n "${image_ref}" ]]; then
-      docker tag "${backup_ref}" "${image_ref}"
+      if ! docker tag "${backup_ref}" "${image_ref}"; then
+        echo "恢复旧镜像标签失败：${backup_ref} -> ${image_ref}"
+        return 1
+      fi
+    fi
+  done
+}
+
+rollback_upgrade() {
+  local index service
+  local -a existing_services=()
+
+  echo
+  echo "==> 升级失败，开始回滚本次涉及的服务"
+  # 首次新增的服务没有旧镜像，不能在回滚时触发其构建。
+  if ! restore_rollback_image_tags; then
+    return 1
+  fi
+
+  for index in "${!ROLLBACK_SERVICES[@]}"; do
+    service="${ROLLBACK_SERVICES[$index]}"
+    if [[ -n "${ROLLBACK_BACKUPS[$index]}" ]]; then
+      existing_services+=("${service}")
+    else
+      echo "跳过此前未部署的服务：${service}"
     fi
   done
 
-  if compose up -d --no-deps "${ROLLBACK_SERVICES[@]}"; then
-    echo "==> 已恢复旧服务容器"
-  else
+  if ! compose rm -sf "${ROLLBACK_SERVICES[@]}"; then
+    echo "清理失败容器失败，保留回滚镜像，请检查容器状态"
+    return 1
+  fi
+  if [[ "${#existing_services[@]}" -eq 0 ]]; then
+    echo "==> 此前没有已部署服务，已清理本次新增容器"
+    return 0
+  fi
+  if ! compose up -d --no-build --no-deps "${existing_services[@]}" ||
+    ! wait_for_services "${existing_services[@]}"; then
     echo "回滚容器启动失败，请执行：${COMPOSE_BIN[*]} --env-file ${ENV_FILE} -f ${COMPOSE_FILE} ps"
+    return 1
+  fi
+  echo "==> 已恢复旧服务容器并通过状态检查"
+}
+
+handle_upgrade_failure() {
+  if rollback_upgrade; then
+    cleanup_rollback_backups
+  else
+    echo "==> 回滚未完成，保留以下镜像供手动恢复："
+    local backup_ref
+    for backup_ref in "${ROLLBACK_BACKUPS[@]}"; do
+      [[ -z "${backup_ref}" ]] || echo "  ${backup_ref}"
+    done
   fi
 }
 
 upgrade_services() {
   local target="$1"
   local -a services=()
+  local -a build_services=()
 
   case "${target}" in
     admin)
       services=(admin)
       echo "==> 仅升级管理端"
-      snapshot_for_rollback "${services[@]}"
-      if ! run_frontend_build admin; then
-        rollback_upgrade
-        cleanup_rollback_backups
-        return 1
-      fi
+      build_services=(admin)
       ;;
     app)
       services=(app)
       echo "==> 仅升级用户端"
-      snapshot_for_rollback "${services[@]}"
-      if ! run_frontend_build app; then
-        rollback_upgrade
-        cleanup_rollback_backups
-        return 1
-      fi
+      build_services=(app)
       ;;
     backend)
       services=(pdf-parser api consumer)
       echo "==> 升级 PDF 解析服务、API 和 Consumer"
-      snapshot_for_rollback "${services[@]}"
+      build_services=("${services[@]}")
       ;;
     base)
       services=("${SERVICES_BASE[@]}")
       echo "==> 仅重建基础服务容器（不删除数据卷）"
-      snapshot_for_rollback "${services[@]}"
       ;;
     all)
       services=("${SERVICES_BASE[@]}" pdf-parser api consumer admin app)
       echo "==> 完整无损升级"
-      snapshot_for_rollback "${services[@]}"
+      build_services=(pdf-parser api consumer admin app)
       ;;
     *)
       echo "不支持的升级目标：${target}"
@@ -421,42 +453,43 @@ upgrade_services() {
       ;;
   esac
 
-  if [[ "${target}" == "admin" || "${target}" == "app" ]]; then
-    compose rm -sf "${services[@]}" >/dev/null 2>&1 || true
-    if ! compose up -d --build --no-deps "${services[@]}" ||
-      ! wait_for_services "${services[@]}"; then
-      rollback_upgrade
+  if ! snapshot_for_rollback "${services[@]}"; then
+    return 1
+  fi
+
+  # 旧容器保持运行，全部构建成功之后才切换。兼容 Compose V1，
+  # 切换时仍先 rm 避免 ContainerConfig 错误，但不再边停服务边构建。
+  if { [[ "${target}" == "admin" || "${target}" == "app" ]] &&
+       ! run_frontend_build "${target}"; } ||
+     { [[ "${target}" == "all" ]] &&
+       { ! run_frontend_builds || ! verify_frontend_artifacts; }; } ||
+     { [[ "${#build_services[@]}" -gt 0 ]] &&
+       ! compose build "${build_services[@]}"; }; then
+    echo "==> 构建失败，未停止或删除现有服务容器"
+    if restore_rollback_image_tags; then
       cleanup_rollback_backups
-      return 1
+    else
+      echo "旧镜像标签恢复失败，回滚镜像已保留"
     fi
-  elif [[ "${target}" == "backend" ]]; then
-    compose rm -sf "${services[@]}" >/dev/null 2>&1 || true
-    if ! compose up -d --build --no-deps "${services[@]}" ||
+    return 1
+  fi
+
+  if [[ "${target}" != "all" ]]; then
+    if ! compose rm -sf "${services[@]}" ||
+      ! compose up -d --no-build --no-deps "${services[@]}" ||
       ! wait_for_services "${services[@]}"; then
-      rollback_upgrade
-      cleanup_rollback_backups
-      return 1
-    fi
-  elif [[ "${target}" == "base" ]]; then
-    compose rm -sf "${services[@]}" >/dev/null 2>&1 || true
-    if ! compose up -d "${services[@]}" ||
-      ! wait_for_services "${services[@]}"; then
-      rollback_upgrade
-      cleanup_rollback_backups
+      handle_upgrade_failure
       return 1
     fi
   else
     # Base services are restarted without deleting their named volumes.
     if ! compose rm -sf "${SERVICES_BASE[@]}" >/dev/null 2>&1 ||
       ! compose up -d "${SERVICES_BASE[@]}" ||
-      ! run_frontend_builds ||
-      ! verify_frontend_artifacts ||
       ! compose rm -sf pdf-parser api consumer admin app >/dev/null 2>&1 ||
-      ! compose up -d --build --no-deps pdf-parser api consumer ||
-      ! compose up -d --build --no-deps admin app ||
+      ! compose up -d --no-build --no-deps pdf-parser api consumer ||
+      ! compose up -d --no-build --no-deps admin app ||
       ! wait_for_services "${services[@]}"; then
-      rollback_upgrade
-      cleanup_rollback_backups
+      handle_upgrade_failure
       return 1
     fi
   fi
@@ -492,13 +525,13 @@ verify_frontend_artifacts() {
   if [[ ! -d "${admin_dist}" ]]; then
     echo "缺少前端构建产物：${admin_dist}"
     echo "admin 镜像构建依赖该目录，请先检查 admin-build 日志。"
-    exit 1
+    return 1
   fi
 
   if [[ ! -d "${app_dist}" ]]; then
     echo "缺少前端构建产物：${app_dist}"
     echo "app 镜像构建依赖该目录，请先检查 app-build 日志。"
-    exit 1
+    return 1
   fi
 }
 
@@ -596,4 +629,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
