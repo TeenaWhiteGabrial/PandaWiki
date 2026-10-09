@@ -4,7 +4,8 @@ import { IconZhinengwenda, IconJinsousuo } from '@panda-wiki/icons';
 import { useSearchParams } from 'next/navigation';
 import {
   Box,
-  Button,
+  IconButton,
+  Tooltip,
   Typography,
   Modal,
   Stack,
@@ -14,6 +15,9 @@ import {
   Tabs,
   Tab,
 } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import AiQaContent from './AiQaContent';
 import SearchDocContent from './SearchDocContent';
 import { useStore } from '@/provider';
@@ -78,11 +82,13 @@ const StyledTab = styled(Tab)(({ theme }) => ({
 const QaModal: React.FC<QaModalProps> = () => {
   const { qaModalOpen, setQaModalOpen, kbDetail, mobile } = useStore();
   const [searchMode, setSearchMode] = useState<'chat' | 'search'>('chat');
+  const [fullScreen, setFullScreen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const aiQaInputRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
   const onClose = () => {
     setQaModalOpen?.(false);
+    setFullScreen(false);
   };
 
   const placeholder = useMemo(() => {
@@ -114,9 +120,11 @@ const QaModal: React.FC<QaModalProps> = () => {
 
   useEffect(() => {
     if (!qaModalOpen) {
-      setTimeout(() => {
+      setFullScreen(false);
+      const timer = setTimeout(() => {
         setSearchMode('chat');
       }, 300);
+      return () => clearTimeout(timer);
     }
   }, [qaModalOpen]);
 
@@ -131,27 +139,41 @@ const QaModal: React.FC<QaModalProps> = () => {
   return (
     <Modal
       open={qaModalOpen as boolean}
-      onClose={onClose}
+      onClose={(_, reason) => {
+        if (reason === 'escapeKeyDown' && fullScreen) {
+          setFullScreen(false);
+        } else {
+          onClose();
+        }
+      }}
+      slotProps={{ backdrop: { sx: { backdropFilter: 'blur(3px)' } } }}
       sx={{
         display: 'flex',
         justifyContent: 'center',
-        alignItems: 'flex-start',
-        p: 2,
+        alignItems: 'center',
+        p: fullScreen ? 0 : { xs: 0, sm: 2.5 },
       }}
     >
       <Box
+        role='dialog'
+        aria-modal='true'
+        aria-label='智能问答与文档搜索'
         sx={theme => ({
           display: 'flex',
           flexDirection: 'column',
-          flex: 1,
-          maxWidth: 800,
+          width: '100%',
+          maxWidth: fullScreen ? 'none' : 1120,
+          height: fullScreen
+            ? '100dvh'
+            : { xs: '100dvh', sm: 'min(900px, calc(100dvh - 40px))' },
           maxHeight: '100%',
+          minHeight: 0,
           backgroundColor: lighten(theme.palette.background.default, 0.05),
-          borderRadius: '10px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+          borderRadius: fullScreen ? 0 : { xs: 0, sm: '18px' },
+          boxShadow: '0 24px 80px rgba(0, 0, 0, 0.22)',
           overflow: 'hidden',
           outline: 'none',
-          pb: 2,
+          pb: { xs: 1.5, sm: 2 },
         })}
         onClick={e => e.stopPropagation()}
       >
@@ -161,9 +183,12 @@ const QaModal: React.FC<QaModalProps> = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            px: 2,
-            pt: 2,
-            pb: 2.5,
+            gap: 1,
+            flexShrink: 0,
+            px: { xs: 1.5, sm: 3 },
+            py: 1.5,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
           }}
         >
           <StyledTabs
@@ -175,6 +200,7 @@ const QaModal: React.FC<QaModalProps> = () => {
             scrollButtons={false}
           >
             <StyledTab
+              aria-label='智能问答'
               label={
                 <Stack direction='row' gap={0.5} alignItems='center'>
                   <IconZhinengwenda sx={{ fontSize: 16 }} />
@@ -184,6 +210,7 @@ const QaModal: React.FC<QaModalProps> = () => {
               value='chat'
             />
             <StyledTab
+              aria-label='仅搜索文档'
               label={
                 <Stack direction='row' gap={0.5} alignItems='center'>
                   <IconJinsousuo sx={{ fontSize: 16 }} />
@@ -194,34 +221,41 @@ const QaModal: React.FC<QaModalProps> = () => {
             />
           </StyledTabs>
 
-          {/* Esc按钮 */}
-          {!mobile && (
-            <Button
-              variant='outlined'
-              color='primary'
-              onClick={onClose}
-              size='small'
-              sx={theme => ({
-                minWidth: 'auto',
-                px: 1,
-                py: '1px',
-                fontSize: 12,
-                fontWeight: 500,
-                textTransform: 'none',
-                color: 'text.secondary',
-                borderColor: alpha(theme.palette.text.primary, 0.1),
-              })}
-            >
-              Esc
-            </Button>
-          )}
+          <Stack direction='row' gap={0.5} sx={{ flexShrink: 0 }}>
+            <Tooltip title={fullScreen ? '退出全屏（Esc）' : '全屏显示'}>
+              <IconButton
+                aria-label={fullScreen ? '退出全屏' : '全屏显示'}
+                aria-pressed={fullScreen}
+                onClick={() => setFullScreen(value => !value)}
+                size='small'
+                sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+              >
+                {fullScreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title='关闭对话框'>
+              <IconButton
+                aria-label='关闭对话框'
+                onClick={onClose}
+                size='small'
+              >
+                <CloseIcon />
+              </IconButton>
+            </Tooltip>
+          </Stack>
         </Box>
 
         {/* 主内容区域 - 根据模式切换 */}
         <Box
           sx={{
-            px: 3,
+            px: { xs: 1.5, sm: 3, lg: 4 },
+            pt: 1.5,
             flex: 1,
+            minHeight: 0,
+            minWidth: 0,
+            width: '100%',
+            maxWidth: 1280,
+            alignSelf: 'center',
             display: searchMode === 'chat' ? 'flex' : 'none',
             flexDirection: 'column',
           }}
@@ -234,8 +268,15 @@ const QaModal: React.FC<QaModalProps> = () => {
         </Box>
         <Box
           sx={{
-            px: 3,
+            px: { xs: 1.5, sm: 3, lg: 4 },
+            py: 2,
             flex: 1,
+            minHeight: 0,
+            minWidth: 0,
+            overflow: 'auto',
+            width: '100%',
+            maxWidth: 1280,
+            alignSelf: 'center',
             display: searchMode === 'search' ? 'flex' : 'none',
             flexDirection: 'column',
           }}
@@ -247,6 +288,7 @@ const QaModal: React.FC<QaModalProps> = () => {
         <Box
           sx={{
             px: 3,
+            flexShrink: 0,
             pt: !kbDetail?.settings?.conversation_setting
               ?.copyright_hide_enabled
               ? 2

@@ -70,6 +70,7 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 	groupIDs []int,
 	accessCtx *domain.EnterpriseAccessContext,
 	systemPrompt string,
+	requestHistory []*schema.Message,
 ) ([]*schema.Message, []*domain.RankedNodeChunks, error) {
 	messages := make([]*schema.Message, 0)
 	rankedNodes := make([]*domain.RankedNodeChunks, 0)
@@ -80,7 +81,13 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 		return nil, nil, errors.New("get conversation messages failed")
 	}
 	if len(msgs) > 0 {
-		historyMessages := make([]*schema.Message, 0)
+		historyMessages := make([]*schema.Message, 0, len(requestHistory)+len(msgs))
+		for _, msg := range requestHistory {
+			if msg.Role == schema.System {
+				continue
+			}
+			historyMessages = append(historyMessages, msg)
+		}
 		for _, msg := range msgs {
 			switch msg.Role {
 			case schema.Assistant:
@@ -113,6 +120,15 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 				}
 			}
 
+			if systemPrompt == "" {
+				systemPrompt = domain.SystemDefaultPrompt
+			}
+			for _, msg := range requestHistory {
+				if msg.Role == schema.System {
+					systemPrompt += "\n调用方补充要求：\n" + msg.Content
+				}
+			}
+			systemPrompt += "\n" + domain.ConversationContextPrompt
 			template := prompt.FromMessages(schema.GoTemplate,
 				schema.SystemMessage(systemPrompt),
 				schema.UserMessage(domain.UserQuestionFormatter),
@@ -140,12 +156,16 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 				return nil, nil, errors.New("filter rank nodes failed")
 			}
 			documents := domain.FormatNodeChunks(rankedNodes, kb.AccessSettings.BaseURL)
+			if strings.TrimSpace(rewrittenQuery) == "" {
+				rewrittenQuery = question
+			}
 			u.logger.Debug("documents", log.String("documents", documents))
 
 			formattedMessages, err := template.Format(ctx, map[string]any{
-				"CurrentDate": time.Now().Format("2006-01-02"),
-				"Question":    rewrittenQuery,
-				"Documents":   documents,
+				"CurrentDate":    time.Now().Format("2006-01-02"),
+				"Question":       question,
+				"RetrievalQuery": rewrittenQuery,
+				"Documents":      documents,
 			})
 			if err != nil {
 				u.logger.Error("format messages failed", log.Error(err))
@@ -542,7 +562,11 @@ func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) 
 	}
 	u.logger.Info("get related documents from raglite", log.Any("record_count", len(records)))
 	if len(records) == 0 && req.KBID != "" {
-		fallbackNodes, fallbackErr := u.getRankNodesByLocalFallback(ctx, req.KBID, req.Question, 5)
+		fallbackQuery := rewrittenQuery
+		if strings.TrimSpace(fallbackQuery) == "" {
+			fallbackQuery = req.Question
+		}
+		fallbackNodes, fallbackErr := u.getRankNodesByLocalFallback(ctx, req.KBID, fallbackQuery, 5)
 		if fallbackErr != nil {
 			u.logger.Warn("local fallback retrieval failed", log.Error(fallbackErr))
 		} else if len(fallbackNodes) > 0 {

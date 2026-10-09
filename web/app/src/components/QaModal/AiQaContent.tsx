@@ -1,4 +1,6 @@
 'use client';
+import { useChatSession } from '@/hooks/useChatSession';
+import ChatHistoryToolbar from '@/components/ChatHistoryToolbar';
 import aiLoading from '@/assets/images/ai-loading.gif';
 import Logo from '@/assets/images/logo.png';
 import { ChunkResultItem } from '@/assets/type';
@@ -28,7 +30,6 @@ import {
   IconDianzanWeixuanzhong,
   IconDianzanXuanzhong1,
   IconFasong,
-  IconXinduihua,
   IconXingxing,
 } from '@panda-wiki/icons';
 import dayjs from 'dayjs';
@@ -151,8 +152,10 @@ const AiQaContent: React.FC<{
   const [conversation, setConversation] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [thinking, setThinking] = useState<keyof typeof AnswerStatus>(4);
-  const [nonce, setNonce] = useState('');
-  const [conversationId, setConversationId] = useState('');
+  const chatSession = useChatSession(useBasePath());
+  const { conversationId } = chatSession;
+  const [restoringHistory, setRestoringHistory] = useState(false);
+  const initialQueryRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(false);
   const [conversationItem, setConversationItem] =
@@ -173,13 +176,12 @@ const AiQaContent: React.FC<{
     if (loading) {
       handleSearchAbort();
     }
-    handleSearch(true);
-    setConversationId('');
+    chatSession.reset();
+    setRestoringHistory(false);
     setConversation([]);
     setFullAnswer('');
     setInput('');
     setLoading(false);
-    setNonce('');
   };
 
   const handleSearch = (reset: boolean = false) => {
@@ -273,6 +275,7 @@ const AiQaContent: React.FC<{
   const chatAnswer = async (q: string) => {
     setLoading(true);
     setThinking(1);
+    const version = chatSession.generation.current;
 
     let token = '';
 
@@ -284,6 +287,7 @@ const AiQaContent: React.FC<{
       const solution = await cap.solve();
       token = solution.token;
     } catch (error) {
+      if (version !== chatSession.generation.current) return;
       setLoading(false);
       setThinking(4);
       message.error('验证失败');
@@ -298,19 +302,31 @@ const AiQaContent: React.FC<{
       app_type: 1,
       captcha_token: token,
     };
-    if (conversationId) reqData.conversation_id = conversationId;
-    if (nonce) reqData.nonce = nonce;
+    if (version !== chatSession.generation.current) return;
+    try {
+      const session = await chatSession.resolve();
+      if (!session || version !== chatSession.generation.current) return;
+      reqData.conversation_id = session.conversation_id;
+      reqData.nonce = session.nonce;
+    } catch (error) {
+      if (version !== chatSession.generation.current) return;
+      setLoading(false);
+      setThinking(4);
+      message.error((error as Error)?.message || '恢复会话失败，请重试');
+      return;
+    }
 
     if (sseClientRef.current) {
       sseClientRef.current.subscribe(
         JSON.stringify(reqData),
         ({ type, content, chunk_result }) => {
+          if (version !== chatSession.generation.current) return;
           if (type === 'conversation_id') {
-            setConversationId(prev => prev + content);
+            chatSession.acceptEvent(type, content);
           } else if (type === 'message_id') {
-            messageIdRef.current += content;
+            messageIdRef.current = content;
           } else if (type === 'nonce') {
-            setNonce(prev => prev + content);
+            chatSession.acceptEvent(type, content);
           } else if (type === 'error') {
             setLoading(false);
             setThinking(4);
@@ -403,13 +419,11 @@ const AiQaContent: React.FC<{
   }, []);
 
   const onSearch = (q: string, reset: boolean = false) => {
-    if (loading || !q.trim()) return;
+    if (loading || restoringHistory || !q.trim()) return;
+    if (reset) chatSession.reset();
+    setLoading(true);
     setShouldAutoScroll(true); // 开始新搜索时，重置为自动滚动
-    const newConversation = reset
-      ? []
-      : conversation.some(item => item.source === 'history')
-        ? []
-        : [...conversation];
+    const newConversation = reset ? [] : [...conversation];
     lastResultExpendRef.current = false;
     newConversation.push({
       image_paths: [],
@@ -428,13 +442,12 @@ const AiQaContent: React.FC<{
     messageIdRef.current = '';
     setConversation(newConversation);
     setFullAnswer('');
-    setTimeout(() => {
-      chatAnswer(q);
-      setInput('');
-    }, 0);
+    void chatAnswer(q);
+    setInput('');
   };
 
   const handleSearchAbort = () => {
+    chatSession.generation.current++;
     sseClientRef.current?.unsubscribe();
     setLoading(false);
     setThinking(4);
@@ -504,24 +517,22 @@ const AiQaContent: React.FC<{
       },
     });
     const searchQuery =
-      sessionStorage.getItem('chat_search_query') || searchParams.get('ask');
+      initialQueryRef.current ||
+      sessionStorage.getItem('chat_search_query') ||
+      searchParams.get('ask');
+    initialQueryRef.current = searchQuery;
     if (searchQuery) {
       sessionStorage.removeItem('chat_search_query');
       const newSearchParams = new URLSearchParams(searchParams.toString());
       newSearchParams.delete('cid');
       newSearchParams.delete('ask');
-      window.history.replaceState(null, '', newSearchParams.toString());
+      const url = new URL(window.location.href);
+      url.search = newSearchParams.toString();
+      window.history.replaceState(null, '', url.toString());
       onSearch(searchQuery, true);
     }
     return () => {
       handleSearchAbort();
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.delete('cid');
-      currentUrl.searchParams.delete('ask');
-      window.history.replaceState(null, '', currentUrl.toString());
-      setTimeout(() => {
-        onReset();
-      });
     };
   }, []);
 
@@ -534,67 +545,111 @@ const AiQaContent: React.FC<{
     }
   }, [conversationId]);
 
+  const loadHistory = async (cid: string): Promise<boolean> => {
+    handleSearchAbort();
+    chatSession.reset();
+    chatSession.restore(cid);
+    const version = chatSession.generation.current;
+    setRestoringHistory(true);
+    setConversation([]);
+    setFullAnswer('');
+    setInput('');
+    messageIdRef.current = '';
+    try {
+      const res = await getShareV1ConversationDetail(
+        { id: cid },
+        { isAlert: false },
+      );
+      if (version !== chatSession.generation.current) return false;
+      const conversation: ConversationItem[] = [];
+      if (res.messages) {
+        let current: Partial<ConversationItem> = {
+          chunk_result: [],
+        };
+        res.messages.forEach(message => {
+          if (message.role === 'user') {
+            if (current.q || current.image_paths?.length) {
+              conversation.push({
+                image_paths: current.image_paths || [],
+                q: current.q || '',
+                a: '',
+                score: 0,
+                update_time: '',
+                message_id: '',
+                source: 'history',
+                chunk_result: [],
+                thinking_content: '',
+                id: uuidv4(),
+                result_expend: true,
+                thinking_expend: true,
+              });
+            }
+            current = {
+              image_paths: message.image_paths || [],
+              q: message.content,
+              chunk_result: [],
+            };
+          } else if (message.role === 'assistant') {
+            if (
+              current.q ||
+              (current.image_paths && current.image_paths.length > 0)
+            ) {
+              const { thinkingContent, answerContent } = handleThinkingContent(
+                message.content || '',
+              );
+              current.a = answerContent;
+              current.update_time = message.created_at;
+              current.score = 0;
+              current.message_id = '';
+              current.thinking_content = thinkingContent;
+              current.source = 'history';
+              current.id = uuidv4();
+              conversation.push(current as ConversationItem);
+              current = {};
+            }
+          }
+        });
+        if (
+          current.q ||
+          (current.image_paths && current.image_paths.length > 0)
+        ) {
+          conversation.push({
+            image_paths: current.image_paths || [],
+            q: current.q || '',
+            a: '',
+            score: 0,
+            update_time: '',
+            message_id: '',
+            source: 'history',
+            chunk_result: [],
+            thinking_content: '',
+            id: uuidv4(),
+            result_expend: true,
+            thinking_expend: true,
+          });
+        }
+      }
+      setConversation(conversation);
+      setShouldAutoScroll(false);
+      return true;
+    } catch (error) {
+      if (version !== chatSession.generation.current) return false;
+      setRestoringHistory(false);
+      chatSession.reset();
+      message.error((error as Error)?.message || '加载历史会话失败，请重试');
+      return false;
+    } finally {
+      if (version === chatSession.generation.current)
+        setRestoringHistory(false);
+    }
+  };
+
   useEffect(() => {
     const cid = searchParams.get('cid');
-    if (cid) {
-      const conversation: ConversationItem[] = [];
-      getShareV1ConversationDetail({
-        id: cid,
-      }).then(res => {
-        if (res.messages) {
-          let current: Partial<ConversationItem> = {
-            chunk_result: [],
-          };
-          res.messages.forEach(message => {
-            if (message.role === 'user') {
-              current = {
-                image_paths: message.image_paths || [],
-                q: message.content,
-                chunk_result: [],
-              };
-            } else if (message.role === 'assistant') {
-              if (
-                current.q ||
-                (current.image_paths && current.image_paths.length > 0)
-              ) {
-                const { thinkingContent, answerContent } =
-                  handleThinkingContent(message.content || '');
-                current.a = answerContent;
-                current.update_time = message.created_at;
-                current.score = 0;
-                current.message_id = '';
-                current.thinking_content = thinkingContent;
-                current.source = 'history';
-                current.id = uuidv4();
-                conversation.push(current as ConversationItem);
-                current = {};
-              }
-            }
-          });
-          if (
-            current.q ||
-            (current.image_paths && current.image_paths.length > 0)
-          ) {
-            conversation.push({
-              image_paths: current.image_paths || [],
-              q: current.q || '',
-              a: '',
-              score: 0,
-              update_time: '',
-              message_id: '',
-              source: 'history',
-              chunk_result: [],
-              thinking_content: '',
-              id: uuidv4(),
-              result_expend: true,
-              thinking_expend: true,
-            });
-          }
-        }
-        setConversation(conversation);
-        setShouldAutoScroll(false);
-      });
-    }
+    if (cid && !initialQueryRef.current) void loadHistory(cid);
+    return () => {
+      chatSession.generation.current++;
+    };
   }, []);
 
   useEffect(() => {
@@ -611,21 +666,38 @@ const AiQaContent: React.FC<{
 
   return (
     <StyledMainContainer className={palette.mode === 'dark' ? 'md-dark' : ''}>
+      <ChatHistoryToolbar
+        conversationId={conversationId}
+        disabled={restoringHistory}
+        credentials={chatSession.historyCredentials}
+        onSelect={loadHistory}
+        onNew={onReset}
+      />
       {/* 无对话时显示欢迎界面 */}
       {conversation.length === 0 && (
         <Box
           sx={{
             flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 4,
-            pb: 5,
+            gap: 3,
+            py: 3,
           }}
         >
           {/* Logo区域 */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, my: 8 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              my: { xs: 2, sm: 4 },
+              flexShrink: 0,
+            }}
+          >
             <Image
               src={getImagePath(kbDetail?.settings?.icon || Logo.src, basePath)}
               alt='logo'
@@ -919,35 +991,6 @@ const AiQaContent: React.FC<{
           ))}
         </Stack>
       </StyledConversationContainer>
-      {conversation.length > 0 && (
-        <Button
-          variant='contained'
-          sx={theme => ({
-            textTransform: 'none',
-            minWidth: 'auto',
-            px: 3.5,
-            py: '2px',
-            gap: 0.5,
-            fontSize: 12,
-            backgroundColor: 'background.default',
-            color: 'text.primary',
-            boxShadow: `0px 1px 2px 0px ${alpha(theme.palette.text.primary, 0.06)}`,
-            border: '1px solid',
-            borderColor: alpha(theme.palette.text.primary, 0.1),
-            cursor: 'pointer',
-            '&:hover': {
-              boxShadow: `0px 1px 2px 0px ${alpha(theme.palette.text.primary, 0.06)}`,
-              borderColor: 'primary.main',
-              color: 'primary.main',
-            },
-            mb: 2,
-          })}
-          onClick={onReset}
-        >
-          <IconXinduihua sx={{ fontSize: 14 }} />
-          新会话
-        </Button>
-      )}
 
       <StyledInputContainer>
         <StyledInputWrapper>
@@ -955,7 +998,7 @@ const AiQaContent: React.FC<{
             fullWidth
             multiline
             rows={2}
-            disabled={loading}
+            disabled={loading || restoringHistory}
             ref={inputRef}
             size='small'
             value={input}
@@ -975,7 +1018,7 @@ const AiQaContent: React.FC<{
                 handleSearch();
               }
             }}
-            placeholder={placeholder}
+            placeholder={restoringHistory ? '正在恢复历史会话...' : placeholder}
             autoComplete='off'
           />
           <StyledActionButtonStack
@@ -1001,10 +1044,9 @@ const AiQaContent: React.FC<{
               ) : (
                 <IconButton
                   size='small'
-                  disabled={input.length === 0}
+                  disabled={input.length === 0 || restoringHistory}
                   onClick={() => {
                     if (input.length > 0) {
-                      handleSearchAbort();
                       setThinking(1);
                       handleSearch();
                     }

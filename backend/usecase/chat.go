@@ -151,7 +151,7 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 				eventCh <- domain.SSEEvent{Type: "error", Content: "nonce is required"}
 				return
 			}
-			err := u.conversationUsecase.ValidateConversationNonce(ctx, req.ConversationID, req.Nonce)
+			err := u.conversationUsecase.ValidateChatConversation(ctx, req.KBID, req.ConversationID, req.Nonce)
 			if err != nil {
 				u.logger.Error("failed to validate chat conversation nonce", log.Error(err))
 				eventCh <- domain.SSEEvent{Type: "error", Content: "validate chat conversation nonce failed"}
@@ -241,7 +241,7 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 			return
 		}
 
-		messages, rankedNodes, err := u.llmUsecase.BuildConversationMessageWithRAG(ctx, req.ConversationID, req.KBID, groupIds, shareAccess, req.Prompt)
+		messages, rankedNodes, err := u.llmUsecase.BuildConversationMessageWithRAG(ctx, req.ConversationID, req.KBID, groupIds, shareAccess, req.Prompt, req.HistoryMessages)
 		if err != nil {
 			u.logger.Error("build messages failed", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: err.Error()}

@@ -77,9 +77,23 @@ var UserQuestionFormatter = `
 {{.Question}}
 </question>
 
+<retrieval_query>
+{{.RetrievalQuery}}
+</retrieval_query>
+
 <documents>
 {{.Documents}}
 </documents>
+`
+
+// Applied to custom prompts as well, so existing installations gain follow-up support.
+const ConversationContextPrompt = `
+多轮对话规则：
+1. 回答的是用户本轮的原始问题。检索问题仅用于查找资料，不应替代用户本轮的意图。
+2. 结合前面的用户问题和助手回答理解“刚才”“上述”“它”“第二条”等指代；“第二条”通常指上一轮回答中的第二项。沿用用户此前明确的对象、条件和格式要求，除非本轮已改变。
+3. 用户要求对前文进行引用、复述、整理、总结、改写、翻译或转换表格时，可以直接使用对话已有内容，不必因为本轮未检索到新文档而拒答；对于这些请求，“文档不足就拒答”的规则不适用。不得自行补充未经资料支持的新事实。
+4. 对需要新事实的追问，依据本轮提供的可访问文档作答。历史回答可能有误，不应当作已核实的知识库事实，也不能用它绕过文档权限。
+5. 若前文有多个可能的指代对象或缺少必要信息，请简短询问用户，不要猜测。没有历史内容时，不要声称记得之前的对话。
 `
 
 // processContentWithBaseURL adds baseURL prefix to static-file URLs in content

@@ -15,15 +15,28 @@ import {
 // 布局容器组件
 export const StyledMainContainer = styled(Box)(() => ({
   flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: 0,
+  minWidth: 0,
 }));
 
-export const StyledConversationContainer = styled(Stack)(() => ({
-  maxHeight: 'calc(100vh - 332px)',
-  overflow: 'auto',
-  scrollbarWidth: 'none',
-  msOverflowStyle: 'none',
+export const StyledConversationContainer = styled(Stack)(({ theme }) => ({
+  flex: 1,
+  minHeight: 0,
+  minWidth: 0,
+  overflowY: 'auto',
+  overflowX: 'hidden',
+  overscrollBehavior: 'contain',
+  scrollbarWidth: 'thin',
+  scrollbarColor: `${alpha(theme.palette.text.primary, 0.2)} transparent`,
+  padding: theme.spacing(1, 1, 2, 0),
   '&::-webkit-scrollbar': {
-    display: 'none',
+    width: 6,
+  },
+  '&::-webkit-scrollbar-thumb': {
+    backgroundColor: alpha(theme.palette.text.primary, 0.2),
+    borderRadius: 6,
   },
 }));
 
@@ -55,6 +68,7 @@ export const StyledAiBubble = styled(Box)(({ theme }) => ({
 
 export const StyledAiBubbleContent = styled(Box)(() => ({
   wordBreak: 'break-word',
+  minWidth: 0,
 }));
 
 // 对话相关组件
@@ -177,6 +191,7 @@ export const StyledInputContainer = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   gap: theme.spacing(1),
+  flexShrink: 0,
 }));
 
 export const StyledInputWrapper = styled(Stack)(({ theme }) => ({
@@ -184,20 +199,21 @@ export const StyledInputWrapper = styled(Stack)(({ theme }) => ({
   paddingRight: theme.spacing(1.5),
   paddingTop: theme.spacing(1),
   paddingBottom: theme.spacing(1),
-  borderRadius: '10px',
+  borderRadius: '14px',
   border: '1px solid',
   borderColor: alpha(theme.palette.text.primary, 0.1),
   display: 'flex',
   alignItems: 'flex-end',
   gap: theme.spacing(2),
   backgroundColor: theme.palette.background.default,
-  boxShadow: `0px 20px 40px 0px ${alpha(theme.palette.text.primary, 0.06)}`,
+  boxShadow: `0px 4px 20px 0px ${alpha(theme.palette.text.primary, 0.05)}`,
   transition: 'border-color 0.2s ease-in-out',
   '&:hover': {
     borderColor: theme.palette.primary.main,
   },
   '&:focus-within': {
     borderColor: theme.palette.primary.main,
+    boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.08)}`,
   },
 }));
 

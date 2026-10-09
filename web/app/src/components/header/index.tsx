@@ -203,47 +203,52 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
   }
 
   return (
-    <CustomHeader
-      isDocPage={isDocPage}
-      mobile={mobile}
-      docWidth={docWidth}
-      catalogWidth={catalogWidth}
-      logo={headerLogo}
-      title={kbDetail?.settings?.title}
-      placeholder={
-        kbDetail?.settings?.web_app_custom_style?.header_search_placeholder
-      }
-      showSearch
-      homePath={basePath || '/'}
-      btns={headerButtons}
-      onSearch={handleSearch}
-      onQaClick={() => setQaModalOpen?.(true)}
-    >
-      <Stack sx={{ ml: 2 }} direction='row' alignItems='center' gap={1}>
-        {!!authInfo && (
-          <Box
-            sx={theme => ({
-              maxWidth: 180,
-              color: theme.palette.text.secondary,
-              fontSize: 14,
-              fontWeight: 500,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            })}
-            title={authInfo.account || ''}
-          >
-            {authInfo.account}
-          </Box>
-        )}
-        {!authInfo && (
-          <LoginButton basePath={basePath} redirectPath={currentRedirectPath} />
-        )}
-        <ThemeSwitch />
-        {!!authInfo && <LogoutButton />}
-      </Stack>
+    <>
+      <CustomHeader
+        isDocPage={isDocPage}
+        mobile={mobile}
+        docWidth={docWidth}
+        catalogWidth={catalogWidth}
+        logo={headerLogo}
+        title={kbDetail?.settings?.title}
+        placeholder={
+          kbDetail?.settings?.web_app_custom_style?.header_search_placeholder
+        }
+        showSearch
+        homePath={basePath || '/'}
+        btns={headerButtons}
+        onSearch={handleSearch}
+        onQaClick={() => setQaModalOpen?.(true)}
+      >
+        <Stack sx={{ ml: 2 }} direction='row' alignItems='center' gap={1}>
+          {!!authInfo && (
+            <Box
+              sx={theme => ({
+                maxWidth: 180,
+                color: theme.palette.text.secondary,
+                fontSize: 14,
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              })}
+              title={authInfo.account || ''}
+            >
+              {authInfo.account}
+            </Box>
+          )}
+          {!authInfo && (
+            <LoginButton
+              basePath={basePath}
+              redirectPath={currentRedirectPath}
+            />
+          )}
+          <ThemeSwitch />
+          {!!authInfo && <LogoutButton />}
+        </Stack>
+      </CustomHeader>
       <QaModal />
-    </CustomHeader>
+    </>
   );
 };
 
@@ -310,34 +315,39 @@ export const WelcomeHeader = ({
   }
 
   return (
-    <WelcomeHeaderComponent
-      isDocPage={false}
-      mobile={mobile}
-      docWidth='full'
-      catalogWidth={catalogWidth}
-      logo={headerLogo}
-      title={kbDetail?.settings?.title}
-      placeholder={
-        kbDetail?.settings?.web_app_custom_style?.header_search_placeholder
-      }
-      showSearch={showSearch}
-      homePath={basePath || '/'}
-      btns={headerButtons}
-      onSearch={handleSearch}
-      onQaClick={() => setQaModalOpen?.(true)}
-    >
-      {!authInfo && (
-        <Box sx={{ ml: 2 }}>
-          <LoginButton basePath={basePath} redirectPath={currentRedirectPath} />
-        </Box>
-      )}
-      {!!authInfo && (
-        <Box sx={{ ml: 2 }}>
-          <LogoutButton />
-        </Box>
-      )}
+    <>
+      <WelcomeHeaderComponent
+        isDocPage={false}
+        mobile={mobile}
+        docWidth='full'
+        catalogWidth={catalogWidth}
+        logo={headerLogo}
+        title={kbDetail?.settings?.title}
+        placeholder={
+          kbDetail?.settings?.web_app_custom_style?.header_search_placeholder
+        }
+        showSearch={showSearch}
+        homePath={basePath || '/'}
+        btns={headerButtons}
+        onSearch={handleSearch}
+        onQaClick={() => setQaModalOpen?.(true)}
+      >
+        {!authInfo && (
+          <Box sx={{ ml: 2 }}>
+            <LoginButton
+              basePath={basePath}
+              redirectPath={currentRedirectPath}
+            />
+          </Box>
+        )}
+        {!!authInfo && (
+          <Box sx={{ ml: 2 }}>
+            <LogoutButton />
+          </Box>
+        )}
+      </WelcomeHeaderComponent>
       <QaModal />
-    </WelcomeHeaderComponent>
+    </>
   );
 };
 

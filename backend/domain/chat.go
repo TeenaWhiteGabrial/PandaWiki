@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/cloudwego/eino/schema"
 )
 
 type ChatRequest struct {
@@ -23,6 +25,8 @@ type ChatRequest struct {
 	RemoteIP string           `json:"-"`
 	Info     ConversationInfo `json:"-"`
 	Prompt   string           `json:"-"`
+	// Only populated by the authenticated compatibility endpoint, never bound from web requests.
+	HistoryMessages []*schema.Message `json:"-"`
 }
 
 type ChatRagOnlyRequest struct {

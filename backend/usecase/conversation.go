@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"regexp"
 
@@ -167,6 +168,45 @@ func extractReferencesBlock(conversationID, appID, text string) []*domain.Conver
 
 func (u *ConversationUsecase) ValidateConversationNonce(ctx context.Context, conversationID, nonce string) error {
 	return u.repo.ValidateConversationNonce(ctx, conversationID, nonce)
+}
+
+func (u *ConversationUsecase) ValidateChatConversation(ctx context.Context, kbID, id, nonce string) error {
+	conversation, err := u.repo.GetChatConversation(ctx, kbID, id)
+	if err != nil {
+		return err
+	}
+	if nonce == "" || subtle.ConstantTimeCompare([]byte(conversation.Nonce), []byte(nonce)) != 1 {
+		return fmt.Errorf("invalid conversation nonce")
+	}
+	return nil
+}
+
+func (u *ConversationUsecase) ResumeShareConversation(ctx context.Context, kbID, id, nonce, userID, remoteIP string) (*domain.ChatSession, error) {
+	conversation, err := u.repo.GetChatConversation(ctx, kbID, id)
+	if err != nil {
+		return nil, err
+	}
+	owned := userID != "" && conversation.Info.UserInfo.UserID == userID
+	validNonce := nonce != "" && subtle.ConstantTimeCompare([]byte(conversation.Nonce), []byte(nonce)) == 1
+	forked := !owned && !validNonce
+	if forked {
+		conversation, err = u.repo.ForkConversation(ctx, conversation, userID, remoteIP)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &domain.ChatSession{ConversationID: conversation.ID, Nonce: conversation.Nonce, Forked: forked}, nil
+}
+
+func (u *ConversationUsecase) GetShareConversationHistory(ctx context.Context, kbID, userID string, req *domain.ShareConversationHistoryRequest) (*domain.PaginatedResult[[]*domain.ShareConversationHistoryItem], error) {
+	if req.Page < 1 || req.Page > 100000 || req.PageSize < 1 || req.PageSize > 50 || len(req.Sessions) > 100 {
+		return nil, fmt.Errorf("invalid conversation history pagination")
+	}
+	items, total, err := u.repo.GetShareConversationHistory(ctx, kbID, userID, req)
+	if err != nil {
+		return nil, err
+	}
+	return domain.NewPaginatedResult(items, total), nil
 }
 
 func (u *ConversationUsecase) CreateConversation(ctx context.Context, conversation *domain.Conversation) error {

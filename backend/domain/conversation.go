@@ -152,6 +152,37 @@ type ShareConversationDetailResp struct {
 	CreatedAt time.Time                   `json:"created_at"`
 }
 
+type ChatSession struct {
+	ConversationID string `json:"conversation_id"`
+	Nonce          string `json:"nonce"`
+	Forked         bool   `json:"forked"`
+}
+
+type ResumeConversationRequest struct {
+	ID    string `json:"id" validate:"required"`
+	Nonce string `json:"nonce"`
+}
+
+// Anonymous history is discoverable only with credentials kept by its browser.
+type ConversationHistoryCredential struct {
+	ID    string `json:"id" validate:"required,max=128"`
+	Nonce string `json:"nonce" validate:"required,max=128"`
+}
+
+type ShareConversationHistoryRequest struct {
+	Page     int                             `json:"page" validate:"min=1,max=100000"`
+	PageSize int                             `json:"per_page" validate:"min=1,max=50"`
+	Query    string                          `json:"query" validate:"max=200"`
+	Sessions []ConversationHistoryCredential `json:"sessions" validate:"max=100,dive"`
+}
+
+type ShareConversationHistoryItem struct {
+	ID        string    `json:"id"`
+	Subject   string    `json:"subject"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type ShareConversationMessage struct {
 	Role       schema.RoleType `json:"role"`
 	Content    string          `json:"content"`

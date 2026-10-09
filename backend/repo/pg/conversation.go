@@ -3,8 +3,10 @@ package pg
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/chaitin/panda-wiki/domain"
@@ -117,6 +119,80 @@ func (r *ConversationRepository) ValidateConversationNonce(ctx context.Context, 
 		return err
 	}
 	return nil
+}
+
+func (r *ConversationRepository) GetChatConversation(ctx context.Context, kbID, id string) (*domain.Conversation, error) {
+	conversation := &domain.Conversation{}
+	err := r.db.WithContext(ctx).Where("kb_id = ? AND id = ?", kbID, id).First(conversation).Error
+	return conversation, err
+}
+
+func (r *ConversationRepository) GetShareConversationHistory(ctx context.Context, kbID, userID string, req *domain.ShareConversationHistoryRequest) ([]*domain.ShareConversationHistoryItem, uint64, error) {
+	items := []*domain.ShareConversationHistoryItem{}
+	query := r.db.WithContext(ctx).Model(&domain.Conversation{}).Where("conversations.kb_id = ?", kbID)
+	if userID != "" {
+		query = query.Where("conversations.info->'user_info'->>'user_id' = ?", userID)
+	} else {
+		if len(req.Sessions) == 0 {
+			return items, 0, nil
+		}
+		credentials := r.db.Where("1 = 0")
+		for _, session := range req.Sessions {
+			if session.ID != "" && session.Nonce != "" {
+				credentials = credentials.Or("conversations.id = ? AND conversations.nonce = ?", session.ID, session.Nonce)
+			}
+		}
+		query = query.Where("COALESCE(conversations.info->'user_info'->>'user_id', '') = ''").Where(credentials)
+	}
+	if req.Query != "" {
+		// Treat percent and underscore as literal characters, not LIKE wildcards.
+		query = query.Where("strpos(lower(conversations.subject), lower(?)) > 0", req.Query)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := query.Select(`conversations.id, conversations.subject, conversations.created_at,
+		COALESCE((SELECT MAX(m.created_at) FROM conversation_messages m
+		WHERE m.conversation_id = conversations.id AND m.kb_id = conversations.kb_id), conversations.created_at) AS updated_at`).
+		Order("updated_at DESC, conversations.id DESC").Offset((req.Page - 1) * req.PageSize).Limit(req.PageSize).Find(&items).Error
+	return items, uint64(total), err
+}
+
+// Shared histories are copied atomically; the viewer never receives the original nonce.
+func (r *ConversationRepository) ForkConversation(ctx context.Context, source *domain.Conversation, userID, remoteIP string) (*domain.Conversation, error) {
+	fork := &domain.Conversation{
+		ID: uuid.NewString(), Nonce: uuid.NewString(), KBID: source.KBID, AppID: source.AppID,
+		Subject: source.Subject, RemoteIP: remoteIP, CreatedAt: time.Now(),
+		Info: domain.ConversationInfo{UserInfo: domain.UserInfo{UserID: userID}},
+	}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var messages []domain.ConversationMessage
+		if err := tx.Where("conversation_id = ? AND kb_id = ?", source.ID, source.KBID).Order("created_at asc").Find(&messages).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(fork).Error; err != nil {
+			return err
+		}
+		ids := make(map[string]string, len(messages))
+		for _, msg := range messages {
+			ids[msg.ID] = uuid.NewString()
+		}
+		for _, msg := range messages {
+			if msg.Role != schema.User && msg.Role != schema.Assistant {
+				continue
+			}
+			msg.ID, msg.ParentID = ids[msg.ID], ids[msg.ParentID]
+			msg.ConversationID, msg.RemoteIP = fork.ID, remoteIP
+			msg.PromptTokens, msg.CompletionTokens, msg.TotalTokens = 0, 0, 0
+			msg.Info = domain.FeedBackInfo{}
+			if err := tx.Create(&msg).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return fork, err
 }
 
 func (r *ConversationRepository) GetConversationDistribution(ctx context.Context, kbID string) ([]domain.ConversationDistribution, error) {

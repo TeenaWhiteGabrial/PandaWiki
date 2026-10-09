@@ -276,18 +276,9 @@ func (h *ShareChatHandler) ChatCompletions(c echo.Context) error {
 		return h.sendOpenAIError(c, "messages cannot be empty", "invalid_request_error")
 	}
 
-	// use last user message as message
-	var lastUserMessage string
-	for i := len(req.Messages) - 1; i >= 0; i-- {
-		if req.Messages[i].Role == "user" {
-			if req.Messages[i].Content != nil {
-				lastUserMessage = req.Messages[i].Content.String()
-			}
-			break
-		}
-	}
-	if lastUserMessage == "" {
-		return h.sendOpenAIError(c, "no user message found", "invalid_request_error")
+	lastUserMessage, history, err := req.ConversationMessages()
+	if err != nil {
+		return h.sendOpenAIError(c, err.Error(), "invalid_request_error")
 	}
 
 	// validate api bot settings
@@ -312,10 +303,11 @@ func (h *ShareChatHandler) ChatCompletions(c echo.Context) error {
 	}
 
 	chatReq := &domain.ChatRequest{
-		Message:  lastUserMessage,
-		KBID:     kbID,
-		AppType:  domain.AppTypeOpenAIAPI,
-		RemoteIP: c.RealIP(),
+		Message:         lastUserMessage,
+		KBID:            kbID,
+		AppType:         domain.AppTypeOpenAIAPI,
+		RemoteIP:        c.RealIP(),
+		HistoryMessages: history,
 	}
 
 	// set stream response header

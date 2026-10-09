@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/cloudwego/eino/schema"
 )
 
 // OpenAI API 请求结构体
@@ -22,6 +24,34 @@ type OpenAICompletionsRequest struct {
 	Tools            []OpenAITool          `json:"tools,omitempty"`
 	ToolChoice       *OpenAIToolChoice     `json:"tool_choice,omitempty"`
 	ResponseFormat   *OpenAIResponseFormat `json:"response_format,omitempty"`
+}
+
+// ConversationMessages preserves the caller's ordered context instead of taking only the last question.
+func (r *OpenAICompletionsRequest) ConversationMessages() (string, []*schema.Message, error) {
+	if len(r.Messages) == 0 || r.Messages[len(r.Messages)-1].Role != "user" {
+		return "", nil, fmt.Errorf("messages must end with a user question")
+	}
+	var history []*schema.Message
+	for i, msg := range r.Messages {
+		if msg.Content == nil || strings.TrimSpace(msg.Content.String()) == "" {
+			return "", nil, fmt.Errorf("message %d must have text content", i)
+		}
+		content := msg.Content.String()
+		if i == len(r.Messages)-1 {
+			return content, history, nil
+		}
+		switch msg.Role {
+		case "user":
+			history = append(history, schema.UserMessage(content))
+		case "assistant":
+			history = append(history, schema.AssistantMessage(content, nil))
+		case "system", "developer":
+			history = append(history, schema.SystemMessage(content))
+		default:
+			return "", nil, fmt.Errorf("unsupported conversation role: %s", msg.Role)
+		}
+	}
+	return "", nil, fmt.Errorf("no user question found")
 }
 
 type OpenAIStreamOptions struct {
