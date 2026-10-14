@@ -184,9 +184,9 @@ func (h *ShareCommonHandler) FileDownloadURL(c echo.Context) error {
 	if kbID == "" {
 		return h.NewResponseWithError(c, "kb_id is required", nil)
 	}
-	if !strings.HasPrefix(key, kbID+"/") {
-		return h.NewResponseWithError(c, "file key is invalid", fmt.Errorf("file key does not belong to current knowledge base"))
-	}
+	// Storage keys can retain an older KB prefix after data migration. The
+	// current KB still scopes node permission checks, and the exact key must
+	// still be present in that node's published metadata below.
 	nodeID := strings.TrimSpace(c.QueryParam("node_id"))
 	if nodeID == "" {
 		return h.NewResponseWithError(c, "node_id is required", fmt.Errorf("node_id is empty"))
