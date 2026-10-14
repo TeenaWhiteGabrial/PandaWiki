@@ -76,6 +76,7 @@ const FilePreview = ({ info }: FilePreviewProps) => {
   const fileKey = info.meta?.file_key || '';
   const previewKey = info.meta?.preview_key || '';
   const nodeId = info.id || '';
+  const kbId = info.kb_id || '';
   const fileType = getFileType(info);
   const fileName = info.meta?.file_name || info.name || '未命名文件';
   const [fileUrl, setFileUrl] = useState('');
@@ -93,7 +94,7 @@ const FilePreview = ({ info }: FilePreviewProps) => {
 
     if (!fileKey) return;
 
-    resolveShareFileUrl(fileKey, nodeId)
+    resolveShareFileUrl(fileKey, nodeId, kbId)
       .then(url => {
         if (!disposed) setFileUrl(url);
       })
@@ -102,7 +103,7 @@ const FilePreview = ({ info }: FilePreviewProps) => {
       });
 
     if (previewKey) {
-      resolveShareFileUrl(previewKey, nodeId)
+      resolveShareFileUrl(previewKey, nodeId, kbId)
         .then(url => {
           if (!disposed) setPreviewUrl(url);
         })
@@ -114,7 +115,7 @@ const FilePreview = ({ info }: FilePreviewProps) => {
     return () => {
       disposed = true;
     };
-  }, [fileKey, nodeId, previewKey]);
+  }, [fileKey, kbId, nodeId, previewKey]);
 
   if (!fileKey) {
     return (
@@ -159,7 +160,7 @@ const FilePreview = ({ info }: FilePreviewProps) => {
         <Button
           variant='outlined'
           disabled={!fileUrl}
-          onClick={() => openShareFile(fileKey, nodeId)}
+          onClick={() => openShareFile(fileKey, nodeId, kbId)}
         >
           下载原文件
         </Button>

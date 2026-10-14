@@ -11,6 +11,7 @@ interface LegacyFileNoticeProps {
 const LegacyFileNotice = ({ info }: LegacyFileNoticeProps) => {
   const fileKey = info.meta?.file_key || '';
   const nodeId = info.id || '';
+  const kbId = info.kb_id || '';
 
   return (
     <Stack
@@ -37,7 +38,7 @@ const LegacyFileNotice = ({ info }: LegacyFileNoticeProps) => {
         <Box>
           <Button
             variant='outlined'
-            onClick={() => openShareFile(fileKey, nodeId)}
+            onClick={() => openShareFile(fileKey, nodeId, kbId)}
           >
             下载原文件
           </Button>

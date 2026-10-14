@@ -315,6 +315,7 @@ const DocContent = ({
           <AttachmentList
             attachments={info?.meta?.attachments}
             nodeId={info?.id || ''}
+            kbId={info?.kb_id || ''}
           />
 
           <Box
