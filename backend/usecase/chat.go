@@ -80,6 +80,7 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 	eventCh := make(chan domain.SSEEvent, 100)
 	go func() {
 		defer close(eventCh)
+		requestStarted := time.Now()
 		// 1. get app detail and validate app
 		app, err := u.appRepo.GetOrCreateAppByKBIDAndType(ctx, req.KBID, req.AppType)
 		if err != nil {
@@ -89,18 +90,7 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		req.KBID = app.KBID
 		req.AppID = app.ID
 		req.AppType = app.Type
-		// 2. get model and validate model
-		model, err := u.modelUsecase.GetChatModel(ctx)
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				eventCh <- domain.SSEEvent{Type: "error", Content: "请前往管理后台，点击右上角的“系统设置”配置推理大模型。"}
-			} else {
-				eventCh <- domain.SSEEvent{Type: "error", Content: "模型获取失败"}
-			}
-			return
-		}
-		req.ModelInfo = model
-		// 3. conversation management
+		// 2. conversation management
 		if req.AppType == domain.AppTypeWechatServiceBot || req.AppType == domain.AppTypeWechatBot || req.AppType == domain.AppTypeWecomAIBot { // wechat service has its own id
 			nonce := uuid.New().String()
 			eventCh <- domain.SSEEvent{Type: "conversation_id", Content: req.ConversationID}
@@ -162,7 +152,35 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		messageId := uuid.New().String()
 		eventCh <- domain.SSEEvent{Type: "message_id", Content: messageId}
 		userMessageId := uuid.New().String()
+		traceID := uuid.NewString()
+		trace := newChatTrace(traceID, req.KBID, req.ConversationID, userMessageId, messageId, req.Message, requestStarted)
+		eventCh <- domain.SSEEvent{Type: "trace_id", Content: traceID}
+		trace.add("request_received", "completed", map[string]any{"question": req.Message, "conversation_id": req.ConversationID, "kb_id": req.KBID, "app_type": req.AppType, "user_id": req.Info.UserInfo.UserID, "auth_user_id": req.Info.UserInfo.AuthUserID, "image_count": len(req.ImagePaths)}, map[string]any{"user_message_id": userMessageId, "assistant_message_id": messageId}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].StartedAt = requestStarted
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(requestStarted).Milliseconds()
+		tracePersisted := false
+		persistTrace := func() {
+			if tracePersisted {
+				return
+			}
+			if trace.trace.Status == "in_progress" {
+				if ctx.Err() != nil {
+					trace.finish("interrupted")
+				} else {
+					trace.finish("failed")
+				}
+			}
+			persistCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if saveErr := u.conversationUsecase.repo.SaveChatTrace(persistCtx, trace.trace); saveErr != nil {
+				u.logger.Error("save chat trace failed", log.Error(saveErr), log.String("trace_id", traceID), log.String("conversation_id", req.ConversationID))
+			} else {
+				tracePersisted = true
+			}
+		}
+		defer persistTrace()
 		// save user question to conversation message
+		questionSaveStarted := time.Now()
 		if err := u.conversationUsecase.CreateChatConversationMessage(ctx, req.KBID, &domain.ConversationMessage{
 			ID:             userMessageId,
 			ConversationID: req.ConversationID,
@@ -173,23 +191,55 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 			ImagePaths:     req.ImagePaths,
 			RemoteIP:       req.RemoteIP,
 		}); err != nil {
+			trace.add("save_user_question", "failed", nil, nil, err)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(questionSaveStarted).Milliseconds()
+			trace.finish("failed")
+			persistTrace()
 			u.logger.Error("failed to save user question to conversation message", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to save user question to conversation message"}
 			return
 		}
+		trace.add("save_user_question", "completed", nil, map[string]any{"user_message_id": userMessageId}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(questionSaveStarted).Milliseconds()
+		modelLoadStarted := time.Now()
+		model, modelErr := u.modelUsecase.GetChatModel(ctx)
+		if modelErr != nil {
+			trace.add("load_chat_model", "failed", nil, nil, modelErr)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(modelLoadStarted).Milliseconds()
+			trace.finish("failed")
+			persistTrace()
+			if modelErr == gorm.ErrRecordNotFound {
+				eventCh <- domain.SSEEvent{Type: "error", Content: "请前往管理后台，点击右上角的“系统设置”配置推理大模型。"}
+			} else {
+				eventCh <- domain.SSEEvent{Type: "error", Content: "模型获取失败"}
+			}
+			return
+		}
+		req.ModelInfo = model
+		trace.trace.Model = string(model.Model)
+		trace.add("load_chat_model", "completed", nil, map[string]any{"provider": model.Provider, "model": model.Model}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(modelLoadStarted).Milliseconds()
 		// extra1. if user set question block words then check it
+		blockWordsLoadStarted := time.Now()
 		blockWords, err := u.blockWordRepo.GetBlockWords(ctx, req.KBID)
 		if err != nil {
+			trace.add("load_question_filter", "failed", nil, nil, err)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(blockWordsLoadStarted).Milliseconds()
 			u.logger.Error("failed to get question block words", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get question block words"}
 			return
 		}
+		trace.add("load_question_filter", "completed", nil, map[string]any{"configured_block_word_count": len(blockWords)}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(blockWordsLoadStarted).Milliseconds()
 		if len(blockWords) > 0 { // check --> filter
 			questionFilter := utils.GetDFA(req.KBID)
 			if err := questionFilter.DFA.Check(req.Message); err != nil { // exist then return err
 				answer := "**您的问题包含敏感词, AI 无法回答您的问题。**"
+				trace.add("input_filter", "blocked", nil, map[string]any{"reason": "命中问题屏蔽词"}, nil)
+				trace.add("final_answer", "completed", nil, map[string]any{"source": "question_block_word", "answer": answer}, nil)
 				eventCh <- domain.SSEEvent{Type: "error", Content: answer}
 				// save ai answer and set it err
+				blockedAnswerSaveStarted := time.Now()
 				if err := u.conversationUsecase.CreateChatConversationMessage(context.Background(), req.KBID, &domain.ConversationMessage{
 					ID:             messageId,
 					ConversationID: req.ConversationID,
@@ -202,13 +252,19 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 					RemoteIP:       req.RemoteIP,
 					ParentID:       userMessageId,
 				}); err != nil {
+					trace.add("save_answer", "failed", nil, nil, err)
+					trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(blockedAnswerSaveStarted).Milliseconds()
 					u.logger.Error("failed to save assistant answer to conversation message", log.Error(err))
 					eventCh <- domain.SSEEvent{Type: "error", Content: "failed to save assistant answer to conversation message"}
 					return
 				}
+				trace.add("save_answer", "completed", nil, map[string]any{"assistant_message_id": messageId}, nil)
+				trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(blockedAnswerSaveStarted).Milliseconds()
+				trace.finish("blocked")
 				return
 			}
 		}
+		trace.add("input_filter", "completed", nil, map[string]any{"passed": true}, nil)
 
 		if req.Info.UserInfo.AuthUserID == 0 {
 			auth, _ := u.AuthRepo.GetAuthBySourceType(ctx, req.AppType.ToSourceType())
@@ -219,34 +275,51 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 
 		kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, req.KBID)
 		if err != nil {
+			trace.add("load_knowledge_base", "failed", nil, nil, err)
 			u.logger.Error("failed to get kb", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get kb"}
 			return
 		}
+		trace.add("load_knowledge_base", "completed", nil, map[string]any{"kb_id": kb.ID, "dataset_id": kb.DatasetID, "enterprise_auth_enabled": kb.AccessSettings.EnterpriseAuth.Enabled}, nil)
 
 		groupIds := []int(nil)
 		if !kb.AccessSettings.EnterpriseAuth.Enabled {
+			groupLookupStarted := time.Now()
 			groupIds, err = u.AuthRepo.GetAuthGroupIdsWithParentsByAuthId(ctx, req.Info.UserInfo.AuthUserID)
 			if err != nil {
+				trace.add("load_user_permissions", "failed", nil, nil, err)
 				u.logger.Error("failed to get auth groupIds", log.Error(err))
 				eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get auth groupIds"}
 				return
 			}
+			step := map[string]any{"user_group_ids": groupIds}
+			trace.add("load_user_permissions", "completed", nil, step, nil)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(groupLookupStarted).Milliseconds()
+		} else {
+			trace.add("load_user_permissions", "skipped", nil, map[string]any{"reason": "知识库启用了企业身份访问控制"}, nil)
 		}
 
+		accessStarted := time.Now()
 		shareAccess, err := u.enterpriseUsecase.BuildShareAccessContext(ctx, req.Info.UserInfo.UserID)
 		if err != nil {
+			trace.add("build_access_context", "failed", nil, nil, err)
 			u.logger.Error("failed to build enterprise access context", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to build enterprise access context"}
 			return
 		}
+		trace.add("build_access_context", "completed", nil, map[string]any{"authenticated_user": req.Info.UserInfo.UserID != ""}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(accessStarted).Milliseconds()
 
-		messages, rankedNodes, err := u.llmUsecase.BuildConversationMessageWithRAG(ctx, req.ConversationID, req.KBID, groupIds, shareAccess, req.Prompt, req.HistoryMessages)
+		messageBuildStarted := time.Now()
+		messages, rankedNodes, err := u.llmUsecase.BuildConversationMessageWithRAGTraced(ctx, req.ConversationID, req.KBID, groupIds, shareAccess, req.Prompt, req.HistoryMessages, trace)
 		if err != nil {
+			trace.add("prepare_model_context", "failed", nil, nil, err)
 			u.logger.Error("build messages failed", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: err.Error()}
 			return
 		}
+		trace.add("prepare_model_context", "completed", nil, map[string]any{"message_count": len(messages), "document_count": len(rankedNodes)}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(messageBuildStarted).Milliseconds()
 
 		u.logger.Debug("message:", log.Any("schema", messages))
 		for _, node := range rankedNodes {
@@ -262,8 +335,11 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		answer := ""
 		usage := schema.TokenUsage{}
 
+		modelConfigStarted := time.Now()
 		modelkitModel, err := req.ModelInfo.ToModelkitModel()
 		if err != nil {
+			trace.add("model_configuration", "failed", nil, nil, err)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(modelConfigStarted).Milliseconds()
 			u.logger.Error("failed to convert model to modelkit model", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to convert model to modelkit model"}
 			return
@@ -271,13 +347,18 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		chatModel, err := u.modelkit.GetChatModel(ctx, modelkitModel)
 
 		if err != nil {
+			trace.add("model_configuration", "failed", map[string]any{"provider": req.ModelInfo.Provider, "model": req.ModelInfo.Model}, nil, err)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(modelConfigStarted).Milliseconds()
 			u.logger.Error("failed to get chat model", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to get chat model"}
 			return
 		}
+		trace.add("model_configuration", "completed", nil, map[string]any{"provider": req.ModelInfo.Provider, "model": req.ModelInfo.Model}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(modelConfigStarted).Milliseconds()
 		// get words
 		onChunkAC, flushBuffer := u.CreateAcOnChunk(ctx, req.KBID, &answer, eventCh, blockWords)
 
+		inferenceStarted := time.Now()
 		chatErr := u.llmUsecase.ChatWithAgent(ctx, chatModel, messages, &usage, onChunkAC)
 
 		// 处理缓冲区中剩余的内容
@@ -286,21 +367,30 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		}
 
 		if chatErr != nil {
+			trace.add("model_inference", "failed", map[string]any{"provider": req.ModelInfo.Provider, "model": req.ModelInfo.Model}, map[string]any{"partial_answer": answer, "prompt_tokens": usage.PromptTokens, "completion_tokens": usage.CompletionTokens}, chatErr)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(inferenceStarted).Milliseconds()
 			u.logger.Error("对话失败", log.Error(chatErr))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "对话失败，请稍后再试"}
 			return
 		}
+		trace.add("model_inference", "completed", map[string]any{"provider": req.ModelInfo.Provider, "model": req.ModelInfo.Model}, map[string]any{"prompt_tokens": usage.PromptTokens, "completion_tokens": usage.CompletionTokens, "total_tokens": usage.TotalTokens, "answer_empty": strings.TrimSpace(answer) == ""}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(inferenceStarted).Milliseconds()
 
+		answerSource := "model"
 		if strings.TrimSpace(answer) == "" {
 			u.logger.Error("chat model returned empty answer", log.String("provider", string(req.ModelInfo.Provider)), log.String("model", string(req.ModelInfo.Model)), log.String("conversation_id", req.ConversationID))
 			if len(rankedNodes) == 0 {
 				answer = "抱歉，我当前的知识不足以回答这个问题。"
+				answerSource = "server_fallback_no_retrieved_documents"
 			} else {
 				answer = buildFallbackAnswerFromRankedNodes(rankedNodes)
+				answerSource = "server_fallback_from_retrieved_documents"
 			}
 			eventCh <- domain.SSEEvent{Type: "data", Content: answer}
 		}
+		trace.add("final_answer", "completed", nil, map[string]any{"source": answerSource, "answer": answer}, nil)
 
+		persistAnswerStarted := time.Now()
 		if err := u.conversationUsecase.CreateChatConversationMessage(ctx, req.KBID, &domain.ConversationMessage{
 			ID:               messageId,
 			ConversationID:   req.ConversationID,
@@ -316,17 +406,28 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 			RemoteIP:         req.RemoteIP,
 			ParentID:         userMessageId,
 		}); err != nil {
+			trace.add("save_answer", "failed", nil, nil, err)
 			u.logger.Error("failed to save assistant answer to conversation message", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to save assistant answer to conversation message"}
 			return
 		}
+		trace.add("save_answer", "completed", nil, map[string]any{"assistant_message_id": messageId}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(persistAnswerStarted).Milliseconds()
 		// update model usage
+		usageUpdateStarted := time.Now()
 		if err := u.modelUsecase.UpdateUsage(ctx, req.ModelInfo.ID, &usage); err != nil {
+			trace.add("update_model_usage", "failed", nil, nil, err)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(usageUpdateStarted).Milliseconds()
+			trace.finish("failed")
 			u.logger.Error("failed to update model usage", log.Error(err))
 			eventCh <- domain.SSEEvent{Type: "error", Content: "failed to update model usage"}
 			return
 		}
+		trace.add("update_model_usage", "completed", nil, map[string]any{"total_tokens": usage.TotalTokens}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(usageUpdateStarted).Milliseconds()
 
+		trace.finish("completed")
+		persistTrace()
 		eventCh <- domain.SSEEvent{Type: "done"}
 	}()
 	return eventCh, nil

@@ -72,10 +72,28 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 	systemPrompt string,
 	requestHistory []*schema.Message,
 ) ([]*schema.Message, []*domain.RankedNodeChunks, error) {
+	return u.BuildConversationMessageWithRAGTraced(ctx, conversationID, kbID, groupIDs, accessCtx, systemPrompt, requestHistory, nil)
+}
+
+func (u *LLMUsecase) BuildConversationMessageWithRAGTraced(
+	ctx context.Context,
+	conversationID string,
+	kbID string,
+	groupIDs []int,
+	accessCtx *domain.EnterpriseAccessContext,
+	systemPrompt string,
+	requestHistory []*schema.Message,
+	trace *chatTraceRecorder,
+) ([]*schema.Message, []*domain.RankedNodeChunks, error) {
 	messages := make([]*schema.Message, 0)
 	rankedNodes := make([]*domain.RankedNodeChunks, 0)
 
+	historyStarted := time.Now()
 	msgs, err := u.conversationRepo.GetConversationMessagesByID(ctx, conversationID)
+	if trace != nil {
+		trace.add("load_conversation_history", statusForError(err), map[string]any{"conversation_id": conversationID}, map[string]any{"message_count": len(msgs)}, err)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(historyStarted).Milliseconds()
+	}
 	if err != nil {
 		u.logger.Error("get conversation messages failed", log.Error(err))
 		return nil, nil, errors.New("get conversation messages failed")
@@ -109,13 +127,22 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 			question := historyMessages[len(historyMessages)-1].Content
 			var rewrittenQuery string
 			if systemPrompt == "" {
-				if settingPrompt, err := u.promptRepo.GetPromptContent(ctx, kbID); err != nil {
-					u.logger.Error("get prompt from settings failed", log.Error(err))
+				promptStarted := time.Now()
+				if settingPrompt, promptErr := u.promptRepo.GetPromptContent(ctx, kbID); promptErr != nil {
+					u.logger.Error("get prompt from settings failed", log.Error(promptErr))
+					if trace != nil {
+						trace.add("load_chat_prompt", "failed", nil, map[string]any{"using_default_prompt": true}, promptErr)
+						trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(promptStarted).Milliseconds()
+					}
 				} else {
 					if settingPrompt != "" {
 						systemPrompt = settingPrompt
 					} else {
 						systemPrompt = domain.SystemDefaultPrompt
+					}
+					if trace != nil {
+						trace.add("load_chat_prompt", "completed", nil, map[string]any{"custom_prompt_configured": settingPrompt != ""}, nil)
+						trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(promptStarted).Milliseconds()
 					}
 				}
 			}
@@ -133,24 +160,33 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 				schema.SystemMessage(systemPrompt),
 				schema.UserMessage(domain.UserQuestionFormatter),
 			)
+			kbLookupStarted := time.Now()
 			kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, kbID)
 			if err != nil {
+				if trace != nil {
+					trace.add("load_knowledge_base_for_retrieval", "failed", map[string]any{"kb_id": kbID}, nil, err)
+					trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(kbLookupStarted).Milliseconds()
+				}
 				u.logger.Error("get kb failed", log.Error(err))
 				return nil, nil, errors.New("get kb failed")
 			}
-			rewrittenQuery, rankedNodes, err = u.GetRankNodes(ctx, GetRankNodesRequest{
+			if trace != nil {
+				trace.add("load_knowledge_base_for_retrieval", "completed", map[string]any{"kb_id": kbID}, map[string]any{"dataset_id": kb.DatasetID}, nil)
+				trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(kbLookupStarted).Milliseconds()
+			}
+			rewrittenQuery, rankedNodes, err = u.getRankNodes(ctx, GetRankNodesRequest{
 				KBID:                kbID,
 				DatasetID:           kb.DatasetID,
 				Question:            question,
 				GroupIDs:            groupIDs,
 				SimilarityThreshold: 0.2,
 				HistoryMessages:     historyMessages[:len(historyMessages)-1],
-			})
+			}, trace)
 			if err != nil {
 				u.logger.Error("get rank nodes failed", log.Error(err))
 				return nil, nil, errors.New("get rank nodes failed")
 			}
-			rankedNodes, err = u.filterRankedNodesByEnterpriseAccess(ctx, rankedNodes, accessCtx)
+			rankedNodes, err = u.filterRankedNodesByEnterpriseAccessTraced(ctx, rankedNodes, accessCtx, trace)
 			if err != nil {
 				u.logger.Error("filter rank nodes by enterprise access failed", log.Error(err))
 				return nil, nil, errors.New("filter rank nodes failed")
@@ -161,6 +197,7 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 			}
 			u.logger.Debug("documents", log.String("documents", documents))
 
+			formatStarted := time.Now()
 			formattedMessages, err := template.Format(ctx, map[string]any{
 				"CurrentDate":    time.Now().Format("2006-01-02"),
 				"Question":       question,
@@ -168,18 +205,48 @@ func (u *LLMUsecase) BuildConversationMessageWithRAG(
 				"Documents":      documents,
 			})
 			if err != nil {
+				if trace != nil {
+					trace.add("format_model_messages", "failed", map[string]any{"question": question, "rewritten_query": rewrittenQuery, "document_count": len(rankedNodes)}, nil, err)
+					trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(formatStarted).Milliseconds()
+				}
 				u.logger.Error("format messages failed", log.Error(err))
 				return nil, nil, errors.New("format messages failed")
 			}
 			messages = slices.Insert(formattedMessages, 1, historyMessages[:len(historyMessages)-1]...)
+			if trace != nil {
+				trace.add("format_model_messages", "completed", map[string]any{"question": question, "rewritten_query": rewrittenQuery, "document_count": len(rankedNodes)}, map[string]any{"message_count": len(messages)}, nil)
+				trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(formatStarted).Milliseconds()
+				trace.add("model_input", "completed", nil, map[string]any{"messages": traceMessagesForDiagnostics(messages)}, nil)
+			}
 		}
 	}
 	return messages, rankedNodes, nil
 }
 
 func (u *LLMUsecase) filterRankedNodesByEnterpriseAccess(ctx context.Context, rankedNodes []*domain.RankedNodeChunks, accessCtx *domain.EnterpriseAccessContext) ([]*domain.RankedNodeChunks, error) {
-	if u.enterprise == nil || accessCtx == nil || len(rankedNodes) == 0 {
+	return u.filterRankedNodesByEnterpriseAccessTraced(ctx, rankedNodes, accessCtx, nil)
+}
+
+func (u *LLMUsecase) filterRankedNodesByEnterpriseAccessTraced(ctx context.Context, rankedNodes []*domain.RankedNodeChunks, accessCtx *domain.EnterpriseAccessContext, trace *chatTraceRecorder) ([]*domain.RankedNodeChunks, error) {
+	if len(rankedNodes) == 0 {
+		if trace != nil {
+			trace.add("permission_filter", "completed", map[string]any{"candidate_count": 0}, map[string]any{"allowed_count": 0, "excluded_count": 0}, nil)
+		}
 		return rankedNodes, nil
+	}
+	if u.enterprise == nil || accessCtx == nil {
+		if trace != nil {
+			trace.add("permission_filter", "skipped", map[string]any{"candidate_count": len(rankedNodes)}, map[string]any{"reason": "未启用企业文档访问筛选"}, nil)
+		}
+		return rankedNodes, nil
+	}
+	permissionStarted := time.Now()
+	permissionFailure := func(err error) ([]*domain.RankedNodeChunks, error) {
+		if trace != nil {
+			trace.add("permission_filter", "failed", map[string]any{"candidate_count": len(rankedNodes)}, nil, err)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(permissionStarted).Milliseconds()
+		}
+		return nil, err
 	}
 
 	nodeIDs := lo.Map(rankedNodes, func(node *domain.RankedNodeChunks, _ int) string {
@@ -187,30 +254,53 @@ func (u *LLMUsecase) filterRankedNodesByEnterpriseAccess(ctx context.Context, ra
 	})
 	nodesMap, err := u.nodeRepo.GetNodesByIDs(ctx, nodeIDs)
 	if err != nil {
-		return nil, err
+		return permissionFailure(err)
 	}
+	permissionErrors := make([]map[string]any, 0)
 	for _, nodeInfo := range nodesMap {
 		resolvedPermissions, resolveErr := u.enterprise.ResolveNodePermissions(ctx, nodeInfo)
-		if resolveErr == nil {
-			nodeInfo.Permissions = resolvedPermissions
-		}
-		if nodeInfo.NavId != "" && u.enterprise != nil && u.enterprise.navRepo != nil {
-			if nav, navErr := u.enterprise.navRepo.GetById(ctx, nodeInfo.NavId); navErr == nil {
-				nodeInfo.Permissions = u.enterprise.MergeNodeAndNavPermissions(nodeInfo.Permissions, nav.Permissions)
+		if resolveErr != nil {
+			if trace != nil {
+				permissionErrors = append(permissionErrors, map[string]any{"node_id": nodeInfo.ID, "stage": "resolve_node_permissions", "error": resolveErr.Error()})
 			}
+			continue
+		}
+		nodeInfo.Permissions = resolvedPermissions
+		if nodeInfo.NavId != "" && u.enterprise != nil && u.enterprise.navRepo != nil {
+			nav, navErr := u.enterprise.navRepo.GetById(ctx, nodeInfo.NavId)
+			if navErr != nil {
+				if trace != nil {
+					permissionErrors = append(permissionErrors, map[string]any{"node_id": nodeInfo.ID, "stage": "resolve_parent_permissions", "error": navErr.Error()})
+				}
+				continue
+			}
+			nodeInfo.Permissions = u.enterprise.MergeNodeAndNavPermissions(nodeInfo.Permissions, nav.Permissions)
 		}
 	}
 
 	filtered := make([]*domain.RankedNodeChunks, 0, len(rankedNodes))
+	allowed := make([]map[string]any, 0, len(rankedNodes))
+	excluded := make([]map[string]any, 0)
 	for _, rankedNode := range rankedNodes {
 		nodeInfo, ok := nodesMap[rankedNode.NodeID]
 		if !ok {
+			excluded = append(excluded, map[string]any{"node_id": rankedNode.NodeID, "name": rankedNode.NodeName, "reason": "文档节点已不存在"})
 			continue
 		}
 		if !u.enterprise.CanAnswerable(nodeInfo.Permissions, accessCtx) {
+			excluded = append(excluded, map[string]any{"node_id": rankedNode.NodeID, "name": rankedNode.NodeName, "reason": "当前用户无权查看该文档"})
 			continue
 		}
 		filtered = append(filtered, rankedNode)
+		allowed = append(allowed, map[string]any{"node_id": rankedNode.NodeID, "name": rankedNode.NodeName})
+	}
+	if trace != nil {
+		status := "completed"
+		if len(permissionErrors) > 0 {
+			status = "completed_with_warnings"
+		}
+		trace.add("permission_filter", status, map[string]any{"candidate_count": len(rankedNodes)}, map[string]any{"allowed": allowed, "excluded": excluded, "allowed_count": len(allowed), "excluded_count": len(excluded), "permission_resolution_errors": permissionErrors}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(permissionStarted).Milliseconds()
 	}
 	return filtered, nil
 }
@@ -547,8 +637,13 @@ type GetRankNodesRequest struct {
 }
 
 func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) (string, []*domain.RankedNodeChunks, error) {
+	return u.getRankNodes(ctx, req, nil)
+}
+
+func (u *LLMUsecase) getRankNodes(ctx context.Context, req GetRankNodesRequest, trace *chatTraceRecorder) (string, []*domain.RankedNodeChunks, error) {
 	var rankedNodes []*domain.RankedNodeChunks
 	// get related documents from raglite
+	retrievalStarted := time.Now()
 	rewrittenQuery, records, err := u.rag.QueryRecords(ctx, &rag.QueryRecordsRequest{
 		DatasetID:           req.DatasetID,
 		Query:               req.Question,
@@ -557,6 +652,16 @@ func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) 
 		HistoryMsgs:         req.HistoryMessages,
 		MaxChunksPerDoc:     req.MaxChunksPerDoc,
 	})
+	if trace != nil {
+		chunks := make([]map[string]any, 0, len(records))
+		for _, record := range records {
+			chunks = append(chunks, map[string]any{"chunk_id": record.ID, "document_id": record.DocID, "name": record.Name, "excerpt": record.Content})
+		}
+		trace.add("vector_retrieval", statusForError(err), map[string]any{"query": req.Question, "group_ids": req.GroupIDs, "similarity_threshold": req.SimilarityThreshold, "top_k": 10, "history_messages": traceMessagesForDiagnostics(req.HistoryMessages)}, map[string]any{
+			"rewritten_query": rewrittenQuery, "returned_count": len(records), "chunks": chunks,
+		}, err)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(retrievalStarted).Milliseconds()
+	}
 	if err != nil {
 		return "", nil, fmt.Errorf("get records from raglite failed: %w", err)
 	}
@@ -566,7 +671,13 @@ func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) 
 		if strings.TrimSpace(fallbackQuery) == "" {
 			fallbackQuery = req.Question
 		}
+		fallbackStarted := time.Now()
 		fallbackNodes, fallbackErr := u.getRankNodesByLocalFallback(ctx, req.KBID, fallbackQuery, 5)
+		if trace != nil {
+			output := map[string]any{"returned_count": len(fallbackNodes), "documents": traceNodesForDiagnostics(fallbackNodes)}
+			trace.add("local_fallback_retrieval", statusForError(fallbackErr), map[string]any{"query": fallbackQuery}, output, fallbackErr)
+			trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(fallbackStarted).Milliseconds()
+		}
 		if fallbackErr != nil {
 			u.logger.Warn("local fallback retrieval failed", log.Error(fallbackErr))
 		} else if len(fallbackNodes) > 0 {
@@ -574,6 +685,7 @@ func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) 
 			return rewrittenQuery, fallbackNodes, nil
 		}
 	}
+	resolutionStarted := time.Now()
 	rankedNodesMap := make(map[string]*domain.RankedNodeChunks)
 	// get raw node by doc_id
 	if len(records) > 0 {
@@ -583,6 +695,10 @@ func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) 
 		u.logger.Info("node chunk doc ids", log.Any("docIDs", docIDs))
 		docIDNode, err := u.nodeRepo.GetNodeReleasesWithPathsByDocIDs(ctx, docIDs)
 		if err != nil {
+			if trace != nil {
+				trace.add("document_resolution", "failed", map[string]any{"candidate_document_ids": docIDs}, nil, err)
+				trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(resolutionStarted).Milliseconds()
+			}
 			return "", nil, fmt.Errorf("get nodes by ids failed: %w", err)
 		}
 		u.logger.Info("get node release by doc ids", log.Any("docIDNode", lo.Keys(docIDNode)))
@@ -605,7 +721,30 @@ func (u *LLMUsecase) GetRankNodes(ctx context.Context, req GetRankNodesRequest) 
 			}
 		}
 	}
+	if trace != nil {
+		trace.add("document_resolution", "completed", map[string]any{"candidate_chunk_count": len(records)}, map[string]any{"resolved_document_count": len(rankedNodes), "documents": traceNodesForDiagnostics(rankedNodes)}, nil)
+		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(resolutionStarted).Milliseconds()
+	}
 	return rewrittenQuery, rankedNodes, nil
+}
+
+func statusForError(err error) string {
+	if err != nil {
+		return "failed"
+	}
+	return "completed"
+}
+
+func traceNodesForDiagnostics(nodes []*domain.RankedNodeChunks) []map[string]any {
+	result := make([]map[string]any, 0, len(nodes))
+	for _, node := range nodes {
+		chunks := make([]map[string]any, 0, len(node.Chunks))
+		for _, chunk := range node.Chunks {
+			chunks = append(chunks, map[string]any{"chunk_id": chunk.ID, "excerpt": chunk.Content})
+		}
+		result = append(result, map[string]any{"node_id": node.NodeID, "name": node.NodeName, "path": node.NodePathNames, "chunks": chunks})
+	}
+	return result
 }
 
 func (u *LLMUsecase) getRankNodesByLocalFallback(ctx context.Context, kbID, question string, limit int) ([]*domain.RankedNodeChunks, error) {

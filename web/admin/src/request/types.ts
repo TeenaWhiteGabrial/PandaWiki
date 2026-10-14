@@ -686,12 +686,38 @@ export interface DomainContributeSettings {
 export interface DomainConversationDetailResp {
   app_id?: string;
   created_at?: string;
+  chat_traces?: DomainChatTrace[];
   id?: string;
   ip_address?: DomainIPAddress;
   messages?: DomainConversationMessage[];
   references?: DomainConversationReference[];
   remote_ip?: string;
   subject?: string;
+}
+
+export interface DomainChatTrace {
+  trace_id?: string;
+  kb_id?: string;
+  conversation_id?: string;
+  user_message_id?: string;
+  assistant_message_id?: string;
+  question?: string;
+  model?: string;
+  status?: string;
+  started_at?: string;
+  finished_at?: string;
+  steps?: DomainChatTraceStep[];
+}
+
+export interface DomainChatTraceStep {
+  name?: string;
+  status?: string;
+  started_at?: string;
+  finished_at?: string;
+  duration_ms?: number;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  error?: string;
 }
 
 export interface DomainConversationInfo {

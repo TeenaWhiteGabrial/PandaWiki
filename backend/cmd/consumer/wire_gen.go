@@ -100,7 +100,7 @@ func createApp() (*App, error) {
 	userRepository := pg2.NewUserRepository(db, logger)
 	statUseCase := usecase.NewStatUseCase(statRepository, nodeRepository, conversationRepository, appRepository, ipAddressRepo, geoRepo, userRepository, knowledgeBaseRepository, logger)
 	nodeUsecase := usecase.NewNodeUsecase(nodeRepository, navRepository, appRepository, ragRepository, userRepository, knowledgeBaseRepository, llmUsecase, ragService, logger, minioClient, modelRepository, authRepo, modelUsecase, enterpriseUsecase, systemSettingRepo, configConfig)
-	cronHandler, err := mq3.NewCronHandler(logger, statRepository, nodeRepository, statUseCase, nodeUsecase)
+	cronHandler, err := mq3.NewCronHandler(logger, statRepository, nodeRepository, conversationRepository, statUseCase, nodeUsecase)
 	if err != nil {
 		return nil, err
 	}

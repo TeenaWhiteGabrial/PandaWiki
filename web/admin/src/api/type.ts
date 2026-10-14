@@ -602,6 +602,7 @@ export type ChatConversationPair = {
     feedback_type: number;
     score: number;
   };
+  trace?: import('@/request/types').DomainChatTrace;
 };
 
 // ============================================》stat

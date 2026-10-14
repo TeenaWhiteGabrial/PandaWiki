@@ -97,6 +97,23 @@ func (r *ConversationRepository) GetConversationReferences(ctx context.Context, 
 	return references, nil
 }
 
+func (r *ConversationRepository) SaveChatTrace(ctx context.Context, trace *domain.ChatTrace) error {
+	return r.db.WithContext(ctx).Save(trace).Error
+}
+
+func (r *ConversationRepository) GetChatTraces(ctx context.Context, kbID, conversationID string) ([]*domain.ChatTrace, error) {
+	traces := make([]*domain.ChatTrace, 0)
+	err := r.db.WithContext(ctx).
+		Where("kb_id = ? AND conversation_id = ?", kbID, conversationID).
+		Order("started_at ASC").Find(&traces).Error
+	return traces, err
+}
+
+func (r *ConversationRepository) DeleteExpiredChatTraces(ctx context.Context, now time.Time) (int64, error) {
+	result := r.db.WithContext(ctx).Where("expires_at < ?", now).Delete(&domain.ChatTrace{})
+	return result.RowsAffected, result.Error
+}
+
 func (r *ConversationRepository) GetConversationMessagesByID(ctx context.Context, conversationID string) ([]*domain.ConversationMessage, error) {
 	messages := []*domain.ConversationMessage{}
 	if err := r.db.WithContext(ctx).

@@ -129,6 +129,11 @@ func (u *ConversationUsecase) GetConversationDetail(ctx context.Context, kbID, c
 		return nil, err
 	}
 	conversation.References = references
+	traces, err := u.repo.GetChatTraces(ctx, kbID, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	conversation.ChatTraces = traces
 	return conversation, nil
 }
 

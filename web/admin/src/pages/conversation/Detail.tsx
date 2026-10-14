@@ -1,6 +1,7 @@
 import { ChatConversationPair } from '@/api';
 import { getApiV1ConversationDetail } from '@/request/Conversation';
 import { DomainConversationDetailResp } from '@/request/types';
+import type { DomainChatTrace } from '@/request/types';
 import Avatar from '@/components/Avatar';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Card from '@/components/Card';
@@ -38,6 +39,154 @@ const handleThinkingContent = (content: string) => {
     answerContent: answerContent,
   };
 };
+
+const chatTraceStepLabels: Record<string, string> = {
+  request_received: '接收问题',
+  save_user_question: '保存用户问题',
+  load_chat_model: '读取推理模型配置',
+  load_conversation_history: '读取历史会话',
+  load_chat_prompt: '读取问答提示词',
+  load_knowledge_base_for_retrieval: '准备检索知识库',
+  load_question_filter: '加载问题过滤规则',
+  input_filter: '问题检查',
+  load_knowledge_base: '读取知识库',
+  load_user_permissions: '读取用户等级',
+  build_access_context: '生成访问权限',
+  vector_retrieval: '向量检索',
+  local_fallback_retrieval: '本地补充检索',
+  document_resolution: '匹配文档和片段',
+  permission_filter: '文档权限筛选',
+  model_input: '发送给模型的上下文（超长字段会截断）',
+  format_model_messages: '组装模型输入',
+  prepare_model_context: '准备模型上下文',
+  model_configuration: '配置模型',
+  model_inference: '模型生成',
+  final_answer: '最终回答',
+  save_answer: '保存回答',
+  update_model_usage: '更新模型用量',
+};
+
+const chatTraceStatusLabels: Record<string, string> = {
+  in_progress: '处理中',
+  completed: '已完成',
+  failed: '失败',
+  interrupted: '已中断',
+  blocked: '已拦截',
+  running: '进行中',
+  skipped: '已跳过',
+  completed_with_warnings: '已完成，但有权限读取异常',
+};
+
+const formatTraceTime = (value?: string) =>
+  value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—';
+
+const ChatTracePanel = ({ trace }: { trace: DomainChatTrace }) => (
+  <StyledAccordion>
+    <StyledAccordionSummary
+      expandIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />}
+    >
+      <Typography variant='body2' sx={{ fontSize: 12, fontWeight: 600 }}>
+        排查回答过程 ·{' '}
+        {chatTraceStatusLabels[trace.status || ''] ||
+          trace.status ||
+          '未知状态'}{' '}
+        · 追踪编号 {trace.trace_id}
+      </Typography>
+    </StyledAccordionSummary>
+    <StyledAccordionDetails>
+      <Stack gap={1.5}>
+        <Typography variant='caption' color='text.secondary'>
+          日志包含用户标识、问题、检索片段和模型上下文，保留 30
+          天；单段过长或历史消息过多时会截断。
+        </Typography>
+        <Typography variant='caption' color='text.secondary'>
+          请求开始：{formatTraceTime(trace.started_at)} · 结束：
+          {formatTraceTime(trace.finished_at)}
+        </Typography>
+        {(trace.steps || []).map((step, index) => (
+          <Box
+            key={`${step.name}-${index}`}
+            sx={{
+              borderLeft: '2px solid',
+              borderColor:
+                step.status === 'failed' || step.status === 'blocked'
+                  ? 'error.main'
+                  : step.status === 'completed_with_warnings'
+                    ? 'warning.main'
+                    : 'divider',
+              pl: 1.5,
+            }}
+          >
+            <Stack direction='row' justifyContent='space-between' gap={1}>
+              <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                {chatTraceStepLabels[step.name || ''] ||
+                  step.name ||
+                  '处理步骤'}
+              </Typography>
+              <Typography
+                variant='caption'
+                color={
+                  step.status === 'failed' || step.status === 'blocked'
+                    ? 'error.main'
+                    : step.status === 'completed_with_warnings'
+                      ? 'warning.main'
+                      : 'text.secondary'
+                }
+              >
+                {chatTraceStatusLabels[step.status || ''] ||
+                  step.status ||
+                  '未知'}
+                {step.duration_ms ? ` · ${step.duration_ms} ms` : ''}
+              </Typography>
+            </Stack>
+            <Typography variant='caption' color='text.secondary'>
+              {formatTraceTime(step.started_at)} →{' '}
+              {formatTraceTime(step.finished_at)}
+            </Typography>
+            {step.error && (
+              <Typography variant='body2' color='error.main' sx={{ mt: 0.5 }}>
+                {step.error}
+              </Typography>
+            )}
+            {step.input && <TracePayload title='输入' value={step.input} />}
+            {step.output && <TracePayload title='输出' value={step.output} />}
+          </Box>
+        ))}
+      </Stack>
+    </StyledAccordionDetails>
+  </StyledAccordion>
+);
+
+const TracePayload = ({
+  title,
+  value,
+}: {
+  title: string;
+  value: Record<string, unknown>;
+}) => (
+  <Box sx={{ mt: 0.75 }}>
+    <Typography variant='caption' color='text.secondary'>
+      {title}
+    </Typography>
+    <Box
+      component='pre'
+      sx={{
+        m: 0,
+        mt: 0.25,
+        p: 1,
+        maxHeight: 320,
+        overflow: 'auto',
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+        borderRadius: 1,
+        bgcolor: 'background.paper3',
+        fontSize: 11,
+      }}
+    >
+      {JSON.stringify(value, null, 2)}
+    </Box>
+  </Box>
+);
 
 export const StyledConversationItem = styled(Box)(({ theme }) => ({
   display: 'flex',
@@ -201,11 +350,36 @@ const Detail = ({
       setDetail(res);
       const pairs: ChatConversationPair[] = [];
       let currentPair: Partial<ChatConversationPair> = {};
+      const appendUnansweredPair = () => {
+        if (
+          currentPair.user ||
+          (currentPair.image_paths && currentPair.image_paths.length > 0)
+        ) {
+          pairs.push({
+            user: currentPair.user || '',
+            image_paths: currentPair.image_paths || [],
+            assistant: '',
+            thinking_content: '',
+            created_at: '',
+            info: {
+              feedback_content: '',
+              feedback_type: 0,
+              score: 0,
+            },
+            trace: currentPair.trace,
+          });
+          currentPair = {};
+        }
+      };
       res.messages?.forEach(message => {
         if (message.role === 'user') {
+          appendUnansweredPair();
           currentPair = {
             user: message.content,
             image_paths: message.image_paths,
+            trace: res.chat_traces?.find(
+              trace => trace.user_message_id === message.id,
+            ),
           };
         } else if (message.role === 'assistant') {
           if (
@@ -216,6 +390,10 @@ const Detail = ({
               message.content || '',
             );
             currentPair.assistant = answerContent;
+            currentPair.trace =
+              res.chat_traces?.find(
+                trace => trace.assistant_message_id === message.id,
+              ) || currentPair.trace;
             currentPair.thinking_content = thinkingContent;
             currentPair.created_at = message.created_at;
             // @ts-expect-error 类型不兼容
@@ -226,18 +404,7 @@ const Detail = ({
         }
       });
 
-      if (
-        currentPair.user ||
-        (currentPair.image_paths && currentPair.image_paths.length > 0)
-      ) {
-        pairs.push({
-          user: currentPair.user,
-          image_paths: currentPair.image_paths,
-          assistant: '',
-          created_at: '',
-          info: { score: 0 },
-        } as ChatConversationPair);
-      }
+      appendUnansweredPair();
 
       setConversations(pairs);
     });
@@ -364,6 +531,7 @@ const Detail = ({
 
                   {/* AI回答气泡 - 左对齐 */}
                   <StyledAiBubble>
+                    {item.trace && <ChatTracePanel trace={item.trace} />}
                     {/* 思考过程 */}
                     {!!item.thinking_content && (
                       <StyledThinkingAccordion defaultExpanded>

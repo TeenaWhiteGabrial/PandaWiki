@@ -12,20 +12,22 @@ import (
 )
 
 type CronHandler struct {
-	logger      *log.Logger
-	statRepo    *pg.StatRepository
-	nodeRepo    *pg.NodeRepository
-	statUseCase *usecase.StatUseCase
-	nodeUseCase *usecase.NodeUsecase
+	logger           *log.Logger
+	statRepo         *pg.StatRepository
+	nodeRepo         *pg.NodeRepository
+	conversationRepo *pg.ConversationRepository
+	statUseCase      *usecase.StatUseCase
+	nodeUseCase      *usecase.NodeUsecase
 }
 
-func NewCronHandler(logger *log.Logger, statRepo *pg.StatRepository, nodeRepo *pg.NodeRepository, statUseCase *usecase.StatUseCase, nodeUseCase *usecase.NodeUsecase) (*CronHandler, error) {
+func NewCronHandler(logger *log.Logger, statRepo *pg.StatRepository, nodeRepo *pg.NodeRepository, conversationRepo *pg.ConversationRepository, statUseCase *usecase.StatUseCase, nodeUseCase *usecase.NodeUsecase) (*CronHandler, error) {
 	h := &CronHandler{
-		statRepo:    statRepo,
-		nodeRepo:    nodeRepo,
-		statUseCase: statUseCase,
-		nodeUseCase: nodeUseCase,
-		logger:      logger.WithModule("handler.mq.cron"),
+		statRepo:         statRepo,
+		nodeRepo:         nodeRepo,
+		conversationRepo: conversationRepo,
+		statUseCase:      statUseCase,
+		nodeUseCase:      nodeUseCase,
+		logger:           logger.WithModule("handler.mq.cron"),
 	}
 	cron := cron.New()
 
@@ -86,6 +88,11 @@ func NewCronHandler(logger *log.Logger, statRepo *pg.StatRepository, nodeRepo *p
 		return nil, err
 	}
 	h.logger.Info("add cron job", log.String("cron_id", "cleanup_old_node_release_backups"))
+	if _, err := cron.AddFunc("0 3 * * *", h.CleanupExpiredChatTraces); err != nil {
+		h.logger.Error("failed to add cron job for cleaning expired chat traces", log.Error(err))
+		return nil, err
+	}
+	h.logger.Info("add cron job", log.String("cron_id", "cleanup_expired_chat_traces"))
 
 	cron.Start()
 	h.logger.Info("start cron jobs")
@@ -172,4 +179,13 @@ func (h *CronHandler) CleanupOldNodeReleaseBackups() {
 		return
 	}
 	h.logger.Info("cleanup old node release backups successful")
+}
+
+func (h *CronHandler) CleanupExpiredChatTraces() {
+	deleted, err := h.conversationRepo.DeleteExpiredChatTraces(context.Background(), time.Now())
+	if err != nil {
+		h.logger.Error("cleanup expired chat traces failed", log.Error(err))
+		return
+	}
+	h.logger.Info("cleanup expired chat traces successful", log.Int64("deleted_count", deleted))
 }

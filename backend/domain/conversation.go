@@ -114,6 +114,7 @@ type ConversationDetailResp struct {
 
 	Messages   []*ConversationMessage   `json:"messages" gorm:"-"`
 	References []*ConversationReference `json:"references" gorm:"-"`
+	ChatTraces []*ChatTrace             `json:"chat_traces" gorm:"-"`
 
 	IPAddress *IPAddress `json:"ip_address" gorm:"-"`
 
