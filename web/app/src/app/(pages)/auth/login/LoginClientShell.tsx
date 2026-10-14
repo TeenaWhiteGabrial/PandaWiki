@@ -1,12 +1,10 @@
-'use client';
-
-import dynamic from 'next/dynamic';
-
-const Login = dynamic(() => import('@/views/auth/login'), {
-  ssr: false,
-  loading: () => <div style={{ minHeight: '100vh' }} />,
-});
+import { Suspense } from 'react';
+import Login from '@/views/auth/login';
 
 export default function LoginClientShell() {
-  return <Login />;
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh' }} />}>
+      <Login />
+    </Suspense>
+  );
 }
