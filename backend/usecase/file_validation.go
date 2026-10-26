@@ -35,6 +35,7 @@ var uploadTypes = map[string]string{
 	".doc": "application/msword", ".xls": "application/vnd.ms-excel", ".ppt": "application/vnd.ms-powerpoint",
 	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 	".zip": "application/zip", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".tif": "image/tiff", ".tiff": "image/tiff",
+	".ico": "image/vnd.microsoft.icon",
 	".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".avi": "video/x-msvideo", ".webm": "video/webm", ".mkv": "video/x-matroska", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".flac": "audio/flac", ".m4a": "audio/mp4",
 }
 
@@ -69,12 +70,27 @@ func validateUpload(filename string, src uploadSource, size int64, imageOnly boo
 		if size > 20*1024*1024 {
 			return "", fmt.Errorf("图片不能超过 20 MB")
 		}
+		if ext == ".ico" {
+			if err = validateICO(src, size); err != nil {
+				return "", err
+			}
+			break
+		}
+		if bytes.HasPrefix(head, []byte{0, 0, 1, 0}) {
+			return "", fmt.Errorf("文件实际为 ICO 图标，与扩展名 %s 不一致；请转换为 PNG 或使用 .ico 文件上传", ext)
+		}
 		if _, err = src.Seek(0, io.SeekStart); err != nil {
 			return "", err
 		}
 		cfg, format, e := image.DecodeConfig(src)
-		if e != nil || cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > 40000000 {
-			return "", fmt.Errorf("图片内容无效或像素数超过 4000 万")
+		if e != nil {
+			return "", fmt.Errorf("图片格式无法识别或文件损坏（扩展名 %s，检测类型 %s）：%w", ext, http.DetectContentType(head), e)
+		}
+		if cfg.Width <= 0 || cfg.Height <= 0 {
+			return "", fmt.Errorf("图片尺寸无效（%d × %d）", cfg.Width, cfg.Height)
+		}
+		if int64(cfg.Width) > 40000000/int64(cfg.Height) {
+			return "", fmt.Errorf("图片像素数超过 4000 万（%d × %d）", cfg.Width, cfg.Height)
 		}
 		if !(ext == "."+format || (format == "jpeg" && ext == ".jpg") || (format == "tiff" && ext == ".tif")) {
 			return "", fmt.Errorf("图片真实格式与扩展名不一致")

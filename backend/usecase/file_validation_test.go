@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"github.com/chaitin/panda-wiki/config"
+	"hash/crc32"
 	"image"
 	"image/png"
 	"net/http"
@@ -64,6 +66,42 @@ func TestUploadValidationChecksContentAndParsedPDFActions(t *testing.T) {
 			pos, _ := r.Seek(0, 1)
 			if pos != 0 {
 				t.Fatal("source not rewound")
+			}
+		})
+	}
+}
+
+func TestImageValidationDistinguishesDecodingAndPixelLimit(t *testing.T) {
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	oversized := append([]byte(nil), encoded.Bytes()...)
+	// A valid IHDR lets DecodeConfig enforce the limit without allocating a
+	// 48-million-pixel image or trying to decode its pixel data.
+	binary.BigEndian.PutUint32(oversized[16:20], 8000)
+	binary.BigEndian.PutUint32(oversized[20:24], 6000)
+	binary.BigEndian.PutUint32(oversized[29:33], crc32.ChecksumIEEE(oversized[12:29]))
+	for _, tc := range []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"unrecognized", []byte("not an image"), "图片格式无法识别或文件损坏"},
+		{"truncated header", encoded.Bytes()[:20], "图片格式无法识别或文件损坏"},
+		{"pixel limit", oversized, "图片像素数超过 4000 万（8000 × 6000）"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := bytes.NewReader(tc.data)
+			_, err := validateUpload("image.png", src, int64(len(tc.data)), true)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want error containing %q, got %v", tc.want, err)
+			}
+			if tc.name != "pixel limit" && strings.Contains(err.Error(), "像素数超过") {
+				t.Fatal("decoder failure was reported as a pixel limit")
+			}
+			if pos, _ := src.Seek(0, 1); pos != 0 {
+				t.Fatal("source not rewound after failure")
 			}
 		})
 	}
