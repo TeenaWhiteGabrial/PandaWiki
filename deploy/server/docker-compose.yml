@@ -338,6 +338,8 @@ services:
     labels: *pandawiki-log-labels
     environment:
       SECURITY_ALLOWED_HOSTS: ${SECURITY_ALLOWED_HOSTS:-}
+      TARGET: http://api:8000
+      STATIC_FILE_TARGET: ${OSS_DOWNLOAD_URL}
       PORT: 3010
       HOSTNAME: 0.0.0.0
     ports:
