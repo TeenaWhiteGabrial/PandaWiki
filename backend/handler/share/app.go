@@ -59,6 +59,7 @@ func NewShareAppHandler(
 			}
 		})
 	share.GET("/web/info", h.GetWebAppInfo)
+	share.GET("/web/brand", h.GetWebAppBrand)
 	share.GET("/widget/info", h.GetWidgetAppInfo)
 	share.GET("/wechat/info", h.WechatAppInfo)
 
@@ -66,6 +67,20 @@ func NewShareAppHandler(
 	share.GET("/wechat/official_account", h.VerifyUrlWechatOfficialAccount)
 	share.POST("/wechat/official_account", h.WechatHandlerOfficialAccount)
 	return h
+}
+
+// GetWebAppBrand returns only the public names and image paths needed by the
+// login page. It must not load landing-page documents or require a reader session.
+func (h *ShareAppHandler) GetWebAppBrand(c echo.Context) error {
+	kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))
+	if err != nil {
+		return h.NewResponseWithError(c, "get application brand failed", err)
+	}
+	brand, err := h.usecase.GetWebAppBrand(c.Request().Context(), kbID)
+	if err != nil {
+		return h.NewResponseWithError(c, "get application brand failed", err)
+	}
+	return h.NewResponseWithData(c, brand)
 }
 
 // GetWebAppInfo

@@ -104,30 +104,36 @@ const useAuth = (hasAuth: boolean) => {
   return authorized;
 };
 
-const useAdminBrand = (hasAuth: boolean) => {
+const useAdminBrand = (hasAuth: boolean, ready = true) => {
   const dispatch = useAppDispatch();
   const kbId = useAppSelector(state => state.config.kb_id);
 
   useEffect(() => {
+    if (!ready) return;
     if (hasAuth && !kbId) return;
 
     const request = hasAuth
       ? getApiV1AppDetailCompat({ type: '1', kb_id: kbId })
       : getShareWebAppBrand();
 
+    let active = true;
     request
       .then(detail => {
+        if (!active) return;
         const brand = getAppBrandFromDetail(detail);
         dispatch(setAppBrand(brand));
         applyAppBrand(brand);
       })
       .catch(() => undefined);
-  }, [dispatch, hasAuth, kbId]);
+    return () => {
+      active = false;
+    };
+  }, [dispatch, hasAuth, kbId, ready]);
 };
 
 export const MainLayout = () => {
   const authorized = useAuth(true);
-  useAdminBrand(authorized);
+  useAdminBrand(true, authorized);
   if (!authorized) return null;
   return (
     <>
@@ -169,7 +175,7 @@ export const NoSidebarHeaderLayout = ({
   hasAuth: boolean;
 }) => {
   const authorized = useAuth(hasAuth);
-  useAdminBrand(hasAuth && authorized);
+  useAdminBrand(hasAuth, !hasAuth || authorized);
   if (hasAuth && !authorized) return null;
   return (
     <Box

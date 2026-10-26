@@ -10,7 +10,7 @@
  * ---------------------------------------------------------------
  */
 
-import { message } from '@/components/ui';
+import { installResponseInterceptors } from '../responseInterceptors';
 import type {
   AxiosInstance,
   AxiosRequestConfig,
@@ -25,6 +25,8 @@ export interface FullRequestParams
   extends Omit<AxiosRequestConfig, "data" | "params" | "url" | "responseType"> {
   /** set parameter to `true` for call `securityWorker` for this request */
   secure?: boolean;
+  /** Show business errors; optional background requests can opt out. */
+  isAlert?: boolean;
   /** request path */
   path: string;
   /** content type of request body */
@@ -58,19 +60,6 @@ export enum ContentType {
   Text = "text/plain",
 }
 
-const redirectToLogin = () => {
-  const redirectAfterLogin = encodeURIComponent(location.href);
-  const search = `redirect=${redirectAfterLogin}`;
-  const pathname = location.pathname.startsWith("/user")
-    ? "/user/login"
-    : "/login";
-  window.location.href = `${pathname}?${search}`;
-};
-
-const logTraceID = (traceID?: string) => {
-  if (traceID) console.error("API error trace_id:", traceID);
-};
-
 type ExtractDataProp<T> = T extends { data?: infer U } ? U : T;
 
 export class HttpClient<SecurityDataType = unknown> {
@@ -94,35 +83,7 @@ export class HttpClient<SecurityDataType = unknown> {
     this.secure = secure;
     this.format = format;
     this.securityWorker = securityWorker;
-    this.instance.interceptors.response.use(
-      (response) => {
-        if (response.status === 200) {
-          const res = response.data;
-          if (res.success) {
-            return res.data;
-          }
-          logTraceID(res.trace_id);
-          message.error(res.message || "网络异常");
-          return Promise.reject(res);
-        }
-        message.error(response.statusText);
-        return Promise.reject(response);
-      },
-      (error) => {
-        logTraceID(error.response?.data?.trace_id);
-        if (error.response?.status === 403 && error.response?.data?.code === 40302) {
-          if (location.pathname !== '/login') window.location.href = '/login?change_password=1';
-        }
-        if (error.response?.status === 401) {
-          window.location.href = window.__BASENAME__ + "/login";
-          localStorage.removeItem("panda_wiki_token");
-        }
-        if (error.code !== "ERR_CANCELED") {
-          message.error(error.response?.statusText || "网络异常");
-        }
-        return Promise.reject(error.response);
-      },
-    );
+    installResponseInterceptors(this.instance);
   }
 
   public setSecurityData = (data: SecurityDataType | null) => {

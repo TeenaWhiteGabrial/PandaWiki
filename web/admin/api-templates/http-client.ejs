@@ -1,5 +1,5 @@
 <% const { apiConfig, generateResponses, config }=it; %>
-  import { message } from "@/components/ui";
+  import { installResponseInterceptors } from "@/request/responseInterceptors";
   import type { AxiosInstance, AxiosRequestConfig, HeadersDefaults, ResponseType, AxiosResponse } from "axios";
   import axios from "axios";
 
@@ -8,6 +8,8 @@
     export interface FullRequestParams extends Omit<AxiosRequestConfig, "data" | "params" | "url" | "responseType"> {
       /** set parameter to `true` for call `securityWorker` for this request */
       secure?: boolean;
+      /** Set false for optional background requests. */
+      isAlert?: boolean;
       /** request path */
       path: string;
       /** content type of request body */
@@ -36,15 +38,6 @@
               Text = "text/plain",
               }
 
-              const redirectToLogin = () => {
-              const redirectAfterLogin = encodeURIComponent(location.href);
-              const search = `redirect=${redirectAfterLogin}`;
-              const pathname = location.pathname.startsWith('/user')
-              ? '/user/login'
-              : '/login';
-              window.location.href = `${pathname}?${search}`;
-              };
-
               type ExtractDataProp<T> = T extends { data?: infer U } ? U : T
 
 
@@ -61,30 +54,7 @@
                       this.secure = secure;
                       this.format = format;
                       this.securityWorker = securityWorker;
-                      this.instance.interceptors.response.use(
-                      (response) => {
-                      if (response.status === 200) {
-                      const res = response.data;
-                      if (res.success) {
-                      return res.data;
-                      }
-                      message.error(res.message || "网络异常");
-                      return Promise.reject(res);
-                      }
-                      message.error(response.statusText);
-                      return Promise.reject(response);
-                      },
-                      (error) => {
-                      if (error.response?.status === 401) {
-                      window.location.href =  window.__BASENAME__ + '/login';
-                      localStorage.removeItem('panda_wiki_token')
-                      }
-                      if (error.code !== 'ERR_CANCELED') {
-                      message.error(error.response?.statusText || "网络异常");
-                      }
-                      return Promise.reject(error.response);
-                      },
-                      )
+                      installResponseInterceptors(this.instance);
                       }
 
                       public setSecurityData = (data: SecurityDataType | null) => {
@@ -160,12 +130,11 @@
                                       "string") {
                                       body = JSON.stringify(body);
                                       }
-                                      const token = localStorage.getItem('panda_wiki_token') || ''
 
                                       return this.instance.request({
                                       ...requestParams,
                                       headers: {
-                                      Authorization: `Bearer ${token}`,
+                                      "X-PW-CSRF": "1",
                                       ...(requestParams.headers || {}),
                                       ...(type && type !== ContentType.FormData ? { 'Content-Type': type } : {}),
                                       },

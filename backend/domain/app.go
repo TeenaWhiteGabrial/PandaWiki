@@ -495,6 +495,21 @@ type AppDetailResp struct {
 	RecommendNodes []*RecommendNodeListResp `json:"recommend_nodes,omitempty" gorm:"-"`
 }
 
+// AppBrandResp is safe to load before login. Keep it separate from app info,
+// which can include recommended documents, injected code and integration settings.
+type AppBrandResp struct {
+	Settings AppBrandSettings `json:"settings"`
+}
+
+type AppBrandSettings struct {
+	Title        string `json:"title,omitempty"`
+	Icon         string `json:"icon,omitempty"`
+	Favicon      string `json:"favicon,omitempty"`
+	AdminTitle   string `json:"admin_title,omitempty"`
+	AdminLogo    string `json:"admin_logo,omitempty"`
+	AdminFavicon string `json:"admin_favicon,omitempty"`
+}
+
 type AppSettingsResp struct {
 	// nav
 	Title        string `json:"title,omitempty"`

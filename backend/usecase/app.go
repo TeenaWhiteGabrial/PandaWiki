@@ -656,6 +656,21 @@ func (u *AppUsecase) GetMCPServerAppInfo(ctx context.Context, kbID string) (*dom
 	return appInfo, nil
 }
 
+func (u *AppUsecase) GetWebAppBrand(ctx context.Context, kbID string) (*domain.AppBrandResp, error) {
+	app, err := u.repo.GetOrCreateAppByKBIDAndType(ctx, kbID, domain.AppTypeWeb)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.AppBrandResp{Settings: domain.AppBrandSettings{
+		Title:        app.Settings.Title,
+		Icon:         app.Settings.Icon,
+		Favicon:      app.Settings.Favicon,
+		AdminTitle:   app.Settings.AdminTitle,
+		AdminLogo:    app.Settings.AdminLogo,
+		AdminFavicon: app.Settings.AdminFavicon,
+	}}, nil
+}
+
 func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, userID string) (*domain.AppInfoResp, error) {
 	kb, err := u.kbRepo.GetKnowledgeBaseByID(ctx, kbID)
 	if err != nil {

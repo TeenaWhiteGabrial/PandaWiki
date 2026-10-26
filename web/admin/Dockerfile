@@ -13,4 +13,6 @@ COPY ssl /etc/nginx/ssl
 RUN rm -f /etc/nginx/conf.d/default.conf
 ENV UPSTREAM_URL=http://127.0.0.1:8081
 EXPOSE 80
-CMD ["/bin/sh", "-c", "envsubst '${OSS_DOWNLOAD_URL}' < /etc/nginx/templates/server.conf.template > /etc/nginx/conf.d/server.conf && nginx && exec /usr/local/bin/security-proxy --no-auth"]
+# The base Nginx entrypoint skips its hooks when the command starts with /bin/sh.
+# Generate the Host allowlist explicitly before Nginx loads server.conf.
+CMD ["/bin/sh", "-c", "/bin/sh /docker-entrypoint.d/15-security-hosts.sh && envsubst '${OSS_DOWNLOAD_URL}' < /etc/nginx/templates/server.conf.template > /etc/nginx/conf.d/server.conf && nginx -t && nginx && exec /usr/local/bin/security-proxy --no-auth"]
