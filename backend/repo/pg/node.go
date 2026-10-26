@@ -870,7 +870,7 @@ func (r *NodeRepository) GetRecommendNodeListByIDs(ctx context.Context, kbID str
 		Where("node_releases.kb_id = ?", kbID).
 		Where("kb_release_node_releases.release_id = ?", releaseID).
 		Where("node_releases.node_id IN ?", ids).
-		Select("node_releases.node_id as id, node_releases.name, node_releases.type, node_releases.meta->>'summary' as summary, node_releases.meta->>'emoji' as emoji, node_releases.parent_id, node_releases.position, nodes.permissions").
+		Select("node_releases.node_id as id, node_releases.name, node_releases.type, node_releases.meta->>'summary' as summary, node_releases.meta->>'emoji' as emoji, node_releases.parent_id, node_releases.position, nodes.permissions, nodes.nav_id").
 		Find(&nodes).Error; err != nil {
 		return nil, err
 	}
@@ -905,7 +905,7 @@ func (r *NodeRepository) GetRecommendNodeListByParentIDs(ctx context.Context, kb
 		Where("kb_release_node_releases.release_id = ?", releaseID).
 		Where("node_releases.parent_id IN ?", parentIDs).
 		Where("node_releases.type != ?", domain.NodeTypeFolder).
-		Select("node_releases.node_id as id, node_releases.name, node_releases.type, node_releases.meta->>'summary' as summary, node_releases.meta->>'emoji' as emoji, node_releases.parent_id, node_releases.position, nodes.permissions").
+		Select("node_releases.node_id as id, node_releases.name, node_releases.type, node_releases.meta->>'summary' as summary, node_releases.meta->>'emoji' as emoji, node_releases.parent_id, node_releases.position, nodes.permissions, nodes.nav_id").
 		Find(&nodes).Error; err != nil {
 		return nil, err
 	}

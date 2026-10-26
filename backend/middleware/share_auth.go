@@ -126,6 +126,18 @@ func (h *ShareAuthMiddleware) CheckForbidden(next echo.HandlerFunc) echo.Handler
 	}
 }
 
+// OptionalAuthorize allows anonymous page metadata, but validates any supplied
+// reader credential before the handler can return identity-dependent content.
+func (h *ShareAuthMiddleware) OptionalAuthorize(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		c.Response().Header().Set("Cache-Control", "private, no-store")
+		if strings.TrimSpace(c.Request().Header.Get("Authorization")) == "" {
+			return next(c)
+		}
+		return h.Authorize(next)(c)
+	}
+}
+
 func (h *ShareAuthMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// A public document means all authenticated readers, not anonymous

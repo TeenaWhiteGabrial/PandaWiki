@@ -62,6 +62,43 @@ func TestShareContentRequiresCredentialsBeforeResolvingKnowledgeBase(t *testing.
 	}
 }
 
+func TestOptionalShareMetadataAuthenticationBoundary(t *testing.T) {
+	cfg := &config.Config{}
+	m := NewShareAuthMiddleware(cfg, log.NewLogger(cfg), nil, nil)
+	for _, tc := range []struct {
+		name, authorization, cookieName, cookieValue string
+		status                                       int
+	}{
+		{name: "anonymous metadata", status: 200},
+		{name: "admin cookie cannot become reader", cookieName: AdminSessionCookie, cookieValue: "admin-only", status: 200},
+		{name: "explicit invalid credential cannot fall back to public metadata", authorization: "Basic invalid", status: 401},
+		{name: "malformed reader cookie cannot fall back to public metadata", cookieName: ReaderSessionCookie, cookieValue: " ", status: 401},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := echo.New()
+			e.Use(BrowserSessions())
+			e.GET("/share/v1/app/web/info", func(c echo.Context) error {
+				if domain.GetAuthInfoFromCtx(c.Request().Context()) != nil {
+					t.Fatal("anonymous metadata acquired a user identity")
+				}
+				return c.NoContent(200)
+			}, m.OptionalAuthorize)
+			r := httptest.NewRequest(http.MethodGet, "/share/v1/app/web/info", nil)
+			if tc.authorization != "" {
+				r.Header.Set("Authorization", tc.authorization)
+			}
+			if tc.cookieName != "" {
+				r.AddCookie(&http.Cookie{Name: tc.cookieName, Value: tc.cookieValue})
+			}
+			w := httptest.NewRecorder()
+			e.ServeHTTP(w, r)
+			if w.Code != tc.status || w.Header().Get("Cache-Control") != "private, no-store" {
+				t.Fatalf("metadata status/cache=%d/%q, want %d/private, no-store", w.Code, w.Header().Get("Cache-Control"), tc.status)
+			}
+		})
+	}
+}
+
 func TestShareReaderSessionsPostgres(t *testing.T) {
 	dsn := os.Getenv("PANDA_WIKI_TEST_PG_DSN")
 	if dsn == "" {

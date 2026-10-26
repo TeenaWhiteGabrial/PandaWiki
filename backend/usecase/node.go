@@ -413,6 +413,16 @@ func (u *NodeUsecase) StreamSummaryNode(ctx context.Context, req *domain.NodeSum
 }
 
 func (u *NodeUsecase) GetRecommendNodeList(ctx context.Context, req *domain.GetRecommendNodeListReq) ([]*domain.RecommendNodeListResp, error) {
+	nodes, err := u.getPublishedRecommendNodeList(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return u.filterRecommendNodeAudience(ctx, req.KBID, nodes)
+}
+
+// Callers must apply their audience policy: management permissions for the
+// admin editor, reading permissions for the published reader application.
+func (u *NodeUsecase) getPublishedRecommendNodeList(ctx context.Context, req *domain.GetRecommendNodeListReq) ([]*domain.RecommendNodeListResp, error) {
 	// get latest kb release
 	kbRelease, err := u.kbRepo.GetLatestRelease(ctx, req.KBID)
 	if err != nil {
@@ -468,7 +478,7 @@ func (u *NodeUsecase) GetRecommendNodeList(ctx context.Context, req *domain.GetR
 				}
 			}
 		}
-		return u.filterRecommendNodeAudience(ctx, req.KBID, nodes)
+		return nodes, nil
 	}
 	return nil, nil
 }

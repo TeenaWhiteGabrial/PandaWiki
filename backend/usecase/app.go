@@ -603,6 +603,10 @@ func (u *AppUsecase) GetAppDetailByKBIDAndAppType(ctx context.Context, kbID stri
 		}
 		appDetailResp.RecommendNodes = nodes
 	}
+	appDetailResp.Settings.Icon = u.adminBrandImageURL(appDetailResp.Settings.Icon)
+	appDetailResp.Settings.Favicon = u.adminBrandImageURL(appDetailResp.Settings.Favicon)
+	appDetailResp.Settings.AdminLogo = u.adminBrandImageURL(appDetailResp.Settings.AdminLogo)
+	appDetailResp.Settings.AdminFavicon = u.adminBrandImageURL(appDetailResp.Settings.AdminFavicon)
 	return appDetailResp, nil
 }
 
@@ -661,14 +665,7 @@ func (u *AppUsecase) GetWebAppBrand(ctx context.Context, kbID string) (*domain.A
 	if err != nil {
 		return nil, err
 	}
-	return &domain.AppBrandResp{Settings: domain.AppBrandSettings{
-		Title:        app.Settings.Title,
-		Icon:         app.Settings.Icon,
-		Favicon:      app.Settings.Favicon,
-		AdminTitle:   app.Settings.AdminTitle,
-		AdminLogo:    app.Settings.AdminLogo,
-		AdminFavicon: app.Settings.AdminFavicon,
-	}}, nil
+	return &domain.AppBrandResp{Settings: u.webAppBrandSettings(app.Settings)}, nil
 }
 
 func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, userID string) (*domain.AppInfoResp, error) {
@@ -682,6 +679,18 @@ func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, userID
 	if err != nil {
 		return nil, err
 	}
+	brand := u.webAppBrandSettings(app.Settings)
+	// The legacy URL is also used by login pages and older admin bundles.
+	// Anonymous callers need branding and the base URL, never landing-page
+	// documents, document IDs, injected scripts or integration configuration.
+	auth := domain.GetAuthInfoFromCtx(ctx)
+	if auth == nil || auth.UserId == "" {
+		return &domain.AppInfoResp{BaseUrl: kb.AccessSettings.BaseURL, Settings: domain.AppSettingsResp{
+			Title: brand.Title, Icon: brand.Icon, Favicon: brand.Favicon,
+			AdminTitle: brand.AdminTitle, AdminLogo: brand.AdminLogo, AdminFavicon: brand.AdminFavicon,
+		}}, nil
+	}
+	userID = auth.UserId
 	var webAppLandingConfigs []domain.WebAppLandingConfigResp
 	for i := range app.Settings.WebAppLandingConfigs {
 		webAppLandingConfigResp := domain.WebAppLandingConfigResp{
@@ -711,12 +720,23 @@ func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, userID
 				return nil, err
 			}
 			webAppLandingConfigResp.Nodes = navNodes
+			navConfig := *app.Settings.WebAppLandingConfigs[i].NavDocConfig
+			navConfig.NavIds = make([]string, 0, len(navNodes))
+			for _, nav := range navNodes {
+				navConfig.NavIds = append(navConfig.NavIds, nav.NavId)
+			}
+			webAppLandingConfigResp.NavDocConfig = &navConfig
+			webAppLandingConfigResp.NodeIds = nil
 		} else {
 			nodes, err := u.GetRecommendNodesByIds(ctx, kbID, app.Settings.WebAppLandingConfigs[i].NodeIds, userID)
 			if err != nil {
 				return nil, err
 			}
 			webAppLandingConfigResp.Nodes = nodes
+			webAppLandingConfigResp.NodeIds = make([]string, 0, len(nodes))
+			for _, node := range nodes {
+				webAppLandingConfigResp.NodeIds = append(webAppLandingConfigResp.NodeIds, node.ID)
+			}
 		}
 		webAppLandingConfigs = append(webAppLandingConfigs, webAppLandingConfigResp)
 	}
@@ -724,12 +744,12 @@ func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, userID
 		Name:    app.Name,
 		BaseUrl: kb.AccessSettings.BaseURL,
 		Settings: domain.AppSettingsResp{
-			Title:              app.Settings.Title,
-			Icon:               app.Settings.Icon,
-			Favicon:            app.Settings.Favicon,
-			AdminTitle:         app.Settings.AdminTitle,
-			AdminLogo:          app.Settings.AdminLogo,
-			AdminFavicon:       app.Settings.AdminFavicon,
+			Title:              brand.Title,
+			Icon:               brand.Icon,
+			Favicon:            brand.Favicon,
+			AdminTitle:         brand.AdminTitle,
+			AdminLogo:          brand.AdminLogo,
+			AdminFavicon:       brand.AdminFavicon,
 			Btns:               app.Settings.Btns,
 			WelcomeStr:         app.Settings.WelcomeStr,
 			SearchPlaceholder:  app.Settings.SearchPlaceholder,
@@ -769,6 +789,17 @@ func (u *AppUsecase) ShareGetWebAppInfo(ctx context.Context, kbID string, userID
 			StatsSetting:        app.Settings.StatsSetting,
 		},
 	}
+	if len(app.Settings.RecommendNodeIDs) > 0 {
+		nodes, err := u.GetRecommendNodesByIds(ctx, kbID, app.Settings.RecommendNodeIDs, userID)
+		if err != nil {
+			return nil, err
+		}
+		appInfo.RecommendNodes = nodes
+		appInfo.Settings.RecommendNodeIDs = make([]string, 0, len(nodes))
+		for _, node := range nodes {
+			appInfo.Settings.RecommendNodeIDs = append(appInfo.Settings.RecommendNodeIDs, node.ID)
+		}
+	}
 	// init ai feedback string
 	if app.Settings.AIFeedbackSettings.AIFeedbackType == nil {
 		appInfo.Settings.AIFeedbackSettings.AIFeedbackType = []string{"内容不准确", "没有帮助", "其他"}
@@ -803,7 +834,7 @@ func (u *AppUsecase) GetWidgetAppInfo(ctx context.Context, kbID string) (*domain
 	appInfo := &domain.AppInfoResp{
 		Settings: domain.AppSettingsResp{
 			Title:              webApp.Settings.Title,
-			Icon:               webApp.Settings.Icon,
+			Icon:               u.publicBrandImageURL("icon", webApp.Settings.Icon),
 			WelcomeStr:         webApp.Settings.WelcomeStr,
 			SearchPlaceholder:  webApp.Settings.SearchPlaceholder,
 			RecommendQuestions: widgetApp.Settings.WidgetBotSettings.RecommendQuestions,
@@ -1013,6 +1044,7 @@ func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*doma
 			resolvedPermissions = u.nodeUsecase.enterprise.MergeNodeAndNavPermissions(resolvedPermissions, nav.Permissions)
 		}
 		node.Permissions = resolvedPermissions
+		node.Permissions.ManagementGrants = nil
 
 		if u.nodeUsecase.enterprise.CanVisible(node.Permissions, shareAccess) {
 			filteredNodes = append(filteredNodes, nodes[i])
@@ -1043,6 +1075,7 @@ func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*doma
 					resolvedChildPermissions = u.nodeUsecase.enterprise.MergeNodeAndNavPermissions(resolvedChildPermissions, nav.Permissions)
 				}
 				node.RecommendNodes[i2].Permissions = resolvedChildPermissions
+				node.RecommendNodes[i2].Permissions.ManagementGrants = nil
 				if u.nodeUsecase.enterprise.CanVisible(node.RecommendNodes[i2].Permissions, shareAccess) {
 					newFileNodes = append(newFileNodes, node.RecommendNodes[i2])
 				}
@@ -1055,7 +1088,7 @@ func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*doma
 }
 
 func (u *AppUsecase) GetRecommendNodesByIds(ctx context.Context, kbId string, nodeIds []string, userID string) ([]*domain.RecommendNodeListResp, error) {
-	nodes, err := u.nodeUsecase.GetRecommendNodeList(ctx, &domain.GetRecommendNodeListReq{
+	nodes, err := u.nodeUsecase.getPublishedRecommendNodeList(ctx, &domain.GetRecommendNodeListReq{
 		KBID:    kbId,
 		NodeIDs: nodeIds,
 	})
@@ -1078,7 +1111,7 @@ func (u *AppUsecase) GetRecommendNodesByNavIds(ctx context.Context, kbId string,
 		navMap[nav.ID] = nav.Name
 	}
 
-	allNodes, err := u.nodeUsecase.GetRecommendNodeList(ctx, &domain.GetRecommendNodeListReq{
+	allNodes, err := u.nodeUsecase.getPublishedRecommendNodeList(ctx, &domain.GetRecommendNodeListReq{
 		KBID:   kbId,
 		NavIds: navIds,
 	})
@@ -1099,6 +1132,9 @@ func (u *AppUsecase) GetRecommendNodesByNavIds(ctx context.Context, kbId string,
 
 	recommendNodes := make([]*domain.RecommendNodeListResp, 0, len(navIds))
 	for _, navId := range navIds {
+		if len(nodesByNav[navId]) == 0 {
+			continue
+		}
 		recommendNodes = append(recommendNodes, &domain.RecommendNodeListResp{
 			NavId:          navId,
 			NavName:        navMap[navId],

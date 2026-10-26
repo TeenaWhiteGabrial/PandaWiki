@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -514,14 +515,14 @@ func (h *FileHandler) UploadImage(c echo.Context) error {
 		return h.NewResponseWithError(c, "unsupported image type", fmt.Errorf("unsupported image type: %s", file.Filename))
 	}
 
-	key, imageURL, err := h.fileUsecase.UploadImage(c.Request().Context(), kbID, file)
+	key, _, err := h.fileUsecase.UploadImage(c.Request().Context(), kbID, file)
 	if err != nil {
 		return h.NewResponseWithError(c, "upload image failed", err)
 	}
 	return h.NewResponseWithData(c, domain.ObjectUploadResp{
 		Key:      key,
 		Filename: file.Filename,
-		URL:      imageURL,
+		URL:      "/api/v1/file/download?key=" + url.QueryEscape(key),
 	})
 }
 

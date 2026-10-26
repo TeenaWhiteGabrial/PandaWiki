@@ -232,6 +232,9 @@ func TestPrivateUploadsCannotInheritPublicACL(t *testing.T) {
 	if metadata["x-amz-acl"] != "public-read" {
 		t.Fatal("caller metadata mutated")
 	}
+	if _, err := storage.PutDisplayImage(context.Background(), "kb/assets/icon.png", strings.NewReader("hello"), 5, minio.PutObjectOptions{UserMetadata: metadata, DisableMultipart: true}); err != nil {
+		t.Fatal(err)
+	}
 	id, err := storage.MultipartUpload(context.Background(), "file")
 	if err != nil || id != "upload-1" {
 		t.Fatalf("multipart init: %q %v", id, err)
@@ -239,7 +242,7 @@ func TestPrivateUploadsCannotInheritPublicACL(t *testing.T) {
 	if err := storage.CompleteMultipartUpload(context.Background(), "file", id, []minio.CompletePart{{PartNumber: 1, ETag: "test"}}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(calls, ",") != "put,multipart,complete" {
+	if strings.Join(calls, ",") != "put,put,multipart,complete" {
 		t.Fatalf("upload paths not covered: %v", calls)
 	}
 	signed, err := storage.PresignedPutURL(context.Background(), "file", time.Minute)
@@ -297,6 +300,31 @@ func TestLocalMinioPrivateWorkflow(t *testing.T) {
 	response.Body.Close()
 	if response.StatusCode != 200 || string(data) != payload {
 		t.Fatal("authorized signed download failed")
+	}
+	imageKey := "kb/assets/private-image.png"
+	if _, err = storage.PutDisplayImage(ctx, imageKey, strings.NewReader(payload), int64(len(payload)), minio.PutObjectOptions{ContentType: "image/png"}); err != nil {
+		t.Fatal(err)
+	}
+	defer sdk.RemoveObject(ctx, bucket, imageKey, minio.RemoveObjectOptions{})
+	anonymousImage, err := http.Get("http://" + endpoint + "/" + bucket + "/" + imageKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	anonymousImage.Body.Close()
+	if anonymousImage.StatusCode != 403 {
+		t.Fatalf("unsigned display image GET = %d, want private", anonymousImage.StatusCode)
+	}
+	signedImage, err := storage.SignURL(ctx, "ignored", imageKey, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imageResponse, err := http.Get(signedImage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imageResponse.Body.Close()
+	if imageResponse.StatusCode != 200 {
+		t.Fatalf("signed display image GET = %d", imageResponse.StatusCode)
 	}
 	signedPut, err := storage.PresignedPutURL(ctx, "direct.txt", time.Minute)
 	if err != nil {

@@ -224,12 +224,10 @@ func privateObjectOptions(opts minio.PutObjectOptions) minio.PutObjectOptions {
 	return opts
 }
 
-// PutDisplayImage preserves the existing ACL behavior of validated display
-// assets (e.g. the login-page logo). Documents must always use PutObject.
+// Display assets stay private in storage. Admin previews use signed downloads;
+// login-page branding has a separate endpoint limited to configured image fields.
 func (c *MinioClient) PutDisplayImage(ctx context.Context, object string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
-	info, err := c.client.PutObject(ctx, c.bucket, c.physicalObject(object), reader, size, opts)
-	info.Key = strings.TrimLeft(object, "/")
-	return info, err
+	return c.PutObject(ctx, c.bucket, object, reader, size, opts)
 }
 
 // PresignedPutURL returns a short-lived URL that allows the browser to upload

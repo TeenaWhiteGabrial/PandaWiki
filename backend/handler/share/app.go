@@ -3,6 +3,7 @@ package share
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	wechat_v2 "github.com/silenceper/wechat/v2"
@@ -15,6 +16,7 @@ import (
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
+	"github.com/chaitin/panda-wiki/middleware"
 	"github.com/chaitin/panda-wiki/usecase"
 )
 
@@ -42,6 +44,8 @@ func NewShareAppHandler(
 	baseHandler *handler.BaseHandler,
 	logger *log.Logger,
 	usecase *usecase.AppUsecase,
+	shareAuth *middleware.ShareAuthMiddleware,
+	files *usecase.FileUsecase,
 ) *ShareAppHandler {
 	h := &ShareAppHandler{
 		BaseHandler: baseHandler,
@@ -58,8 +62,24 @@ func NewShareAppHandler(
 				return next(c)
 			}
 		})
-	share.GET("/web/info", h.GetWebAppInfo)
+	share.GET("/web/info", h.GetWebAppInfo, shareAuth.OptionalAuthorize)
 	share.GET("/web/brand", h.GetWebAppBrand)
+	share.GET("/web/brand/image", func(c echo.Context) error {
+		c.Response().Header().Set("Cache-Control", "private, no-store")
+		kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))
+		if err != nil {
+			return c.NoContent(http.StatusNotFound)
+		}
+		key, err := h.usecase.GetPublicBrandImageKey(c.Request().Context(), kbID, c.QueryParam("field"))
+		if err != nil {
+			return c.NoContent(http.StatusNotFound)
+		}
+		signed, err := files.SignFileURL(c.Request().Context(), key, 5*time.Minute)
+		if err != nil {
+			return h.NewResponseWithError(c, "failed to load branding image", err)
+		}
+		return c.Redirect(http.StatusFound, signed)
+	})
 	share.GET("/widget/info", h.GetWidgetAppInfo)
 	share.GET("/wechat/info", h.WechatAppInfo)
 
