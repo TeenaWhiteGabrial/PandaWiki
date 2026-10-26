@@ -32,10 +32,12 @@ func NewJWTMiddleware(config *config.Config, logger *log.Logger, userAccessRepo 
 	jwtMiddleware := echoMiddleware.WithConfig(echoMiddleware.Config{
 		SigningKey: []byte(config.Auth.JWT.Secret),
 		ErrorHandler: func(c echo.Context, err error) error {
+			ClearBrowserSession(c)
 			logger.Error("jwt auth failed", log.Error(err))
 			return c.JSON(http.StatusUnauthorized, domain.PWResponse{
 				Success: false,
 				Message: "Unauthorized",
+				Code:    domain.SessionInvalidCode,
 			})
 		},
 	})
@@ -65,11 +67,23 @@ func (m *JWTMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc {
 			if !ok {
 				return c.JSON(http.StatusUnauthorized, domain.PWResponse{Success: false, Message: "Unauthorized"})
 			}
+			token := c.Get("user").(*jwt.Token)
+			claims, ok := token.Claims.(jwt.MapClaims)
+			if !ok || m.userAccessRepo == nil {
+				return invalidAccountSession(c)
+			}
+			sessionID, state, err := checkAccountSession(c, claims, m.userAccessRepo.AccountSessions(), m.config)
+			if err != nil {
+				return invalidAccountSession(c)
+			}
+			if requiresPasswordChange(c, state.PasswordChangeRequired) {
+				return passwordChangeRequired(c)
+			}
 			if !m.isAdministrator(userID) {
 				return administratorAccessDenied(c)
 			}
 			ctx := context.WithValue(c.Request().Context(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{
-				IsToken: false, Permission: consts.UserKBPermissionNull, UserId: userID,
+				SessionExpiresAt: accountSessionExpiresAt(claims), IsToken: false, Permission: consts.UserKBPermissionNull, UserId: userID, SessionID: sessionID, PasswordChangeRequired: state.PasswordChangeRequired,
 			})
 			c.SetRequest(c.Request().WithContext(ctx))
 			m.userAccessRepo.UpdateAccessTime(userID)
@@ -227,7 +241,7 @@ func (m *JWTMiddleware) ValidateKBUserPerm(perm consts.UserKBPermission) echo.Mi
 				}
 			}
 
-			if !authInfo.IsToken && perm == consts.UserKBPermissionDocManage {
+			if perm == consts.UserKBPermissionDocManage {
 				if err := m.validateScopedDocumentOperation(c, kbId, authInfo.UserId); err != nil {
 					return c.JSON(http.StatusForbidden, domain.PWResponse{Success: false, Message: err.Error()})
 				}

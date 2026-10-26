@@ -12,7 +12,7 @@ import {
 import { useAppSelector } from '@/store';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
 import { copyText } from '@/utils';
-import { message } from '@/components/ui';
+import { message, Modal } from '@/components/ui';
 import { Select } from 'antd';
 import { Box, Button, Stack, TextField, Typography } from '@mui/material';
 import dayjs from 'dayjs';
@@ -22,6 +22,7 @@ const MCPAccess = () => {
   const { kb_id, user, kbDetail } = useAppSelector(state => state.config);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createdToken, setCreatedToken] = useState('');
   const [tokens, setTokens] = useState<
     GithubComChaitinPandaWikiProApiTokenV1APITokenListItem[]
   >([]);
@@ -46,7 +47,7 @@ const MCPAccess = () => {
 
   const baseUrl = useMemo(() => {
     if (typeof window === 'undefined') return 'http://127.0.0.1:8000';
-    return `${window.location.protocol}//${window.location.hostname}:8000`;
+    return window.location.origin;
   }, []);
 
   const buildMCPConfigSnippet = (token: string) =>
@@ -81,8 +82,17 @@ const MCPAccess = () => {
       permission: 'not null' | 'doc_manage';
     };
     postApiProV1TokenCreate(payload)
-      .then(() => {
-        message.success('创建成功');
+      .then(result => {
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          !('token' in result) ||
+          typeof result.token !== 'string'
+        ) {
+          throw new Error('创建结果缺少密钥，请刷新后检查');
+        }
+        setCreatedToken(result.token);
+        message.success('创建成功，请保存密钥，关闭后不再显示');
         fetchTokens();
       })
       .finally(() => setCreating(false));
@@ -98,12 +108,51 @@ const MCPAccess = () => {
 
   return (
     <Stack spacing={2}>
+      <Modal
+        open={!!createdToken}
+        title='请保存 MCP 密钥（仅显示一次）'
+        footer={null}
+        onCancel={() => setCreatedToken('')}
+      >
+        <Stack gap={2}>
+          <Typography>
+            关闭后只能查看掩码；如遗失，请删除旧密钥并重新创建。
+          </Typography>
+          <TextField
+            value={buildMCPConfigSnippet(createdToken)}
+            fullWidth
+            multiline
+            minRows={8}
+            slotProps={{ input: { readOnly: true } }}
+          />
+          <Button
+            onClick={() =>
+              copyText(createdToken, undefined, undefined, 'Token')
+            }
+          >
+            复制 Token
+          </Button>
+          <Button
+            onClick={() =>
+              copyText(
+                buildMCPConfigSnippet(createdToken),
+                undefined,
+                undefined,
+                'MCP 配置片段',
+              )
+            }
+          >
+            复制 MCP 配置
+          </Button>
+          <Button onClick={() => setCreatedToken('')}>已保存，关闭</Button>
+        </Stack>
+      </Modal>
       <Card sx={{ p: 3 }}>
         <Stack spacing={2}>
           <Typography variant='h6'>MCP 接入</Typography>
           <Typography color='text.secondary' fontSize={14}>
-            为 MCP 客户端创建长期可用的专用 API Token。不要直接使用 24
-            小时过期的登录 token。下方展示的是通用 HTTP MCP
+            为 MCP 客户端创建专用 API Token。不要直接使用登录
+            token。下方展示的是通用 HTTP MCP
             连接片段，具体客户端外层配置格式可能略有差异。
           </Typography>
           <Typography color='text.secondary' fontSize={13}>
@@ -190,32 +239,6 @@ const MCPAccess = () => {
                     <Stack direction='row' spacing={1}>
                       <Button
                         size='small'
-                        onClick={() =>
-                          copyText(
-                            item.token || '',
-                            undefined,
-                            undefined,
-                            'Token',
-                          )
-                        }
-                      >
-                        复制 Token
-                      </Button>
-                      <Button
-                        size='small'
-                        onClick={() =>
-                          copyText(
-                            buildMCPConfigSnippet(item.token || ''),
-                            undefined,
-                            undefined,
-                            'MCP 配置片段',
-                          )
-                        }
-                      >
-                        复制 MCP 配置片段
-                      </Button>
-                      <Button
-                        size='small'
                         color='error'
                         onClick={() => handleDelete(item.id)}
                       >
@@ -223,14 +246,12 @@ const MCPAccess = () => {
                       </Button>
                     </Stack>
                   </Stack>
-                  <TextField
-                    label='通用 MCP 配置片段'
-                    value={buildMCPConfigSnippet(item.token || '')}
-                    fullWidth
-                    multiline
-                    minRows={8}
-                    InputProps={{ readOnly: true }}
-                  />
+                  <Typography fontFamily='monospace'>
+                    {item.token_hint || '密钥已隐藏'}
+                  </Typography>
+                  <Typography fontSize={13} color='text.secondary'>
+                    完整密钥仅在创建时显示。
+                  </Typography>
                 </Stack>
               </Box>
             ))

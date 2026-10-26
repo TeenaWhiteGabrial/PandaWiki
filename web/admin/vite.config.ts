@@ -1,3 +1,4 @@
+import { allowedHost, pageSecurityHeaders } from '../security.mjs';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { visualizer } from 'rollup-plugin-visualizer';
@@ -82,6 +83,7 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     server: {
+      headers: pageSecurityHeaders({ development: true }),
       proxy: {
         '/api': {
           target: env.TARGET,
@@ -107,6 +109,19 @@ export default defineConfig(({ command, mode }) => {
     },
     plugins: [
       react(),
+      {
+        name: 'request-host-boundary',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (!allowedHost(req.headers.host || '')) {
+              res.statusCode = 421;
+              res.end();
+              return;
+            }
+            next();
+          });
+        },
+      },
       generateRoutesPlugin(),
       ...(command === 'build' && shouldAnalyze
         ? [

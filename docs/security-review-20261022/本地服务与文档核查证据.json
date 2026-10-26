@@ -1,0 +1,89 @@
+[
+  {
+    "type": "local_redis_details",
+    "version": "7.4.8",
+    "role": "master",
+    "modules": [],
+    "default_user_flags": [
+      "on",
+      "nopass",
+      "sanitize-payload"
+    ],
+    "default_user_commands": "+@all",
+    "password_hash_count": 0
+  },
+  {
+    "type": "local_nats_anonymous_connect",
+    "response": "PONG"
+  },
+  {
+    "type": "local_nats_monitor",
+    "status": 200,
+    "version": "2.14.1",
+    "auth_required": null
+  },
+  {
+    "type": "local_node_detail_no_auth",
+    "label": "public_P0",
+    "status": 200,
+    "success": true,
+    "code": 0,
+    "message": "",
+    "body_content_present": true,
+    "file_key_present": true
+  },
+  {
+    "type": "local_node_detail_no_auth",
+    "label": "restricted_P2",
+    "status": 200,
+    "success": false,
+    "code": 40003,
+    "message": "Permission Denied",
+    "body_content_present": false,
+    "file_key_present": false
+  },
+  {
+    "type": "local_node_detail_no_auth",
+    "label": "restricted_P7",
+    "status": 200,
+    "success": true,
+    "code": 0,
+    "message": "",
+    "body_content_present": true,
+    "file_key_present": true
+  },
+  {
+    "type": "local_download_guard_no_auth",
+    "label": "restricted_P2",
+    "status": 200,
+    "success": false,
+    "code": 40003,
+    "message": "Permission Denied",
+    "url_returned": false
+  },
+  {
+    "type": "local_download_guard_no_auth",
+    "label": "public_P0_wrong_key",
+    "status": 200,
+    "success": false,
+    "code": 0,
+    "message": "file key is invalid",
+    "url_returned": false
+  },
+  {
+    "type": "local_redis_additional_conditions",
+    "tls_port": 0,
+    "upload_blacklist_setting_exists": false
+  },
+  {
+    "type": "local_P7_effective_configuration",
+    "nav_name": "权限验收-受限栏目-20261021",
+    "nav_permissions": {
+      "visible": "open",
+      "visitable": "open",
+      "answerable": "open"
+    },
+    "parent_inherit": true,
+    "document_inherit": true
+  }
+]

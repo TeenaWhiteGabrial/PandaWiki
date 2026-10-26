@@ -6,6 +6,7 @@ source "${ROOT_DIR}/scripts/dev-env.sh"
 
 ensure_dev_dirs
 load_external_oss_env
+load_local_security_env
 resolve_go_bin
 
 cd "${PANDA_WIKI_ROOT_DIR}/backend/store/pg"
@@ -21,11 +22,11 @@ env \
   PDF_PARSER_TOKEN="${PDF_PARSER_TOKEN:-}" \
   LOG_LEVEL="-4" \
   LOG_STORE_URL="http://127.0.0.1:13100" \
-  ADMIN_PASSWORD="admin123" \
+  ADMIN_PASSWORD="${ADMIN_PASSWORD:-YunzhouWiki@2026}" \
   PANDA_WIKI_CONFIG_FILE="${PANDA_WIKI_CONFIG_FILE:-${PANDA_WIKI_ROOT_DIR}/backend/config.yml}" \
   JWT_SECRET="dev-jwt-secret" \
   PG_DSN="host=127.0.0.1 user=panda-wiki password=panda-wiki-secret dbname=panda-wiki port=15432 sslmode=disable TimeZone=Asia/Shanghai" \
-  MQ_NATS_SERVER="nats://127.0.0.1:4222" \
+  MQ_NATS_SERVER="nats://panda-wiki:${NATS_PASSWORD}@127.0.0.1:4222" \
   REDIS_ADDR="127.0.0.1:16379" \
   OSS_ENDPOINT="${OSS_ENDPOINT}" \
   OSS_ACCESS_KEY="${OSS_ACCESS_KEY}" \

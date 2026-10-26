@@ -110,7 +110,7 @@ func (u *NodeUsecase) GetList(ctx context.Context, req *domain.GetNodeListReq) (
 		return nodes, nil
 	}
 
-	nodes, err = u.filterReadableManagedNodes(ctx, req.KBID, nodes)
+	nodes, err = u.filterManagedNodes(ctx, req.KBID, nodes)
 	if err != nil {
 		return nil, err
 	}
@@ -135,18 +135,21 @@ func (u *NodeUsecase) GetNodeByKBID(ctx context.Context, id, kbId, format string
 		return nil, err
 	}
 
-	allowed, err := u.canReadOrManageNode(ctx, kbId, id)
+	allowed, err := u.canManageNodeInAdmin(ctx, kbId, id)
 	if err != nil {
 		return nil, err
 	}
 	if !allowed {
-		return nil, fmt.Errorf("没有此文档的查阅权限")
+		return nil, fmt.Errorf("没有此文档的管理权限")
 	}
 	access, err := u.managementAccess(ctx, kbId)
 	if err != nil {
 		return nil, err
 	}
 	node.CanManage = access.Global || access.CanManageNode(id)
+	if !node.CanManage {
+		node.Permissions.ManagementGrants = nil
+	}
 
 	nodeRelease, err := u.nodeRepo.GetLatestNodeReleaseWithPublishAccount(ctx, node.ID)
 	if err != nil {
@@ -211,10 +214,10 @@ func (u *NodeUsecase) Update(ctx context.Context, req *domain.UpdateNodeReq, use
 }
 
 func (u *NodeUsecase) GetNodeReleaseList(ctx context.Context, kbID, nodeID string) ([]*v1.NodeReleaseListItem, error) {
-	if allowed, err := u.canReadOrManageNode(ctx, kbID, nodeID); err != nil {
+	if allowed, err := u.canManageNodeInAdmin(ctx, kbID, nodeID); err != nil {
 		return nil, err
 	} else if !allowed {
-		return nil, fmt.Errorf("没有此文档的查阅权限")
+		return nil, fmt.Errorf("没有此文档的管理权限")
 	}
 	return u.nodeRepo.GetNodeReleaseList(ctx, kbID, nodeID)
 }
@@ -227,10 +230,10 @@ func (u *NodeUsecase) GetNodeReleaseDetail(ctx context.Context, kbID, releaseID 
 	if release.KBID != kbID {
 		return nil, fmt.Errorf("文档不属于此知识库")
 	}
-	if allowed, err := u.canReadOrManageNode(ctx, kbID, release.NodeID); err != nil {
+	if allowed, err := u.canManageNodeInAdmin(ctx, kbID, release.NodeID); err != nil {
 		return nil, err
 	} else if !allowed {
-		return nil, fmt.Errorf("没有此文档的查阅权限")
+		return nil, fmt.Errorf("没有此文档的管理权限")
 	}
 	return u.nodeRepo.GetNodeReleaseDetail(ctx, kbID, releaseID)
 }
@@ -275,13 +278,16 @@ func (u *NodeUsecase) ValidateNodePerm(ctx context.Context, kbID, nodeId, userID
 		return &domain.ErrCodeNotFound
 	}
 	resolvedPermissions, err := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
-	if err == nil {
-		node.Permissions = resolvedPermissions
+	if err != nil {
+		return &domain.ErrCodeInternalError
 	}
+	node.Permissions = resolvedPermissions
 	if node.NavID != "" {
-		if nav, navErr := u.navRepo.GetById(ctx, node.NavID); navErr == nil {
-			node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
+		nav, navErr := u.navRepo.GetById(ctx, node.NavID)
+		if navErr != nil || nav.KbID != kbID {
+			return &domain.ErrCodeInternalError
 		}
+		node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
 	}
 	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
 	if err != nil {
@@ -298,13 +304,20 @@ func (u *NodeUsecase) GetNodeReleaseDetailByKBIDAndID(ctx context.Context, kbID,
 	if err != nil {
 		return nil, err
 	}
-	if resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions); resolveErr == nil {
-		node.Permissions = resolvedPermissions
+	resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
+	if resolveErr != nil {
+		return nil, resolveErr
 	}
+	node.Permissions = resolvedPermissions
 	if node.NavID != "" {
-		if nav, navErr := u.navRepo.GetById(ctx, node.NavID); navErr == nil {
-			node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
+		nav, navErr := u.navRepo.GetById(ctx, node.NavID)
+		if navErr != nil {
+			return nil, navErr
 		}
+		if nav.KbID != kbID {
+			return nil, fmt.Errorf("node navigation does not belong to current knowledge base")
+		}
+		node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
 	}
 
 	userMap, err := u.userRepo.GetUsersAccountMap(ctx)
@@ -455,9 +468,29 @@ func (u *NodeUsecase) GetRecommendNodeList(ctx context.Context, req *domain.GetR
 				}
 			}
 		}
-		return nodes, nil
+		return u.filterRecommendNodeAudience(ctx, req.KBID, nodes)
 	}
 	return nil, nil
+}
+
+func (u *NodeUsecase) filterRecommendNodeAudience(ctx context.Context, kbID string, nodes []*domain.RecommendNodeListResp) ([]*domain.RecommendNodeListResp, error) {
+	filtered := make([]*domain.RecommendNodeListResp, 0, len(nodes))
+	for _, node := range nodes {
+		allowed, err := u.canManageNodeInAdmin(ctx, kbID, node.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !allowed {
+			continue
+		}
+		node.Permissions.ManagementGrants = nil
+		node.RecommendNodes, err = u.filterRecommendNodeAudience(ctx, kbID, node.RecommendNodes)
+		if err != nil {
+			return nil, err
+		}
+		filtered = append(filtered, node)
+	}
+	return filtered, nil
 }
 
 func (u *NodeUsecase) BatchMoveNode(ctx context.Context, req *domain.BatchMoveReq) error {
@@ -494,18 +527,21 @@ func (u *NodeUsecase) convertMDToHTML(mdStr string) string {
 }
 
 func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId, userID string) ([]*shareV1.NodeListGroupNavResp, error) {
-
 	nodes, err := u.nodeRepo.GetNodeReleaseListByKBID(ctx, kbId)
 	if err != nil {
 		return nil, err
 	}
 
-	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
+	nodes, err = u.filterShareNodesWithNavigationPaths(ctx, kbId, userID, nodes)
 	if err != nil {
 		return nil, err
 	}
 
 	navs, err := u.navRepo.GetReleaseList(ctx, kbId)
+	if err != nil {
+		return nil, err
+	}
+	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -526,18 +562,6 @@ func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId, userID string)
 	}
 
 	for _, node := range nodes {
-		resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
-		if resolveErr == nil {
-			node.Permissions = resolvedPermissions
-		}
-		if node.NavId != "" {
-			if nav, navErr := u.navRepo.GetById(ctx, node.NavId); navErr == nil {
-				node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
-			}
-		}
-		if !u.enterprise.CanVisible(node.Permissions, shareAccess) {
-			continue
-		}
 		if idx, ok := navIndexMap[node.NavId]; ok {
 			result[idx].List = append(result[idx].List, *node)
 			result[idx].Count++
@@ -554,26 +578,9 @@ func (u *NodeUsecase) GetNodeReleaseListByParentID(ctx context.Context, kbID, pa
 		return nil, err
 	}
 
-	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
+	visibleNodes, err := u.filterShareNodesWithNavigationPaths(ctx, kbID, userID, allNodes)
 	if err != nil {
 		return nil, err
-	}
-
-	// 先过滤权限
-	visibleNodes := make([]*domain.ShareNodeListItemResp, 0)
-	for i, node := range allNodes {
-		resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
-		if resolveErr == nil {
-			node.Permissions = resolvedPermissions
-		}
-		if node.NavId != "" {
-			if nav, navErr := u.navRepo.GetById(ctx, node.NavId); navErr == nil {
-				node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
-			}
-		}
-		if u.enterprise.CanVisible(node.Permissions, shareAccess) {
-			visibleNodes = append(visibleNodes, allNodes[i])
-		}
 	}
 
 	// 构建父子关系映射
@@ -588,6 +595,116 @@ func (u *NodeUsecase) GetNodeReleaseListByParentID(ctx context.Context, kbID, pa
 	return result, nil
 }
 
+func (u *NodeUsecase) filterShareNodesWithNavigationPaths(ctx context.Context, kbID, userID string, nodes []*domain.ShareNodeListItemResp) ([]*domain.ShareNodeListItemResp, error) {
+	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	navs, err := u.navRepo.GetReleaseList(ctx, kbID)
+	if err != nil {
+		return nil, err
+	}
+	navPermissions := make(map[string]domain.NodePermissions, len(navs))
+	for _, nav := range navs {
+		navPermissions[nav.ID] = nav.Permissions
+	}
+
+	nodeByID := make(map[string]*domain.ShareNodeListItemResp, len(nodes))
+	readable := make(map[string]bool, len(nodes))
+	for _, node := range nodes {
+		nodeByID[node.ID] = node
+		if node.NavId != "" {
+			if _, ok := navPermissions[node.NavId]; !ok {
+				readable[node.ID] = false
+				continue
+			}
+		}
+		resolved, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if navPermissions[node.NavId].HasEnterpriseRule() {
+			resolved = u.enterprise.MergeNodeAndNavPermissions(resolved, navPermissions[node.NavId])
+		}
+		node.Permissions = resolved
+		readable[node.ID] = u.enterprise.CanVisible(resolved, shareAccess)
+	}
+
+	pathOnly := make(map[string]bool)
+	for _, node := range nodes {
+		if !readable[node.ID] {
+			continue
+		}
+		parentID := node.ParentID
+		visited := map[string]bool{node.ID: true}
+		for parentID != "" && !visited[parentID] {
+			visited[parentID] = true
+			parent, exists := nodeByID[parentID]
+			if !exists || parent.Type != domain.NodeTypeFolder || parent.NavId != node.NavId {
+				break
+			}
+			if !readable[parent.ID] {
+				pathOnly[parent.ID] = true
+			}
+			parentID = parent.ParentID
+		}
+	}
+
+	filtered := make([]*domain.ShareNodeListItemResp, 0, len(nodes))
+	for _, node := range nodes {
+		if readable[node.ID] {
+			copyNode := *node
+			copyNode.PathOnly = false
+			filtered = append(filtered, &copyNode)
+			continue
+		}
+		if !pathOnly[node.ID] {
+			continue
+		}
+		// Path nodes reveal only the folder name and structure needed to reach
+		// authorized descendants; metadata and ACL details are kept private.
+		copyNode := *node
+		copyNode.PathOnly = true
+		copyNode.Emoji = ""
+		copyNode.Meta = domain.NodeMeta{}
+		copyNode.UpdatedAt = time.Time{}
+		copyNode.Permissions = domain.NodePermissions{}
+		filtered = append(filtered, &copyNode)
+	}
+	return filtered, nil
+}
+
+func (u *NodeUsecase) GetSharePathOnlyNodeDetail(ctx context.Context, kbID, nodeID, userID string) (*shareV1.ShareNodeDetailResp, error) {
+	nodes, err := u.nodeRepo.GetNodeReleaseListByKBID(ctx, kbID)
+	if err != nil {
+		return nil, err
+	}
+	filtered, err := u.filterShareNodesWithNavigationPaths(ctx, kbID, userID, nodes)
+	if err != nil {
+		return nil, err
+	}
+	childrenMap := make(map[string][]*domain.ShareNodeListItemResp, len(filtered))
+	for _, item := range filtered {
+		childrenMap[item.ParentID] = append(childrenMap[item.ParentID], item)
+	}
+	for _, node := range filtered {
+		if node.ID != nodeID || !node.PathOnly {
+			continue
+		}
+		return &shareV1.ShareNodeDetailResp{
+			ID:       node.ID,
+			KbID:     kbID,
+			NavID:    node.NavId,
+			Type:     node.Type,
+			Name:     node.Name,
+			ParentID: node.ParentID,
+			PathOnly: true,
+			List:     u.buildNodeTree(node.ID, childrenMap),
+		}, nil
+	}
+	return nil, fmt.Errorf("node is not a navigation-only ancestor")
+}
+
 // buildNodeTree 递归构建节点树结构
 func (u *NodeUsecase) buildNodeTree(parentID string, childrenMap map[string][]*domain.ShareNodeListItemResp) []*domain.ShareNodeDetailItem {
 	children := childrenMap[parentID]
@@ -598,6 +715,7 @@ func (u *NodeUsecase) buildNodeTree(parentID string, childrenMap map[string][]*d
 			ID:        child.ID,
 			Name:      child.Name,
 			Type:      child.Type,
+			PathOnly:  child.PathOnly,
 			ParentID:  child.ParentID,
 			Position:  child.Position,
 			Meta:      child.Meta,
@@ -649,14 +767,39 @@ func (u *NodeUsecase) GetNodePermissionsByID(ctx context.Context, id, kbID strin
 	if err != nil {
 		return nil, err
 	}
-	effectivePermissions := node.Permissions
-	if resolvedPermissions, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions); resolveErr == nil {
-		effectivePermissions = resolvedPermissions
+	allowed, err := u.canInspectNodePermissionInAdmin(ctx, kbID, id)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, fmt.Errorf("没有此文档的管理权限")
+	}
+	effectivePermissions, err := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
+	if err != nil {
+		return nil, err
+	}
+	if node.NavId != "" {
+		nav, err := u.navRepo.GetById(ctx, node.NavId)
+		if err != nil {
+			return nil, err
+		}
+		if nav.KbID != kbID {
+			return nil, fmt.Errorf("栏目不属于当前知识库")
+		}
+		effectivePermissions = u.enterprise.MergeNodeAndNavPermissions(effectivePermissions, nav.Permissions)
+	}
+	management, err := u.managementAccess(ctx, kbID)
+	if err != nil {
+		return nil, err
 	}
 	resp := &v1.NodePermissionResp{
 		ID:                   node.ID,
 		Permissions:          node.Permissions,
 		EffectivePermissions: effectivePermissions,
+	}
+	if !management.CanManageNode(id) {
+		resp.Permissions.ManagementGrants = nil
+		resp.EffectivePermissions.ManagementGrants = nil
 	}
 	return resp, nil
 }
@@ -670,24 +813,37 @@ func (u *NodeUsecase) ValidateNodePermissionsEdit(req v1.NodePermissionEditReq, 
 
 func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermissionEditReq) error {
 	if req.Permissions != nil {
+		access, err := u.managementAccess(ctx, req.KbId)
+		if err != nil {
+			return err
+		}
+		prepared := make(map[string]domain.NodePermissions, len(req.IDs))
 		for _, id := range req.IDs {
 			node, err := u.nodeRepo.GetByID(ctx, id, req.KbId)
 			if err != nil {
 				return err
 			}
-			permissions := *req.Permissions
-			// Reading settings cannot accidentally remove or forge management grants.
-			permissions.ManagementGrants = node.Permissions.ManagementGrants
-			if config.PermissionLevelsDisabled() {
-				permissions.MinPermissionLevelID = node.Permissions.MinPermissionLevelID
-				permissions.MinPermissionLevelRank = node.Permissions.MinPermissionLevelRank
-				permissions.AllowedPermissionLevelIDs = node.Permissions.AllowedPermissionLevelIDs
-			} else {
-				permissions, err = u.enterprise.NormalizeNodePermissions(ctx, permissions)
+			if !access.CanManageNode(id) {
+				return fmt.Errorf("没有此文档或目录的管理权限")
+			}
+			permissions, err := u.enterprise.prepareReadingPermissions(ctx, node.Permissions, *req.Permissions, true)
+			if err != nil {
+				return err
+			}
+			if err := u.enterprise.ValidateNodePermissionAudience(ctx, req.KbId, permissions, node.Permissions, node.ParentID, node.NavId); err != nil {
+				return err
+			}
+			if permissions.Inherit != nil && *permissions.Inherit {
+				permissions.ParentPermissionSnapshot = nil
+			} else if (permissions.Inherit != nil && !*permissions.Inherit) || hasExplicitNodePermissionRule(permissions) {
+				permissions.ParentPermissionSnapshot, err = u.enterprise.ParentPermissionSnapshot(ctx, req.KbId, node.ParentID, node.NavId)
 				if err != nil {
 					return err
 				}
 			}
+			prepared[id] = permissions
+		}
+		for id, permissions := range prepared {
 			if err := u.nodeRepo.UpdateNodesByKbID(ctx, []string{id}, req.KbId, map[string]interface{}{"permissions": permissions}); err != nil {
 				return err
 			}
@@ -1301,7 +1457,7 @@ func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeList
 		navsReleasedMap[nr.ID] = &nr
 	}
 
-	nodes, err = u.filterReadableManagedNodes(ctx, req.KbId, nodes)
+	nodes, err = u.filterManagedNodes(ctx, req.KbId, nodes)
 	if err != nil {
 		return nil, err
 	}
@@ -1335,7 +1491,8 @@ func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeList
 			CanManage:         management.Global || management.CanManageNav(nav.ID),
 			CanCreateDocument: management.Global || management.CanCreateInNav("", nav.ID, domain.NodeTypeDocument),
 			CanCreateFolder:   management.Global || management.CanCreateInNav("", nav.ID, domain.NodeTypeFolder),
-			CanConfigure:      management.Global,
+			CanConfigure:      management.Global || management.CanManageNav(nav.ID),
+			Permissions:       nav.Permissions,
 			NavName:           nav.Name,
 			Position:          nav.Position,
 			IsReleased:        found && release.Position == nav.Position && release.Name == nav.Name,

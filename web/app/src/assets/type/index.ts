@@ -169,6 +169,7 @@ export interface NodeListItem {
   created_at: string;
   updated_at: string;
   status: 1 | 2; // 1 草稿 2 发布
+  path_only?: boolean;
 }
 
 export interface ChunkResultItem {
@@ -193,6 +194,7 @@ export interface ITreeItem {
   canHaveChildren?: boolean;
   updated_at?: string;
   status?: 1 | 2;
+  pathOnly?: boolean;
 }
 
 export interface ConversationItem {

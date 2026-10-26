@@ -63,6 +63,7 @@ func NewNodeHandler(
 	writeGroup.POST("/restudy", h.NodeRestudy)
 	writeGroup.POST("/learning/cancel", h.NodeLearningCancel)
 	writeGroup.PATCH("/permission/edit", h.NodePermissionEdit)
+	writeGroup.POST("/permission/audience", h.ReadingAudience)
 	writeGroup.PATCH("/management", h.EditNodeManagement)
 	writeGroup.POST("/release/restore", h.RestoreNodeRelease)
 

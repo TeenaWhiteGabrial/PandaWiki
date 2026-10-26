@@ -1,0 +1,46 @@
+=== RUN   TestAdministratorAccessPostgres
+=== RUN   TestAdministratorAccessPostgres/admin
+=== RUN   TestAdministratorAccessPostgres/manager
+=== RUN   TestAdministratorAccessPostgres/user
+=== RUN   TestAdministratorAccessPostgres/unknown
+--- PASS: TestAdministratorAccessPostgres (0.16s)
+    --- PASS: TestAdministratorAccessPostgres/admin (0.07s)
+    --- PASS: TestAdministratorAccessPostgres/manager (0.01s)
+    --- PASS: TestAdministratorAccessPostgres/user (0.00s)
+    --- PASS: TestAdministratorAccessPostgres/unknown (0.00s)
+PASS
+ok  	github.com/chaitin/panda-wiki/middleware	2.342s
+=== RUN   TestAccountSessionAndPasswordRevocation
+--- PASS: TestAccountSessionAndPasswordRevocation (0.39s)
+=== RUN   TestAPITokenDatabaseHashMigrationAndDeletion
+--- PASS: TestAPITokenDatabaseHashMigrationAndDeletion (0.10s)
+PASS
+ok  	github.com/chaitin/panda-wiki/repo/pg	1.919s
+=== RUN   TestAdministratorLoginPostgres
+=== RUN   TestAdministratorLoginPostgres/admin
+=== RUN   TestAdministratorLoginPostgres/manager
+=== RUN   TestAdministratorLoginPostgres/user
+=== RUN   TestAdministratorLoginPostgres/unknown
+--- PASS: TestAdministratorLoginPostgres (0.26s)
+    --- PASS: TestAdministratorLoginPostgres/admin (0.15s)
+    --- PASS: TestAdministratorLoginPostgres/manager (0.02s)
+    --- PASS: TestAdministratorLoginPostgres/user (0.01s)
+    --- PASS: TestAdministratorLoginPostgres/unknown (0.02s)
+=== RUN   TestCommentIdentityAndKnowledgeBaseGuard
+--- PASS: TestCommentIdentityAndKnowledgeBaseGuard (0.12s)
+=== RUN   TestUploadValidationLocalPDFSamples
+=== RUN   TestUploadValidationLocalPDFSamples/202610-知识库管理系统管理端安全测试报告-第一轮.pdf
+=== RUN   TestUploadValidationLocalPDFSamples/202610-知识库管理系统用户端安全测试报告-第一轮(1).pdf
+--- PASS: TestUploadValidationLocalPDFSamples (0.05s)
+    --- PASS: TestUploadValidationLocalPDFSamples/202610-知识库管理系统管理端安全测试报告-第一轮.pdf (0.03s)
+    --- PASS: TestUploadValidationLocalPDFSamples/202610-知识库管理系统用户端安全测试报告-第一轮(1).pdf (0.02s)
+PASS
+ok  	github.com/chaitin/panda-wiki/usecase	1.860s
+=== RUN   TestArchiveUploadSignatureBindsContentType
+--- PASS: TestArchiveUploadSignatureBindsContentType (0.00s)
+PASS
+ok  	github.com/chaitin/panda-wiki/store/s3	1.575s
+=== RUN   TestBootstrapPasswordDoesNotOverwriteChangedPassword
+--- PASS: TestBootstrapPasswordDoesNotOverwriteChangedPassword (2.03s)
+PASS
+ok  	github.com/chaitin/panda-wiki/repo/pg	7.126s

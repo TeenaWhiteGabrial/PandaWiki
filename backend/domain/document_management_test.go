@@ -29,6 +29,30 @@ func TestDocumentManagementCurrentDirectory(t *testing.T) {
 		t.Fatal("must not delete or move an unmanaged subdirectory")
 	}
 }
+
+func TestManagementGrantsForNodeIncludeApplicableAncestors(t *testing.T) {
+	access := managementFixture(ManagementScopeTree)
+	access.Nodes["root"].Permissions.ManagementGrants = []DocumentManagementGrant{{
+		SubjectType:    ManagementSubjectDepartment,
+		SubjectIDs:     []string{"industrial-security"},
+		DirectoryScope: ManagementScopeTree,
+	}}
+	grants := access.ManagementGrantsForNode("subdoc")
+	if len(grants) != 1 || grants[0].SubjectType != ManagementSubjectDepartment || grants[0].SubjectIDs[0] != "industrial-security" {
+		t.Fatalf("expected applicable ancestor grant, got %#v", grants)
+	}
+
+	access.Nodes["root"].Permissions.ManagementGrants[0].DirectoryScope = ManagementScopeCurrent
+	grants = access.ManagementGrantsForNode("doc")
+	if len(grants) != 1 {
+		t.Fatalf("current-directory grant should apply to direct documents, got %#v", grants)
+	}
+	grants = access.ManagementGrantsForNode("subdoc")
+	if len(grants) != 0 {
+		t.Fatalf("current-directory grant must not apply to nested documents, got %#v", grants)
+	}
+}
+
 func TestDocumentManagementDescendantsAndMultipleUsers(t *testing.T) {
 	for _, id := range []string{"alice", "bob"} {
 		access := managementFixture(ManagementScopeTree)
@@ -64,6 +88,68 @@ func TestDocumentManagementAudienceUnionAndExactLevel(t *testing.T) {
 		t.Fatal("anonymous management must fail")
 	}
 }
+
+func TestDocumentManagementHierarchyOnlyNarrowsParentAudience(t *testing.T) {
+	access := managementFixture(ManagementScopeTree)
+	access.Nodes["root"].Permissions.ManagementGrants = []DocumentManagementGrant{{
+		SubjectType: ManagementSubjectDepartment, SubjectIDs: []string{"engineering"}, DirectoryScope: ManagementScopeTree,
+	}}
+	access.Nodes["sub"].Permissions.ManagementGrants = []DocumentManagementGrant{{
+		SubjectType: ManagementSubjectUser, SubjectIDs: []string{"alice"}, DirectoryScope: ManagementScopeTree,
+	}}
+	parentConstraints := access.ManagementGrantConstraintsForParentNode("sub")
+	if len(parentConstraints) != 1 || parentConstraints[0][0].SubjectIDs[0] != "engineering" {
+		t.Fatalf("nested folder delegation should use the parent folder's manager audience, got %#v", parentConstraints)
+	}
+	access.Principal = &EnterpriseAccessContext{PrincipalID: "alice", DepartmentIDs: []string{"engineering"}}
+	if !access.CanManageNode("subdoc") {
+		t.Fatal("a manager matching both parent and child rules should manage the descendant")
+	}
+	access.Principal = &EnterpriseAccessContext{PrincipalID: "bob", DepartmentIDs: []string{"engineering"}}
+	if access.CanManageNode("subdoc") {
+		t.Fatal("matching only the parent rule must not bypass the child restriction")
+	}
+	access.Principal = &EnterpriseAccessContext{PrincipalID: "alice", DepartmentIDs: []string{"sales"}}
+	if access.CanManageNode("subdoc") {
+		t.Fatal("a child grant must not add a manager outside the parent audience")
+	}
+	constraints := access.ManagementGrantConstraintsForNode("subdoc")
+	if len(constraints) != 2 || len(constraints[0]) != 1 || len(constraints[1]) != 1 {
+		t.Fatalf("expected separate parent and child management constraints, got %#v", constraints)
+	}
+}
+
+func TestChildFolderManagementRequiresManagingEveryParentFolder(t *testing.T) {
+	access := managementFixture(ManagementScopeTree)
+	access.Nodes["root"].Permissions.ManagementGrants = nil
+	access.Nodes["sub"].Permissions.ManagementGrants = []DocumentManagementGrant{{
+		SubjectType: ManagementSubjectUser, SubjectIDs: []string{"alice"}, DirectoryScope: ManagementScopeTree,
+	}}
+	if access.CanManageNode("sub") {
+		t.Fatal("a child folder grant must not bypass an unmanaged parent folder")
+	}
+	if access.CanCreate("root", NodeTypeFolder) {
+		t.Fatal("a manager who cannot manage the parent folder must not create a child folder")
+	}
+
+	access.Nodes["root"].Permissions.ManagementGrants = []DocumentManagementGrant{{
+		SubjectType: ManagementSubjectUser, SubjectIDs: []string{"bob"}, DirectoryScope: ManagementScopeTree,
+	}}
+	if constraints := access.ManagementGrantConstraintsForNode("sub"); len(constraints) != 2 {
+		t.Fatalf("expected parent and child grant constraints without duplicates, got %#v", constraints)
+	}
+	if access.CanManageNode("sub") {
+		t.Fatal("a child folder grant must not bypass a parent grant that excludes the principal")
+	}
+
+	access.Nodes["root"].Permissions.ManagementGrants = []DocumentManagementGrant{{
+		SubjectType: ManagementSubjectUser, SubjectIDs: []string{"alice"}, DirectoryScope: ManagementScopeCurrent,
+	}}
+	if !access.CanManageNode("sub") {
+		t.Fatal("a principal who can manage the parent and is explicitly granted the child must manage it")
+	}
+}
+
 func TestDocumentManagementCyclesAndContextIsolation(t *testing.T) {
 	access := managementFixture(ManagementScopeCurrent)
 	access.Nodes["other"].ParentID = "other"
@@ -97,6 +183,9 @@ func TestNavigationManagementScopeAndRootParentForms(t *testing.T) {
 			if !access.CanManageNav("nav") || !access.HasAnyGrant() || access.CanManageNav("other") {
 				t.Fatal("navigation grant boundary broken")
 			}
+			if got := access.ManagementGrantConstraintsForParentNode("folder"); len(got) != 0 {
+				t.Fatalf("top-level folder delegation should not be restricted by the navigation audience: %#v", got)
+			}
 			for _, id := range []string{"direct", "alias"} {
 				if !access.CanManageNode(id) {
 					t.Fatalf("root parent convention rejected: %s", id)
@@ -123,5 +212,31 @@ func TestNavigationManagementScopeAndRootParentForms(t *testing.T) {
 				t.Fatal("an empty authorized navigation must grant access")
 			}
 		})
+	}
+}
+
+func TestTopLevelFolderGrantDefinesItsManagementAudience(t *testing.T) {
+	access := &DocumentManagementAccess{
+		Principal: &EnterpriseAccessContext{PrincipalID: "bob"},
+		Navs: map[string]*Nav{
+			"nav": {ID: "nav", Permissions: NodePermissions{ManagementGrants: []DocumentManagementGrant{{
+				SubjectType: ManagementSubjectUser, SubjectIDs: []string{"alice"}, DirectoryScope: ManagementScopeTree,
+			}}}},
+		},
+		Nodes: map[string]*Node{
+			"root": {ID: "root", NavId: "nav", Type: NodeTypeFolder, Permissions: NodePermissions{ManagementGrants: []DocumentManagementGrant{{
+				SubjectType: ManagementSubjectUser, SubjectIDs: []string{"bob"}, DirectoryScope: ManagementScopeTree,
+			}}}},
+			"child": {ID: "child", NavId: "nav", ParentID: "root", Type: NodeTypeFolder},
+		},
+	}
+	if !access.CanManageNode("root") || !access.CanManageNode("child") {
+		t.Fatal("the top-level folder grant should define its manager audience and inherit to children")
+	}
+	if access.CanManageNav("nav") {
+		t.Fatal("a folder grant must not grant management of the navigation itself")
+	}
+	if constraints := access.ManagementGrantConstraintsForParentNode("child"); len(constraints) != 1 || constraints[0][0].SubjectIDs[0] != "bob" {
+		t.Fatalf("nested delegation should inherit the top-level folder audience, got %#v", constraints)
 	}
 }

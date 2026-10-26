@@ -299,7 +299,9 @@ func (u *MCPUsecase) ListResources(ctx context.Context, kbID string) (*mcpV1.Res
 	}
 
 	resources := make([]mcpV1.Resource, 0, len(navs)+len(nodes))
+	navPermissions := make(map[string]domain.NodePermissions, len(navs))
 	for _, nav := range navs {
+		navPermissions[nav.ID] = nav.Permissions
 		if !u.enterprise.CanVisible(nav.Permissions, access) {
 			continue
 		}
@@ -322,9 +324,15 @@ func (u *MCPUsecase) ListResources(ctx context.Context, kbID string) (*mcpV1.Res
 			Permissions: node.Permissions,
 		}
 		resolvedPerm, resolveErr := u.enterprise.ResolveNodePermissions(ctx, nodeForResolve)
-		if resolveErr == nil {
-			node.Permissions = resolvedPerm
+		if resolveErr != nil {
+			continue
 		}
+		node.Permissions = resolvedPerm
+		navPermissionsForNode, exists := navPermissions[node.NavId]
+		if !exists {
+			continue
+		}
+		node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, navPermissionsForNode)
 		if !u.enterprise.CanVisible(node.Permissions, access) {
 			continue
 		}
@@ -543,8 +551,10 @@ func (u *MCPUsecase) callSearchDocs(ctx context.Context, kbID string, req *mcpV1
 		return nil, err
 	}
 	navNameMap := make(map[string]string, len(navs))
+	navPermissions := make(map[string]domain.NodePermissions, len(navs))
 	for _, nav := range navs {
 		navNameMap[nav.ID] = nav.Name
+		navPermissions[nav.ID] = nav.Permissions
 	}
 
 	nodes, err := u.nodeRepo.GetNodeListByStatus(ctx, kbID, "", strings.TrimSpace(args.Query))
@@ -566,9 +576,16 @@ func (u *MCPUsecase) callSearchDocs(ctx context.Context, kbID string, req *mcpV1
 			Type:        node.Type,
 			Permissions: node.Permissions,
 		}
-		if resolvedPermissions, resolveErr := u.enterprise.ResolveNodePermissions(ctx, nodeForResolve); resolveErr == nil {
-			node.Permissions = resolvedPermissions
+		resolvedPermissions, resolveErr := u.enterprise.ResolveNodePermissions(ctx, nodeForResolve)
+		if resolveErr != nil {
+			continue
 		}
+		node.Permissions = resolvedPermissions
+		navPermission, exists := navPermissions[node.NavId]
+		if !exists {
+			continue
+		}
+		node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, navPermission)
 		if !u.enterprise.CanVisible(node.Permissions, access) {
 			continue
 		}
@@ -617,8 +634,10 @@ func (u *MCPUsecase) listWritableDirectories(ctx context.Context, kbID, navID st
 		return nil, nil, err
 	}
 	navMap := make(map[string]string, len(navs))
+	navPermissions := make(map[string]domain.NodePermissions, len(navs))
 	for _, nav := range navs {
 		navMap[nav.ID] = nav.Name
+		navPermissions[nav.ID] = nav.Permissions
 	}
 
 	dirCandidates := make([]mcpV1.DirectoryCandidate, 0)
@@ -637,9 +656,15 @@ func (u *MCPUsecase) listWritableDirectories(ctx context.Context, kbID, navID st
 			Permissions: node.Permissions,
 		}
 		resolvedPerm, resolveErr := u.enterprise.ResolveNodePermissions(ctx, nodeForResolve)
-		if resolveErr == nil {
-			node.Permissions = resolvedPerm
+		if resolveErr != nil {
+			continue
 		}
+		node.Permissions = resolvedPerm
+		navPermission, exists := navPermissions[node.NavId]
+		if !exists {
+			continue
+		}
+		node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, navPermission)
 		if !u.enterprise.CanVisible(node.Permissions, access) {
 			continue
 		}
@@ -685,9 +710,15 @@ func (u *MCPUsecase) ensureWritableDirectory(ctx context.Context, directoryNode 
 		return err
 	}
 	resolvedPerm, resolveErr := u.enterprise.ResolveNodePermissions(ctx, directoryNode)
-	if resolveErr == nil {
-		directoryNode.Permissions = resolvedPerm
+	if resolveErr != nil {
+		return resolveErr
 	}
+	directoryNode.Permissions = resolvedPerm
+	nav, navErr := u.navRepo.GetById(ctx, directoryNode.NavId)
+	if navErr != nil || nav.KbID != directoryNode.KBID {
+		return fmt.Errorf("directory navigation is unavailable")
+	}
+	directoryNode.Permissions = u.enterprise.MergeNodeAndNavPermissions(directoryNode.Permissions, nav.Permissions)
 	if !u.enterprise.CanVisible(directoryNode.Permissions, access) {
 		return fmt.Errorf("directory is not writable for current user")
 	}
@@ -855,9 +886,15 @@ func (u *MCPUsecase) loadReadableNodeResource(ctx context.Context, kbID, nodeID 
 	}
 
 	resolvedPerm, resolveErr := u.enterprise.ResolveNodePermissions(ctx, node)
-	if resolveErr == nil {
-		node.Permissions = resolvedPerm
+	if resolveErr != nil {
+		return nil, resolveErr
 	}
+	node.Permissions = resolvedPerm
+	nav, navErr := u.navRepo.GetById(ctx, node.NavId)
+	if navErr != nil || nav.KbID != kbID {
+		return nil, fmt.Errorf("resource navigation is unavailable")
+	}
+	node.Permissions = u.enterprise.MergeNodeAndNavPermissions(node.Permissions, nav.Permissions)
 	if !u.enterprise.CanVisible(node.Permissions, access) {
 		return nil, fmt.Errorf("resource is not visible for current user")
 	}

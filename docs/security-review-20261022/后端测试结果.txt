@@ -1,0 +1,67 @@
+?   	github.com/chaitin/panda-wiki	[no test files]
+?   	github.com/chaitin/panda-wiki/api/auth/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/conversation/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/crawler/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/enterprise/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/kb/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/mcp/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/nav/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/node/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/openapi/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/share/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/stat/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/token/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/api/user/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/apm	[no test files]
+?   	github.com/chaitin/panda-wiki/cmd/api	[no test files]
+?   	github.com/chaitin/panda-wiki/cmd/consumer	[no test files]
+?   	github.com/chaitin/panda-wiki/cmd/migrate	[no test files]
+ok  	github.com/chaitin/panda-wiki/config	0.788s
+?   	github.com/chaitin/panda-wiki/consts	[no test files]
+?   	github.com/chaitin/panda-wiki/docs	[no test files]
+ok  	github.com/chaitin/panda-wiki/domain	1.317s
+?   	github.com/chaitin/panda-wiki/handler	[no test files]
+ok  	github.com/chaitin/panda-wiki/handler/mq	2.303s
+ok  	github.com/chaitin/panda-wiki/handler/share	0.988s
+?   	github.com/chaitin/panda-wiki/handler/v1	[no test files]
+?   	github.com/chaitin/panda-wiki/log	[no test files]
+ok  	github.com/chaitin/panda-wiki/middleware	1.620s
+?   	github.com/chaitin/panda-wiki/migration	[no test files]
+?   	github.com/chaitin/panda-wiki/migration/fns	[no test files]
+?   	github.com/chaitin/panda-wiki/mq	[no test files]
+ok  	github.com/chaitin/panda-wiki/mq/nats	2.846s
+?   	github.com/chaitin/panda-wiki/mq/types	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/anydoc	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/bot	[no test files]
+ok  	github.com/chaitin/panda-wiki/pkg/bot/dingtalk	3.511s
+ok  	github.com/chaitin/panda-wiki/pkg/bot/discord	3.378s [no tests to run]
+?   	github.com/chaitin/panda-wiki/pkg/bot/feishu	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/bot/lark	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/bot/utils	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/bot/wechat	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/bot/wechat_official_account	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/bot/wechat_service	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/bot/wecom	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/captcha	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/cas	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/dingtalk	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/feishu	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/ldap	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/oauth	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/ratelimit	[no test files]
+?   	github.com/chaitin/panda-wiki/pkg/wecom	[no test files]
+?   	github.com/chaitin/panda-wiki/repo/cache	[no test files]
+?   	github.com/chaitin/panda-wiki/repo/ipdb	[no test files]
+?   	github.com/chaitin/panda-wiki/repo/mq	[no test files]
+ok  	github.com/chaitin/panda-wiki/repo/pg	3.380s
+?   	github.com/chaitin/panda-wiki/server/http	[no test files]
+?   	github.com/chaitin/panda-wiki/setup	[no test files]
+?   	github.com/chaitin/panda-wiki/store/cache	[no test files]
+?   	github.com/chaitin/panda-wiki/store/ipdb	[no test files]
+ok  	github.com/chaitin/panda-wiki/store/logstore	3.885s
+?   	github.com/chaitin/panda-wiki/store/pg	[no test files]
+ok  	github.com/chaitin/panda-wiki/store/rag	4.505s
+ok  	github.com/chaitin/panda-wiki/store/s3	5.069s
+?   	github.com/chaitin/panda-wiki/telemetry	[no test files]
+ok  	github.com/chaitin/panda-wiki/usecase	2.976s
+?   	github.com/chaitin/panda-wiki/utils	[no test files]

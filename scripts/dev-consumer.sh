@@ -6,6 +6,7 @@ source "${ROOT_DIR}/scripts/dev-env.sh"
 
 ensure_dev_dirs
 load_external_oss_env
+load_local_security_env
 resolve_go_bin
 
 cd "${PANDA_WIKI_ROOT_DIR}/backend/store/pg"
@@ -23,7 +24,7 @@ env \
   LOG_STORE_URL="http://127.0.0.1:13100" \
   PG_DSN="host=127.0.0.1 user=panda-wiki password=panda-wiki-secret dbname=panda-wiki port=15432 sslmode=disable TimeZone=Asia/Shanghai" \
   PANDA_WIKI_CONFIG_FILE="${PANDA_WIKI_CONFIG_FILE:-${PANDA_WIKI_ROOT_DIR}/backend/config.yml}" \
-  MQ_NATS_SERVER="nats://127.0.0.1:4222" \
+  MQ_NATS_SERVER="nats://panda-wiki:${NATS_PASSWORD}@127.0.0.1:4222" \
   REDIS_ADDR="127.0.0.1:16379" \
   OSS_ENDPOINT="${OSS_ENDPOINT}" \
   OSS_ACCESS_KEY="${OSS_ACCESS_KEY}" \

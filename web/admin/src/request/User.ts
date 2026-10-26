@@ -10,7 +10,7 @@
  * ---------------------------------------------------------------
  */
 
-import httpRequest, { ContentType, RequestParams } from "./httpClient";
+import httpRequest, { ContentType, RequestParams } from './httpClient';
 import {
   DeleteApiV1UserDeleteParams,
   DomainPWResponse,
@@ -22,7 +22,7 @@ import {
   V1ResetPasswordReq,
   V1UserInfoResp,
   V1UserListResp,
-} from "./types";
+} from './types';
 
 /**
  * @description GetUser
@@ -37,7 +37,7 @@ import {
 export const getApiV1User = (params: RequestParams = {}) =>
   httpRequest<V1UserInfoResp>({
     path: `/api/v1/user`,
-    method: "GET",
+    method: 'GET',
     type: ContentType.Json,
     ...params,
   });
@@ -65,10 +65,10 @@ export const postApiV1UserCreate = (
     }
   >({
     path: `/api/v1/user/create`,
-    method: "POST",
+    method: 'POST',
     body: body,
     type: ContentType.Json,
-    format: "json",
+    format: 'json',
     ...params,
   });
 
@@ -88,10 +88,10 @@ export const deleteApiV1UserDelete = (
 ) =>
   httpRequest<DomainResponse>({
     path: `/api/v1/user/delete`,
-    method: "DELETE",
+    method: 'DELETE',
     query: query,
     type: ContentType.Json,
-    format: "json",
+    format: 'json',
     ...params,
   });
 
@@ -108,16 +108,28 @@ export const deleteApiV1UserDelete = (
 })` OK
  */
 
-export const getApiV1UserList = (params: RequestParams = {}) =>
+export type UserListQuery = {
+  keyword?: string;
+  role?: string;
+  department_id?: string;
+  page?: number;
+  page_size?: number;
+};
+
+export const getApiV1UserList = (
+  query: UserListQuery = {},
+  params: RequestParams = {},
+) =>
   httpRequest<
     DomainPWResponse & {
       data?: V1UserListResp;
     }
   >({
     path: `/api/v1/user/list`,
-    method: "GET",
+    method: 'GET',
+    query,
     type: ContentType.Json,
-    format: "json",
+    format: 'json',
     ...params,
   });
 
@@ -137,10 +149,10 @@ export const postApiV1UserLogin = (
 ) =>
   httpRequest<V1LoginResp>({
     path: `/api/v1/user/login`,
-    method: "POST",
+    method: 'POST',
     body: body,
     type: ContentType.Json,
-    format: "json",
+    format: 'json',
     ...params,
   });
 
@@ -160,9 +172,27 @@ export const putApiV1UserResetPassword = (
 ) =>
   httpRequest<DomainResponse>({
     path: `/api/v1/user/reset_password`,
-    method: "PUT",
+    method: 'PUT',
     body: body,
     type: ContentType.Json,
-    format: "json",
+    format: 'json',
     ...params,
+  });
+
+export const logoutAccount = () =>
+  httpRequest({
+    path: '/api/v1/user/logout',
+    method: 'POST',
+    format: 'json',
+  });
+export const changeOwnPassword = (
+  currentPassword: string,
+  newPassword: string,
+) =>
+  httpRequest({
+    path: '/api/v1/user/change_password',
+    method: 'POST',
+    body: { current_password: currentPassword, new_password: newPassword },
+    type: ContentType.Json,
+    format: 'json',
   });

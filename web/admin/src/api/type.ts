@@ -1,6 +1,7 @@
 import { AppType, IconMap, ModelProvider } from '@/constant/enums';
 import {
   ConstsNodeRagInfoStatus,
+  DomainDocumentManagementGrant,
   DomainNodePermissions,
 } from '@/request/types';
 
@@ -198,6 +199,9 @@ export interface ITreeItem {
   emoji?: string;
   parentId?: string;
   content_type?: string;
+  file_key?: string;
+  file_name?: string;
+  file_readonly?: boolean;
   summary?: string;
   rag_status?: ConstsNodeRagInfoStatus;
   rag_message?: string;
@@ -208,6 +212,14 @@ export interface ITreeItem {
   updated_at?: string;
   status?: 0 | 1 | 2;
   permissions?: DomainNodePermissions;
+  effective_permissions?: DomainNodePermissions;
+  effective_management_grants?: DomainDocumentManagementGrant[];
+  effective_management_constraints?: DomainDocumentManagementGrant[][];
+  permission_tags?: Array<{
+    label: string;
+    color: 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
+    title?: string;
+  }>;
   collapsed?: boolean;
   /** 文档管理统一树中的目录根节点标识 */
   kind?: 'nav';

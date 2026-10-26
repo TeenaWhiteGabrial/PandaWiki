@@ -39,8 +39,10 @@ export function PermissionTarget({
 
 export function ReadingPermissionSection({
   children,
+  action,
 }: {
   children: ReactNode;
+  action?: ReactNode;
 }) {
   return (
     <Stack
@@ -57,7 +59,11 @@ export function ReadingPermissionSection({
           sx={{ fontSize: 20, color: 'text.secondary' }}
         />
         <Typography fontWeight={600}>谁可以查阅</Typography>
+        <Box sx={{ ml: 'auto' }}>{action}</Box>
       </Stack>
+      <Typography fontSize={12} color='text.secondary'>
+        文档查阅和智能问答均需先登录；全员指所有已登录用户，不包括游客。
+      </Typography>
       {children}
     </Stack>
   );

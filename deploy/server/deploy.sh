@@ -19,6 +19,8 @@ SERVICES_BASE=(
   postgres
   redis
   nats
+  nats-monitor
+  preview
   qdrant
   loki
   alloy
@@ -47,6 +49,10 @@ SERVICES_RUNTIME=(
 required_env_keys=(
   SERVER_IP
   POSTGRES_PASSWORD
+  REDIS_PASSWORD
+  NATS_PASSWORD
+  NATS_MONITOR_PASSWORD
+  PREVIEW_PASSWORD
   RAGLITE_POSTGRES_DB
   JWT_SECRET
   ADMIN_PASSWORD
@@ -159,7 +165,27 @@ check_docker() {
   docker info >/dev/null
 }
 
+# Generate separate internal-service secrets once, preserving existing values.
+ensure_internal_credentials() {
+  local internal_key internal_value
+  for internal_key in NATS_MONITOR_PASSWORD PREVIEW_PASSWORD; do
+    internal_value="$(grep -E "^${internal_key}=" "${ENV_FILE}" | tail -n 1 | cut -d= -f2- || true)"
+    if [[ -z "${internal_value}" || "${internal_value}" == CHANGE_ME_* ]]; then
+      # Remove a blank/example entry before appending the generated value.
+      local internal_tmp
+      internal_tmp="$(mktemp "${ENV_FILE}.XXXXXX")"
+      chmod 600 "${internal_tmp}"
+      awk -F= -v key="${internal_key}" '$1 != key' "${ENV_FILE}" > "${internal_tmp}"
+      printf '\n%s=%s\n' "${internal_key}" "$(openssl rand -hex 24)" >> "${internal_tmp}"
+      mv "${internal_tmp}" "${ENV_FILE}"
+      echo "==> 已生成并保存内部服务凭据：${internal_key}"
+    fi
+  done
+  chmod 600 "${ENV_FILE}"
+}
+
 check_required_envs() {
+  ensure_internal_credentials
   echo "==> 检查关键环境变量"
 
   local missing=0
@@ -272,6 +298,23 @@ project_name() {
   grep '^PROJECT_NAME=' "${ENV_FILE}" | cut -d= -f2-
 }
 
+SCHEMA_VERSION_BEFORE=""
+
+current_schema_version() {
+  local pg_user pg_database
+  pg_user="$(grep '^POSTGRES_USER=' "${ENV_FILE}" | tail -n 1 | cut -d= -f2-)"
+  pg_database="$(grep '^POSTGRES_DB=' "${ENV_FILE}" | tail -n 1 | cut -d= -f2-)"
+  docker exec "$(project_name)-postgres" psql -U "${pg_user}" -d "${pg_database}" -Atqc 'SELECT version FROM schema_migrations WHERE NOT dirty LIMIT 1' 2>/dev/null || true
+}
+
+# Security migration 56 hashes reusable keys. A binary rollback alone would
+# silently break MCP authentication; restore the operator's backup explicitly.
+security_schema_rollback_allowed() {
+  local after="$1" before="$2"
+  [[ "${before}" =~ ^[0-9]+$ && "${after}" =~ ^[0-9]+$ ]] || return 1
+  ! (( before < 56 && after >= 56 ))
+}
+
 declare -a ROLLBACK_SERVICES=()
 declare -a ROLLBACK_BACKUPS=()
 declare -a ROLLBACK_IMAGE_REFS=()
@@ -279,6 +322,7 @@ declare -a ROLLBACK_IMAGE_REFS=()
 snapshot_for_rollback() {
   local service container image_id image_ref backup_ref stamp
   stamp="$(date +%Y%m%d%H%M%S)"
+  SCHEMA_VERSION_BEFORE="$(current_schema_version)"
   ROLLBACK_SERVICES=("$@")
   ROLLBACK_BACKUPS=()
   ROLLBACK_IMAGE_REFS=()
@@ -372,6 +416,14 @@ rollback_upgrade() {
   local index service
   local -a existing_services=()
 
+  local schema_after="$(current_schema_version)"
+  for service in "${ROLLBACK_SERVICES[@]}"; do
+    if [[ "${service}" == "api" ]] && ! security_schema_rollback_allowed "${schema_after}" "${SCHEMA_VERSION_BEFORE}"; then
+      echo "数据库已跨越安全迁移 56，或迁移版本无法确认，已停止自动镜像回滚。"
+      echo "请保留当前数据库与回滚镜像；回退旧版前须人工恢复升级前的数据库备份。"
+      return 1
+    fi
+  done
   echo
   echo "==> 升级失败，开始回滚本次涉及的服务"
   # 首次新增的服务没有旧镜像，不能在回滚时触发其构建。
@@ -439,12 +491,13 @@ upgrade_services() {
       ;;
     base)
       services=("${SERVICES_BASE[@]}")
+      build_services=(nats-monitor)
       echo "==> 仅重建基础服务容器（不删除数据卷）"
       ;;
     all)
       services=("${SERVICES_BASE[@]}" pdf-parser api consumer admin app)
       echo "==> 完整无损升级"
-      build_services=(pdf-parser api consumer admin app)
+      build_services=(nats-monitor pdf-parser api consumer admin app)
       ;;
     *)
       echo "不支持的升级目标：${target}"
@@ -512,6 +565,14 @@ run_frontend_build() {
 }
 
 run_upgrade() {
+  if [[ "${UPGRADE_TARGET}" != "all" ]] && docker inspect "$(project_name)-redis" >/dev/null 2>&1; then
+    local anonymous_ping
+    anonymous_ping="$(docker exec "$(project_name)-redis" env -u REDISCLI_AUTH redis-cli ping 2>/dev/null || true)"
+    if [[ "${anonymous_ping}" == "PONG" ]]; then
+      echo "检测到旧版无认证 Redis。首次安全升级必须使用 upgrade all，同步更新 Redis、NATS 和全部客户端。"
+      return 1
+    fi
+  fi
   echo "==> 无损升级：${UPGRADE_TARGET}（失败自动回滚，不删除数据卷）"
   upgrade_services "${UPGRADE_TARGET}"
 }

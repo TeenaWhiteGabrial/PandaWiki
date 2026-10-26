@@ -47,44 +47,91 @@ func NewUserUsecase(repo *pg.UserRepository, enterpriseRepo *pg.EnterpriseReposi
 }
 
 func (u *UserUsecase) CreateUser(ctx context.Context, user *domain.User, departmentIDs []string, edition consts.LicenseEdition) error {
+	if err := domain.ValidatePassword(user.Password, user.Account); err != nil {
+		return err
+	}
+	user.PasswordChangeRequired = true
+	if !domain.ValidUserAccount(user.Account) {
+		return errors.New("账号仅支持英文字母（大小写）、数字和下划线")
+	}
 	if user.Role == consts.UserRoleAdmin {
 		return errors.New("admin user cannot be created from ui")
 	}
 	if len(departmentIDs) == 0 {
 		return errors.New("department is required")
 	}
+	if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {
+		level, err := u.enterpriseRepo.GetPermissionLevelByID(ctx, *user.PermissionLevelID)
+		if err != nil {
+			return fmt.Errorf("权限等级不存在：%w", err)
+		}
+		if level.Status != domain.PermissionLevelStatusActive {
+			return errors.New("权限等级已停用")
+		}
+	}
 	return u.repo.CreateUser(ctx, user, departmentIDs, edition, u.enterpriseRepo)
 }
 
 func (u *UserUsecase) VerifyUserAndGenerateToken(ctx context.Context, req v1.LoginReq) (string, error) {
-	return u.verifyUserAndGenerateToken(ctx, req, true)
-}
-
-// Reader login shares account credentials, but never grants administration.
-// All management APIs independently check the current administrator role.
-func (u *UserUsecase) VerifyReaderAndGenerateToken(ctx context.Context, req v1.LoginReq) (string, error) {
-	return u.verifyUserAndGenerateToken(ctx, req, false)
-}
-
-func (u *UserUsecase) verifyUserAndGenerateToken(ctx context.Context, req v1.LoginReq, administratorOnly bool) (string, error) {
-	var user *domain.User
-	var err error
-	user, err = u.repo.VerifyUser(ctx, req.Account, req.Password)
+	result, err := u.AuthenticateAccount(ctx, req, true)
 	if err != nil {
 		return "", err
 	}
+	return result.Token, nil
+}
+func (u *UserUsecase) VerifyReaderAndGenerateToken(ctx context.Context, req v1.LoginReq) (string, error) {
+	result, err := u.AuthenticateAccount(ctx, req, false)
+	if err != nil {
+		return "", err
+	}
+	return result.Token, nil
+}
+func (u *UserUsecase) AuthenticateAccount(ctx context.Context, req v1.LoginReq, administratorOnly bool) (*v1.LoginResp, error) {
+	user, err := u.repo.VerifyUser(ctx, req.Account, req.Password)
+	if err != nil {
+		return nil, err
+	}
 	if administratorOnly && !consts.IsAdministrator(user.Role) {
-		return "", ErrAdministratorOnly
+		return nil, ErrAdministratorOnly
 	}
 	if !consts.IsAdministrator(user.Role) && user.Role != consts.UserRoleUser {
-		return "", fmt.Errorf("账号角色无效")
+		return nil, fmt.Errorf("账号角色无效")
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":  user.ID,
-		"exp": time.Now().Add(time.Hour * 24).Unix(),
-	})
-
-	return token.SignedString([]byte(u.config.Auth.JWT.Secret))
+	maxAge := u.config.Auth.JWT.SessionMaxAgeSeconds
+	if maxAge <= 0 {
+		maxAge = 28800
+	}
+	sessionID := uuid.NewString()
+	now := time.Now()
+	expiresAt := now.Add(time.Duration(maxAge) * time.Second)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"id": user.ID, "jti": sessionID, "iat": now.Unix(), "exp": expiresAt.Unix()})
+	signed, err := token.SignedString([]byte(u.config.Auth.JWT.Secret))
+	if err != nil {
+		return nil, err
+	}
+	if err := u.repo.AccountSessions().Create(ctx, sessionID, user.ID, expiresAt); err != nil {
+		return nil, err
+	}
+	return &v1.LoginResp{Token: signed, PasswordChangeRequired: user.PasswordChangeRequired}, nil
+}
+func (u *UserUsecase) Logout(ctx context.Context, sessionID, userID string) error {
+	return u.repo.AccountSessions().Revoke(ctx, sessionID, userID)
+}
+func (u *UserUsecase) ChangeOwnPassword(ctx context.Context, userID string, req *v1.ChangePasswordReq) error {
+	user, err := u.repo.GetUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if _, err := u.repo.VerifyUser(ctx, user.Account, req.CurrentPassword); err != nil {
+		return fmt.Errorf("当前密码错误")
+	}
+	if req.CurrentPassword == req.NewPassword {
+		return fmt.Errorf("新密码不能与当前密码相同")
+	}
+	if err := domain.ValidatePassword(req.NewPassword, user.Account); err != nil {
+		return err
+	}
+	return u.repo.ChangeOwnPassword(ctx, userID, req.NewPassword)
 }
 
 func (u *UserUsecase) GetUser(ctx context.Context, userID string) (*domain.User, error) {
@@ -95,15 +142,51 @@ func (u *UserUsecase) GetUserDepartments(ctx context.Context, userID string) ([]
 	return u.enterpriseRepo.GetUserDepartments(ctx, userID)
 }
 
+func (u *UserUsecase) GetEffectiveDepartmentIDs(ctx context.Context, userID string) ([]string, error) {
+	return u.enterpriseRepo.GetEffectiveDepartmentIDs(ctx, userID)
+}
+
+func (u *UserUsecase) ResolveEffectiveDepartmentIDs(ctx context.Context, departmentIDs []string) ([]string, error) {
+	return u.enterpriseRepo.ResolveEffectiveDepartmentIDs(ctx, departmentIDs)
+}
+
 func (u *UserUsecase) ListUsers(ctx context.Context, authUserID string, req *v1.UserListReq) (*v1.UserListResp, error) {
-	users, err := u.repo.ListUsersWithEnterpriseAccess(ctx, u.enterpriseRepo, authUserID, req)
+	if req == nil {
+		req = &v1.UserListReq{}
+	}
+	if req.Page < 1 {
+		req.Page = 1
+	}
+	if req.Page > 100000 {
+		req.Page = 100000
+	}
+	if req.PageSize < 1 {
+		req.PageSize = 20
+	}
+	if req.PageSize > 100 {
+		req.PageSize = 100
+	}
+
+	users, total, err := u.repo.ListUsersWithEnterpriseAccess(ctx, authUserID, req)
 	if err != nil {
 		return nil, err
 	}
-	return &v1.UserListResp{Users: users}, nil
+	return &v1.UserListResp{
+		Users:    users,
+		Total:    total,
+		Page:     req.Page,
+		PageSize: req.PageSize,
+	}, nil
 }
 
 func (u *UserUsecase) ResetPassword(ctx context.Context, req *v1.ResetPasswordReq) error {
+	user, err := u.repo.GetUser(ctx, req.ID)
+	if err != nil {
+		return err
+	}
+	if err := domain.ValidatePassword(req.NewPassword, user.Account); err != nil {
+		return err
+	}
 	return u.repo.UpdateUserPassword(ctx, req.ID, req.NewPassword)
 }
 

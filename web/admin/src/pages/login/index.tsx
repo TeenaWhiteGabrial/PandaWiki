@@ -1,4 +1,10 @@
-import { postApiV1UserLogin } from '@/request/User';
+import {
+  postApiV1UserLogin,
+  getApiV1User,
+  logoutAccount,
+  changeOwnPassword,
+} from '@/request/User';
+import { PasswordChangeDialog } from '@panda-wiki/ui/security';
 import Bgi from '@/assets/images/login-bgi.png';
 import Logo from '@/assets/images/logo.png';
 import Avatar from '@/components/Avatar';
@@ -28,30 +34,37 @@ import {
   IconBukejian,
 } from '@panda-wiki/icons';
 
-const REMEMBER_KEY = 'panda_wiki_remember_login';
+const LEGACY_REMEMBER_KEY = 'panda_wiki_remember_login';
+const REMEMBER_KEY = 'panda_wiki_remember_accounts';
 const MAX_REMEMBERED_LOGINS = 8;
 
 type RememberedLogin = {
   account: string;
-  password: string;
   updatedAt: number;
 };
 
 const loadRememberedLogins = (): RememberedLogin[] => {
   try {
-    const raw = localStorage.getItem(REMEMBER_KEY);
+    const raw =
+      localStorage.getItem(REMEMBER_KEY) ||
+      localStorage.getItem(LEGACY_REMEMBER_KEY);
+    // Remove legacy credentials even when the stored value cannot be parsed.
+    localStorage.removeItem(LEGACY_REMEMBER_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as RememberedLogin[];
+    const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        item =>
-          item &&
-          typeof item.account === 'string' &&
-          typeof item.password === 'string',
-      )
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const accounts = parsed
+      .filter(item => item && typeof item.account === 'string')
+      .map(item => ({
+        account: item.account as string,
+        updatedAt: Number(item.updatedAt) || 0,
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, MAX_REMEMBERED_LOGINS);
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify(accounts));
+    return accounts;
   } catch {
+    localStorage.removeItem(LEGACY_REMEMBER_KEY);
     localStorage.removeItem(REMEMBER_KEY);
     return [];
   }
@@ -78,6 +91,7 @@ const Login = () => {
   const [remember, setRemember] = useState(false);
   const [see, setSee] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [changeRequired, setChangeRequired] = useState(false);
   const [rememberedLogins, setRememberedLogins] = useState<RememberedLogin[]>(
     [],
   );
@@ -87,8 +101,20 @@ const Login = () => {
     setRememberedLogins(parsed);
     if (parsed.length > 0) {
       setAccount(parsed[0].account || '');
-      setPassword(parsed[0].password || '');
       setRemember(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get('change_password') === '1') {
+      getApiV1User()
+        .then(info => {
+          if (info.password_change_required) {
+            setAccount(info.account || '');
+            setChangeRequired(true);
+          }
+        })
+        .catch(() => undefined);
     }
   }, []);
 
@@ -96,21 +122,20 @@ const Login = () => {
     setAccount(value);
     const matched = rememberedLogins.find(item => item.account === value);
     if (matched) {
-      setPassword(matched.password);
+      setPassword('');
       setRemember(true);
     }
   };
 
   const submit = () => {
-    postApiV1UserLogin({ account, password })
+    postApiV1UserLogin({ account: account.trim(), password })
       .then(res => {
-        localStorage.setItem('panda_wiki_token', res.token!);
+        localStorage.removeItem('panda_wiki_token');
         const trimmedAccount = account.trim();
         if (remember) {
           const nextLogins = [
             {
               account: trimmedAccount,
-              password,
               updatedAt: Date.now(),
             },
             ...rememberedLogins.filter(item => item.account !== trimmedAccount),
@@ -123,6 +148,10 @@ const Login = () => {
           );
           setRememberedLogins(nextLogins);
           saveRememberedLogins(nextLogins);
+        }
+        if (res.password_change_required) {
+          setChangeRequired(true);
+          return;
         }
         navigate(redirect);
         message.success('登录成功');
@@ -225,6 +254,7 @@ const Login = () => {
               <Input
                 size='large'
                 placeholder='账号'
+                autoComplete='username'
                 autoFocus
                 tabIndex={1}
                 prefix={<IconZhanghao sx={{ fontSize: 16, mr: 1 }} />}
@@ -266,6 +296,7 @@ const Login = () => {
                 : ' '}
             </Typography>
             <TextField
+              autoComplete='current-password'
               value={password}
               fullWidth
               sx={{ mb: 4 }}
@@ -324,7 +355,7 @@ const Login = () => {
                     onChange={event => setRemember(event.target.checked)}
                   />
                 }
-                label='记住密码并加入账号列表'
+                label='记住账号'
               />
             </Box>
             <Button
@@ -348,6 +379,24 @@ const Login = () => {
           </Stack>
         </Card>
       </Stack>
+      <PasswordChangeDialog
+        open={changeRequired}
+        account={account}
+        initialPassword={password}
+        onSubmit={changeOwnPassword}
+        onCancel={async () => {
+          await logoutAccount();
+          localStorage.removeItem('panda_wiki_token');
+          setChangeRequired(false);
+          setPassword('');
+        }}
+        onComplete={() => {
+          localStorage.removeItem('panda_wiki_token');
+          setChangeRequired(false);
+          setPassword('');
+          message.success('密码已更新，请重新登录');
+        }}
+      />
     </Box>
   );
 };

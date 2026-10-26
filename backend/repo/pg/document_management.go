@@ -17,18 +17,12 @@ func documentManagementAccess(ctx context.Context, db *store.DB, kbID, userID st
 		return nil, err
 	}
 	access := &domain.DocumentManagementAccess{Principal: &domain.EnterpriseAccessContext{PrincipalID: userID}, Nodes: map[string]*domain.Node{}, Navs: map[string]*domain.Nav{}}
-	// Reading audiences, legacy KB membership and management grants never elevate
-	// an ordinary user into an administrator.
+	// Legacy KB membership and management grants never elevate an ordinary user
+	// into an administrator. Only the super-admin has global document access.
 	if !consts.IsAdministrator(user.Role) {
 		return access, nil
 	}
-	access.Global = true
-	var membership domain.KBUsers
-	err := db.WithContext(ctx).Where("kb_id = ? AND user_id = ?", kbID, userID).First(&membership).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	access.Global = access.Global || membership.Perm == consts.UserKBPermissionFullControl || membership.Perm == consts.UserKBPermissionDocManage
+	access.Global = consts.IsSuperAdmin(user.Role)
 	if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {
 		var level domain.PermissionLevel
 		if err := db.WithContext(ctx).Where("id = ? AND status = ?", *user.PermissionLevelID, domain.PermissionLevelStatusActive).First(&level).Error; err == nil {
@@ -50,7 +44,7 @@ func documentManagementAccess(ctx context.Context, db *store.DB, kbID, userID st
 		return nil, err
 	}
 	var nodes []*domain.Node
-	if err := db.WithContext(ctx).Select("id, kb_id, nav_id, parent_id, type, permissions, meta").Where("kb_id = ?", kbID).Find(&nodes).Error; err != nil {
+	if err := db.WithContext(ctx).Select("id, kb_id, nav_id, parent_id, type, name, permissions, meta").Where("kb_id = ?", kbID).Find(&nodes).Error; err != nil {
 		return nil, err
 	}
 	for _, node := range nodes {
@@ -136,8 +130,54 @@ func (r *NodeRepository) UpdateNodeManagementGrants(ctx context.Context, kbID st
 // Permission choices expose only the fields needed to pick an audience.
 func (r *EnterpriseRepository) PermissionAudienceUsers(ctx context.Context) ([]domain.UserSummary, error) {
 	var users []domain.UserSummary
-	err := r.db.WithContext(ctx).Model(&domain.User{}).Select("id, account, name, role").Order("account ASC").Find(&users).Error
-	return users, err
+	if err := r.db.WithContext(ctx).Model(&domain.User{}).Select("id, account, name, role, COALESCE(permission_level_id, '') AS permission_level_id").Order("account ASC").Find(&users).Error; err != nil {
+		return nil, err
+	}
+	var defaultLevel domain.PermissionLevel
+	if err := r.db.WithContext(ctx).Where("is_default = ? AND status = ?", true, domain.PermissionLevelStatusActive).First(&defaultLevel).Error; err == nil {
+		for i := range users {
+			if users[i].PermissionLevelID == "" {
+				users[i].PermissionLevelID = defaultLevel.ID
+			}
+		}
+	}
+	var assignments []struct {
+		UserID       string `gorm:"column:user_id"`
+		DepartmentID string `gorm:"column:department_id"`
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT assigned.user_id, assigned.department_id
+		FROM user_departments assigned
+		INNER JOIN departments department ON department.id = assigned.department_id
+		WHERE assigned.is_primary = TRUE
+		OR (
+			NOT EXISTS (
+				SELECT 1 FROM user_departments primary_assignment
+				WHERE primary_assignment.user_id = assigned.user_id
+				AND primary_assignment.is_primary = TRUE
+			)
+			AND NOT EXISTS (
+				SELECT 1
+				FROM user_departments descendant_assignment
+				INNER JOIN departments descendant ON descendant.id = descendant_assignment.department_id
+				WHERE descendant_assignment.user_id = assigned.user_id
+				AND descendant.path LIKE department.path || '/%'
+			)
+		)
+		ORDER BY department.path ASC`).Scan(&assignments).Error
+	if err != nil {
+		return nil, err
+	}
+	usersByID := make(map[string]int, len(users))
+	for i := range users {
+		usersByID[users[i].ID] = i
+	}
+	for _, assignment := range assignments {
+		if i, ok := usersByID[assignment.UserID]; ok {
+			users[i].DepartmentIDs = append(users[i].DepartmentIDs, assignment.DepartmentID)
+		}
+	}
+	return users, nil
 }
 
 func (r *UserAccessRepository) ManagementZipTarget(ctx context.Context, id string) (*domain.ZipUploadTask, error) {

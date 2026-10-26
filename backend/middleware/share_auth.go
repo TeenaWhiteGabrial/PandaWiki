@@ -7,7 +7,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 
 	"github.com/chaitin/panda-wiki/config"
@@ -46,7 +45,7 @@ func (h *ShareAuthMiddleware) applyJWTAuth(c echo.Context, kbID string) bool {
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		return []byte(h.config.Auth.JWT.Secret), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil || token == nil || !token.Valid {
 		h.logger.Warn("share jwt auth failed", log.Error(err))
 		return false
@@ -62,11 +61,21 @@ func (h *ShareAuthMiddleware) applyJWTAuth(c echo.Context, kbID string) bool {
 		return false
 	}
 
+	if h.apiTokenRepo == nil {
+		return false
+	}
+	sessionID, state, sessionErr := checkAccountSession(c, claims, h.apiTokenRepo.AccountSessions(), h.config)
+	if sessionErr != nil {
+		return false
+	}
 	ctx := context.WithValue(c.Request().Context(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{
-		IsToken:    false,
-		Permission: consts.UserKBPermissionDocManage,
-		UserId:     userID,
-		KBId:       kbID,
+		SessionExpiresAt:       accountSessionExpiresAt(claims),
+		SessionID:              sessionID,
+		PasswordChangeRequired: state.PasswordChangeRequired,
+		IsToken:                false,
+		Permission:             consts.UserKBPermissionDocManage,
+		UserId:                 userID,
+		KBId:                   kbID,
 	})
 	c.SetRequest(c.Request().WithContext(ctx))
 	return true
@@ -119,6 +128,16 @@ func (h *ShareAuthMiddleware) CheckForbidden(next echo.HandlerFunc) echo.Handler
 
 func (h *ShareAuthMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		// A public document means all authenticated readers, not anonymous
+		// visitors. Reject missing credentials before resolving any KB data.
+		c.Response().Header().Set("Cache-Control", "private, no-store")
+		authHeader := strings.TrimSpace(c.Request().Header.Get("Authorization"))
+		if !strings.HasPrefix(authHeader, "Bearer ") || strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer ")) == "" {
+			return c.JSON(http.StatusUnauthorized, domain.PWResponse{
+				Success: false, Code: domain.SessionInvalidCode, Message: "请先登录后访问知识库",
+			})
+		}
+		c.Request().Header.Set("Authorization", authHeader)
 		kbID, err := h.resolveKBID(c.Request().Context(), c.Request().Header.Get("X-KB-ID"))
 		if err != nil {
 			h.logger.Error("kb_id resolve failed", log.Error(err))
@@ -146,24 +165,18 @@ func (h *ShareAuthMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc 
 			})
 		}
 
-		authHeader := c.Request().Header.Get("Authorization")
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 			if token != "" {
 				if strings.Contains(token, ".") {
-					if h.applyJWTAuth(c, kb.ID) {
-						return next(c)
+					if !h.applyJWTAuth(c, kb.ID) {
+						return invalidAccountSession(c)
 					}
-					ctxAuthInfo := domain.GetAuthInfoFromCtx(c.Request().Context())
-					if ctxAuthInfo != nil && !ctxAuthInfo.IsToken {
-						if ctxAuthInfo.KBId == "" {
-							ctxAuthInfo.KBId = kb.ID
-						}
-						if ctxAuthInfo.Permission == consts.UserKBPermissionNull {
-							ctxAuthInfo.Permission = consts.UserKBPermissionDocManage
-						}
-						return next(c)
+					info := domain.GetAuthInfoFromCtx(c.Request().Context())
+					if requiresPasswordChange(c, info.PasswordChangeRequired) {
+						return passwordChangeRequired(c)
 					}
+					return next(c)
 				} else if h.apiTokenRepo != nil {
 					apiToken, tokenErr := h.apiTokenRepo.GetByTokenWithCache(c.Request().Context(), token)
 					if tokenErr == nil && apiToken != nil && apiToken.KbId == kb.ID {
@@ -177,30 +190,10 @@ func (h *ShareAuthMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc 
 						return next(c)
 					}
 				}
+				return invalidAccountSession(c)
 			}
 		}
 
-		// 分享站点允许匿名访问，由后续栏目/文档权限规则决定可见范围。
-		// 已登录用户仍会透传身份，用于访问有权限要求的内容。
-		if !kb.AccessSettings.EnterpriseAuth.Enabled && !kb.AccessSettings.SimpleAuth.Enabled {
-			return next(c)
-		}
-
-		sess, err := session.Get(domain.SessionName, c)
-		if err != nil {
-			h.logger.Warn("session get failed for anonymous share access", log.Error(err))
-			return next(c)
-		}
-
-		KbIDSess, ok := sess.Values["kb_id"].(string)
-		if !ok || kbID == "" || KbIDSess != kb.ID {
-			return next(c)
-		}
-
-		if kb.AccessSettings.EnterpriseAuth.Enabled {
-			return next(c)
-		}
-
-		return next(c)
+		return invalidAccountSession(c)
 	}
 }

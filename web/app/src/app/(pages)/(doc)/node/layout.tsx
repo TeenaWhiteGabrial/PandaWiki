@@ -13,7 +13,7 @@ export default async function Layout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const [nodeListRes, pathname] = await Promise.all([
-    getShareV1NodeList(),
+    getShareV1NodeList({ cache: 'no-store' }),
     getServerPathname(),
   ]);
 

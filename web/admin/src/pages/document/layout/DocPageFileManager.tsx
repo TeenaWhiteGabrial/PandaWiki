@@ -9,6 +9,7 @@ import NavPermissionModal from '@/pages/document/layout/DocPageNavs/NavPermissio
 import { message, Modal } from '@/components/ui';
 import { ConstsCrawlerSource } from '@/request';
 import { deleteApiV1NavDelete } from '@/request/Nav';
+import { getNodePermissionOptions } from '@/request/NodeManagement';
 import type { ITreeItem } from '@/api';
 import TreeMenu, {
   type TreeMenuItem,
@@ -21,6 +22,10 @@ import type {
   GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
   V1NavListResp,
 } from '@/request/types';
+import {
+  getDocumentPermissionTags,
+  type PermissionAudienceCatalog,
+} from '@/pages/document/utils/permissionTags';
 import {
   Box,
   Breadcrumbs,
@@ -62,6 +67,7 @@ interface DocPageFileManagerProps {
 type ExplorerItem = DomainNodeListItemResp & {
   explorerKind?: 'nav';
   can_configure?: boolean;
+  permission_tags?: ITreeItem['permission_tags'];
 };
 
 const NAV_PATH_PREFIX = 'nav:';
@@ -79,6 +85,12 @@ const DocPageFileManager = ({
   onNavDeleted,
 }: DocPageFileManagerProps) => {
   const { kb_id } = useAppSelector(state => state.config);
+  const [permissionCatalog, setPermissionCatalog] =
+    useState<PermissionAudienceCatalog>({
+      departments: {},
+      levels: {},
+      users: {},
+    });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [deleteSelectedDocsOpen, setDeleteSelectedDocsOpen] = useState(false);
@@ -112,6 +124,37 @@ const DocPageFileManager = ({
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
 
   useEffect(() => {
+    if (!kb_id) return;
+    let active = true;
+    getNodePermissionOptions(kb_id)
+      .then(options => {
+        if (!active) return;
+        setPermissionCatalog({
+          departments: Object.fromEntries(
+            [
+              ...(options.departments || []),
+              ...(options.management_departments || []),
+            ].map(item => [item.id, item.name] as const),
+          ),
+          levels: Object.fromEntries(
+            (options.levels || []).map(item => [item.id, item.name] as const),
+          ),
+          users: Object.fromEntries(
+            [...(options.users || []), ...(options.management_users || [])].map(
+              item => [item.id, item.name || item.account] as const,
+            ),
+          ),
+        });
+      })
+      .catch(() => {
+        // Generic permission labels remain useful when the audience catalog is unavailable.
+      });
+    return () => {
+      active = false;
+    };
+  }, [kb_id]);
+
+  useEffect(() => {
     setSelectedId(null);
     setSelectedItemIds([]);
   }, [folderId, navId]);
@@ -142,35 +185,57 @@ const DocPageFileManager = ({
   const rootName = useMemo(() => '根目录', []);
 
   const currentItems = useMemo((): ExplorerItem[] => {
-    if (!folderId) {
-      return groups
-        .map(group => ({
-          id: `${NAV_PATH_PREFIX}${group.nav_id || ''}`,
-          name: group.nav_name || '未命名目录',
-          nav_id: group.nav_id,
-          parent_id: '',
-          type: 1,
-          kind: 'nav' as const,
-          explorerKind: 'nav' as const,
-          can_manage: group.can_manage,
-          can_create_document: group.can_create_document,
-          can_create_folder: group.can_create_folder,
-          can_configure: group.can_configure,
-        }))
-        .filter(item => item.nav_id);
-    }
-
-    return activeNodes
-      .filter(item =>
-        isNavPath
-          ? !(item.parent_id || '') || item.parent_id === activeNavId
-          : (item.parent_id || '') === folderId,
-      )
-      .sort((a, b) => {
-        if (a.type !== b.type) return a.type === 1 ? -1 : 1;
-        return (a.name || '').localeCompare(b.name || '', 'zh-CN');
-      });
-  }, [activeNavId, activeNodes, folderId, groups, isNavPath]);
+    const items: ExplorerItem[] = !folderId
+      ? groups
+          .map(group => ({
+            id: `${NAV_PATH_PREFIX}${group.nav_id || ''}`,
+            name: group.nav_name || '未命名目录',
+            nav_id: group.nav_id,
+            parent_id: '',
+            type: 1,
+            explorerKind: 'nav' as const,
+            permissions: group.permissions,
+            effective_management_grants: group.permissions?.management_grants,
+            can_manage: group.can_manage,
+            can_create_document: group.can_create_document,
+            can_create_folder: group.can_create_folder,
+            can_configure: group.can_configure,
+          }))
+          .filter(item => item.nav_id)
+      : activeNodes
+          .filter(item =>
+            isNavPath
+              ? !(item.parent_id || '') || item.parent_id === activeNavId
+              : (item.parent_id || '') === folderId,
+          )
+          .sort((a, b) => {
+            if (a.type !== b.type) return a.type === 1 ? -1 : 1;
+            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+          });
+    return items.map(item => {
+      const permissions = item.effective_permissions || item.permissions;
+      const managementGrants = item.effective_management_grants?.length
+        ? item.effective_management_grants
+        : item.permissions?.management_grants;
+      return {
+        ...item,
+        permission_tags: getDocumentPermissionTags(
+          permissions
+            ? { ...permissions, management_grants: managementGrants }
+            : undefined,
+          permissionCatalog,
+          item.effective_management_constraints,
+        ),
+      };
+    });
+  }, [
+    activeNavId,
+    activeNodes,
+    folderId,
+    groups,
+    isNavPath,
+    permissionCatalog,
+  ]);
 
   const selectableItems = useMemo(
     () =>
@@ -525,6 +590,20 @@ const DocPageFileManager = ({
                   rag_message: item.rag_info?.message,
                   kind: item.explorerKind ? 'nav' : undefined,
                 };
+                const navDownloadAction =
+                  item.explorerKind && !itemReadOnly && menu
+                    ? menu({
+                        item: {
+                          ...treeItem,
+                          id: item.nav_id || treeItem.id,
+                          kind: 'nav',
+                        },
+                        createItem: () => undefined,
+                        renameItem: () => undefined,
+                        isEditing: false,
+                        removeItem: () => undefined,
+                      }).find(action => action.key === 'download-folder')
+                    : undefined;
                 const actionMenu: TreeMenuItem[] = item.explorerKind
                   ? !itemReadOnly
                     ? [
@@ -582,6 +661,7 @@ const DocPageFileManager = ({
                             setBatchImportOpen(true);
                           },
                         },
+                        ...(navDownloadAction ? [navDownloadAction] : []),
                         {
                           key: 'edit-nav',
                           label: '修改目录',
@@ -857,23 +937,53 @@ const DocPageFileManager = ({
                         </Typography>
                       )}
                     </Box>
+                    {item.permission_tags &&
+                      item.permission_tags.length > 0 && (
+                        <Stack
+                          direction='row'
+                          alignItems='center'
+                          gap={0.75}
+                          sx={{
+                            flexShrink: 1,
+                            maxWidth: '48%',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          {item.permission_tags.map((tag, index) => (
+                            <Tooltip
+                              key={`${tag.label}-${index}`}
+                              title={tag.title || ''}
+                            >
+                              <Chip
+                                size='small'
+                                color={tag.color}
+                                variant='outlined'
+                                label={tag.label}
+                                sx={{ height: 24, fontSize: 11 }}
+                              />
+                            </Tooltip>
+                          ))}
+                        </Stack>
+                      )}
                     {isFolder && !item.explorerKind && !itemReadOnly && (
-                      <AddDocBtn
-                        parentId={item.id}
-                        navId={item.nav_id}
-                        refresh={refresh}
-                        exportFile={false}
-                        batchImport={false}
-                        context={
-                          <IconButton
-                            size='small'
-                            onClick={event => event.stopPropagation()}
-                            title='新建'
-                          >
-                            <IconJiahao sx={{ fontSize: 18 }} />
-                          </IconButton>
-                        }
-                      />
+                      <Stack direction='row' alignItems='center' gap={0.25}>
+                        <AddDocBtn
+                          parentId={item.id}
+                          navId={item.nav_id}
+                          refresh={refresh}
+                          exportFile={false}
+                          batchImport={false}
+                          context={
+                            <IconButton
+                              size='small'
+                              onClick={event => event.stopPropagation()}
+                              title='新建'
+                            >
+                              <IconJiahao sx={{ fontSize: 18 }} />
+                            </IconButton>
+                          }
+                        />
+                      </Stack>
                     )}
                     {resolvedActionMenu.length > 0 && (
                       <Box onClick={event => event.stopPropagation()}>

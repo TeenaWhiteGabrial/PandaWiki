@@ -49,26 +49,13 @@ const StyledTag = styled('div')<{ color: keyof Theme['palette'] }>(
     borderColor: (theme.palette[color] as PaletteColor).main,
     borderRadius: '10px',
     padding: theme.spacing(0, 1),
+    maxWidth: 260,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
     bgcolor: alpha((theme.palette[color] as PaletteColor).main, 0.1),
   }),
 );
-
-const SCOPE_TYPE_MAP = {
-  permission_level: { label: '按等级', color: 'secondary' },
-  user: { label: '指定用户', color: 'success' },
-  public: {
-    label: '公开',
-    color: 'primary',
-  },
-  custom: {
-    label: '自定义权限',
-    color: 'warning',
-  },
-  department: {
-    label: '自定义权限',
-    color: 'warning',
-  },
-} as const;
 
 const TreeItem = React.forwardRef<
   HTMLDivElement,
@@ -246,40 +233,8 @@ const TreeItem = React.forwardRef<
     }
     return [];
   }, [item, isEditting, createItem, renameItem, removeItem, readOnly]);
-
-  const permissions = useMemo(() => {
-    if (item.permissions) return item.permissions;
-    return null;
-  }, [item.permissions]);
   const ragStatusMeta = useMemo(() => getRagStatusMeta(item), [item]);
-
-  const enterprisePermissionTags = useMemo(() => {
-    if (!permissions) return [];
-    const tags: Array<{ label: string; color: keyof Theme['palette'] }> = [];
-    const scopeType = (permissions as { scope_type?: string }).scope_type;
-    const minPermissionLevelID = (
-      permissions as { min_permission_level_id?: string }
-    ).min_permission_level_id;
-    const allowedDepartmentIDs = (
-      permissions as { allowed_department_ids?: string[] }
-    ).allowed_department_ids;
-    const allowedUserIDs = (permissions as { allowed_user_ids?: string[] })
-      .allowed_user_ids;
-
-    if (scopeType && SCOPE_TYPE_MAP[scopeType as keyof typeof SCOPE_TYPE_MAP]) {
-      tags.push(SCOPE_TYPE_MAP[scopeType as keyof typeof SCOPE_TYPE_MAP]);
-    }
-    if (minPermissionLevelID) {
-      tags.push({ label: '等级受限', color: 'secondary' });
-    }
-    if (
-      (allowedDepartmentIDs && allowedDepartmentIDs.length > 0) ||
-      (allowedUserIDs && allowedUserIDs.length > 0)
-    ) {
-      tags.push({ label: '有白名单', color: 'success' });
-    }
-    return tags;
-  }, [permissions]);
+  const enterprisePermissionTags = item.permission_tags || [];
 
   const isChecked = selectedSet.has(item.id);
   const isIndeterminate =
@@ -581,7 +536,9 @@ const TreeItem = React.forwardRef<
                   )}
                 </Stack>
               )}
-              {menuList.length > 0 && (
+              {(menuList.length > 0 ||
+                item.kind !== 'nav' ||
+                enterprisePermissionTags.length > 0) && (
                 <>
                   <Box
                     sx={{
@@ -591,59 +548,76 @@ const TreeItem = React.forwardRef<
                       borderColor: 'divider',
                     }}
                   />
+                  {item.kind !== 'nav' && (
+                    <Stack
+                      direction='row'
+                      alignItems='center'
+                      gap={1}
+                      sx={{
+                        flexShrink: 1,
+                        maxWidth: '60%',
+                        flexWrap: 'wrap',
+                        fontSize: 12,
+                      }}
+                    >
+                      {item.status === 0 && (
+                        <StyledTag color='error'>未发布</StyledTag>
+                      )}
+                      {item.status === 1 && (
+                        <StyledTag color='error'>更新未发布</StyledTag>
+                      )}
+                      {ragStatusMeta && (
+                        <Tooltip
+                          title={ragStatusMeta.message || ''}
+                          disableHoverListener={!ragStatusMeta.message}
+                        >
+                          <StyledTag color={ragStatusMeta.tagColor}>
+                            {ragStatusMeta.label}
+                          </StyledTag>
+                        </Tooltip>
+                      )}
+                    </Stack>
+                  )}
                   <Stack
                     direction='row'
                     alignItems='center'
-                    gap={2}
-                    sx={{ flexShrink: 0 }}
+                    justifyContent='flex-end'
+                    gap={1}
+                    sx={{
+                      flexShrink: 1,
+                      maxWidth: '60%',
+                      flexWrap: 'wrap',
+                      fontSize: 12,
+                    }}
                   >
-                    {item.kind !== 'nav' && (
-                      <Stack
-                        direction='row'
-                        alignItems='center'
-                        gap={1}
-                        sx={{ flexShrink: 0, fontSize: 12 }}
+                    {enterprisePermissionTags.map((tag, index) => (
+                      <Tooltip
+                        key={`${tag.label}-${index}`}
+                        title={tag.title || ''}
                       >
-                        {item.status === 0 && (
-                          <StyledTag color='error'>未发布</StyledTag>
-                        )}
-                        {item.status === 1 && (
-                          <StyledTag color='error'>更新未发布</StyledTag>
-                        )}
-                        {ragStatusMeta && (
-                          <Tooltip
-                            title={ragStatusMeta.message || ''}
-                            disableHoverListener={!ragStatusMeta.message}
-                          >
-                            <StyledTag color={ragStatusMeta.tagColor}>
-                              {ragStatusMeta.label}
-                            </StyledTag>
-                          </Tooltip>
-                        )}
-                        {enterprisePermissionTags.map(tag => (
-                          <StyledTag key={tag.label} color={tag.color}>
-                            {tag.label}
-                          </StyledTag>
-                        ))}
-                      </Stack>
-                    )}
-                    {item.kind !== 'nav' && (
-                      <Box
-                        sx={{
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          color: 'text.disabled',
-                          width: 60,
-                          textAlign: 'right',
-                        }}
-                      >
-                        {dayjs(item.updated_at).fromNow()}
-                      </Box>
-                    )}
+                        <StyledTag color={tag.color}>{tag.label}</StyledTag>
+                      </Tooltip>
+                    ))}
+                  </Stack>
+                  {item.kind !== 'nav' && (
+                    <Stack
+                      sx={{
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                        color: 'text.disabled',
+                        width: 60,
+                        textAlign: 'right',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {dayjs(item.updated_at).fromNow()}
+                    </Stack>
+                  )}
+                  {menuList.length > 0 && (
                     <Box onClick={e => e.stopPropagation()}>
                       <TreeMenu menu={menuList} />
                     </Box>
-                  </Stack>
+                  )}
                 </>
               )}
             </Stack>

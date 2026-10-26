@@ -7,6 +7,7 @@ import {
   postApiV1NodeBatchMove,
   postApiV1NodeMoveNav,
 } from '@/request/Node';
+import { getApiV1NavList } from '@/request/Nav';
 import {
   GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
   V1NavListResp,
@@ -108,15 +109,30 @@ const Content = () => {
     const params: { kb_id: string; search?: string } = { kb_id };
     if (search) params.search = search;
     setLoading(true);
-    getApiV1NodeListGroupNav(params)
-      .then(res => {
+    Promise.all([
+      getApiV1NodeListGroupNav(params),
+      getApiV1NavList({ kb_id }).catch(() => undefined),
+    ])
+      .then(([res, navListResp]) => {
         const list = res || [];
         setGroups(list);
+        const navPermissions = new Map(
+          (navListResp || [])
+            .filter(nav => nav.id)
+            .map(nav => [nav.id!, nav.permissions] as const),
+        );
         const nextNavList = list
           .map(g => ({
             id: g.nav_id,
             name: g.nav_name,
             position: g.position ?? 0,
+            // Prefer the dedicated nav API so column permission labels do not
+            // depend on fields added to the grouped node-list response.
+            permissions: navPermissions.get(g.nav_id || '') ?? g.permissions,
+            can_manage: g.can_manage,
+            can_create_document: g.can_create_document,
+            can_create_folder: g.can_create_folder,
+            can_configure: g.can_configure,
           }))
           .filter(n => n.id)
           .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));

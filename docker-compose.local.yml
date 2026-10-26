@@ -18,13 +18,25 @@ services:
     environment:
       PDF_PARSER_TOKEN: ${PDF_PARSER_TOKEN:-}
 
+  preview:
+    image: registry.cn-hangzhou.aliyuncs.com/misaka-images/gotenberg:8
+    container_name: panda-wiki-preview
+    labels: *pandawiki-log-labels
+    restart: unless-stopped
+    command: ['gotenberg', '--api-timeout=300s', '--libreoffice-disable-routes=false', '--api-enable-basic-auth']
+    environment:
+      GOTENBERG_API_BASIC_AUTH_USERNAME: panda-wiki
+      GOTENBERG_API_BASIC_AUTH_PASSWORD: ${PREVIEW_PASSWORD:-}
+    ports:
+      - '127.0.0.1:13000:3000'
+
   caddy:
     image: chaitin-registry.cn-hangzhou.cr.aliyuncs.com/chaitin/panda-wiki-caddy:2.10-alpine
     container_name: panda-wiki-caddy
     restart: unless-stopped
     labels: *pandawiki-log-labels
     ports:
-      - '2019:2019'
+      - '127.0.0.1:2019:2019'
     environment:
       CADDY_ADMIN: 0.0.0.0:2019
     volumes:
@@ -40,7 +52,7 @@ services:
       POSTGRES_USER: panda-wiki
       POSTGRES_PASSWORD: panda-wiki-secret
     ports:
-      - '15432:5432'
+      - '127.0.0.1:15432:5432'
     volumes:
       - panda_wiki_postgres:/var/lib/postgresql/data
     healthcheck:
@@ -54,7 +66,10 @@ services:
     container_name: panda-wiki-redis
     labels: *pandawiki-log-labels
     ports:
-      - '16379:6379'
+      - '127.0.0.1:16379:6379'
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Use scripts/dev-deps.sh to initialize local credentials}
+    command: ['redis-server', '--requirepass', '${REDIS_PASSWORD:?required}']
     volumes:
       - panda_wiki_redis:/data
     healthcheck:
@@ -71,18 +86,40 @@ services:
       - --jetstream
       - --store_dir
       - /data
-      - --http_port
-      - '8222'
+      - --config
+      - /etc/nats/security.conf
+      - --user
+      - panda-wiki
+      - --pass
+      - '${NATS_PASSWORD:?Use scripts/dev-deps.sh to initialize local credentials}'
     ports:
-      - '4222:4222'
-      - '8222:8222'
+      - '127.0.0.1:4222:4222'
+      - '127.0.0.1:8222:8822'
     volumes:
       - panda_wiki_nats:/data
+      - ./deploy/server/security/nats.conf:/etc/nats/security.conf:ro
     healthcheck:
       test: ['CMD', '/nats-server', '--version']
       interval: 10s
       timeout: 5s
       retries: 10
+
+  nats-monitor:
+    build:
+      context: ./web/admin
+      dockerfile: security-proxy/Dockerfile
+    container_name: panda-wiki-nats-monitor
+    restart: unless-stopped
+    labels: *pandawiki-log-labels
+    network_mode: 'service:nats'
+    environment:
+      UPSTREAM_URL: http://127.0.0.1:8222
+      PROXY_LISTEN: ':8822'
+      PROXY_USERNAME: panda-wiki
+      PROXY_PASSWORD: ${NATS_MONITOR_PASSWORD:-}
+    depends_on:
+      nats:
+        condition: service_started
 
   qdrant:
     image: registry.cn-hangzhou.aliyuncs.com/misaka-images/qdrant:v1.14.1
@@ -91,7 +128,7 @@ services:
     environment:
       QDRANT__SERVICE__API_KEY: panda-wiki-qdrant-key
     ports:
-      - '6333:6333'
+      - '127.0.0.1:6333:6333'
     volumes:
       - panda_wiki_qdrant:/qdrant/storage
 
@@ -104,13 +141,13 @@ services:
     environment:
       GLOG_GLOBAL_LEVEL: info
       NAMESPACE: anydoc
-      MQ_NATS_URL: nats://panda-wiki-nats:4222
+      MQ_NATS_URL: nats://panda-wiki:${NATS_PASSWORD:?required}@panda-wiki-nats:4222
       OSS_MINIO_ACCESS_KEY: ${OSS_ACCESS_KEY}
       OSS_MINIO_SECRET_KEY: ${OSS_SECRET_KEY}
       OSS_MINIO_ENDPOINT: ${OSS_S3_ENDPOINT}
       OSS_MINIO_USE_SSL: ${OSS_USE_SSL}
     ports:
-      - '8080:8080'
+      - '127.0.0.1:8080:8080'
     depends_on:
       nats:
         condition: service_started
@@ -132,14 +169,14 @@ services:
       STORAGE_MINIO_SECRET_ACCESS_KEY: ${OSS_SECRET_KEY}
       STORAGE_MINIO_USE_SSL: ${OSS_USE_SSL}
       STORAGE_MINIO_BUCKET_NAME: ${OSS_BUCKET_NAME}
-      NATS_URL: nats://panda-wiki-nats:4222
+      NATS_URL: nats://panda-wiki:${NATS_PASSWORD:?required}@panda-wiki-nats:4222
       EMBEDDER_RPM: 800
       LLM_RPM: 50
       # Disable RAGLite table LLM enhancement by default. Table text is still
       # indexed, but RAGLite will not call the analysis model to summarize tables.
       WORKER_MAX_TABLES: ${RAGLITE_WORKER_MAX_TABLES:-0}
     ports:
-      - '5050:5050'
+      - '127.0.0.1:5050:5050'
     volumes:
       - panda_wiki_raglite:/data
     depends_on:

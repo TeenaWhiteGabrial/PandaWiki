@@ -7,13 +7,14 @@ type PWResponse struct {
 	Success bool   `json:"success"`
 	Data    any    `json:"data,omitempty"`
 	Code    int    `json:"code"`
+	TraceID string `json:"trace_id,omitempty"`
 }
 
 type PWResponseErrCode PWResponse
 
 var (
-	ErrCodeNil              = PWResponseErrCode{"success", true, nil, 0}
-	ErrCodePermissionDenied = PWResponseErrCode{"Permission Denied", false, nil, 40003}
-	ErrCodeNotFound         = PWResponseErrCode{"Not Found", false, nil, 40004}
-	ErrCodeInternalError    = PWResponseErrCode{"Internal Error", false, nil, 50001}
+	ErrCodeNil              = PWResponseErrCode{Message: "success", Success: true}
+	ErrCodePermissionDenied = PWResponseErrCode{Message: "Permission Denied", Success: false, Code: 40003}
+	ErrCodeNotFound         = PWResponseErrCode{Message: "Not Found", Success: false, Code: 40004}
+	ErrCodeInternalError    = PWResponseErrCode{Message: "Internal Error", Success: false, Code: 50001}
 )

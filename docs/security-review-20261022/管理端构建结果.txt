@@ -1,0 +1,351 @@
+vite v6.4.1 building for production...
+✅ 路由列表已更新:
+   /doc/editor/history/:id
+   /doc/editor/space
+   /doc/editor/:id
+   /doc/editor
+   /401
+   /comment
+   /conversation
+   /login
+   /release
+   /setting
+   /stat
+transforming...
+✓ 19347 modules transformed.
+../node_modules/.pnpm/lottie-web@5.13.0/node_modules/lottie-web/build/player/lottie.js (14422:32): Use of eval in "../node_modules/.pnpm/lottie-web@5.13.0/node_modules/lottie-web/build/player/lottie.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                                 0.71 kB │ gzip:   0.39 kB
+dist/panda-wiki-admin-assets/KaTeX_Size3-Regular-CTq5MqoE.woff                  4.42 kB
+dist/panda-wiki-admin-assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2                 4.93 kB
+dist/panda-wiki-admin-assets/KaTeX_Size2-Regular-Dy4dx90m.woff2                 5.21 kB
+dist/panda-wiki-admin-assets/KaTeX_Size1-Regular-mCD8mA8B.woff2                 5.47 kB
+dist/panda-wiki-admin-assets/full-DNngwEug.png                                  5.73 kB
+dist/panda-wiki-admin-assets/KaTeX_Size4-Regular-BF-4gkZK.woff                  5.98 kB
+dist/panda-wiki-admin-assets/KaTeX_Size2-Regular-oD1tc_U0.woff                  6.19 kB
+dist/panda-wiki-admin-assets/wide-BcVElWdQ.png                                  6.24 kB
+dist/panda-wiki-admin-assets/normal-DwYytweY.png                                6.26 kB
+dist/panda-wiki-admin-assets/KaTeX_Size1-Regular-C195tn64.woff                  6.50 kB
+dist/panda-wiki-admin-assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2           6.91 kB
+dist/panda-wiki-admin-assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2              6.91 kB
+dist/panda-wiki-admin-assets/KaTeX_Size3-Regular-DgpXs0kz.ttf                   7.59 kB
+dist/panda-wiki-admin-assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff            7.66 kB
+dist/panda-wiki-admin-assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff               7.72 kB
+dist/panda-wiki-admin-assets/KaTeX_Script-Regular-D3wIWfF6.woff2                9.64 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2            10.34 kB
+dist/panda-wiki-admin-assets/KaTeX_Size4-Regular-DWFBv043.ttf                  10.36 kB
+dist/panda-wiki-admin-assets/KaTeX_Script-Regular-D5yQViql.woff                10.59 kB
+dist/panda-wiki-admin-assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2              11.32 kB
+dist/panda-wiki-admin-assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2                 11.35 kB
+dist/panda-wiki-admin-assets/KaTeX_Size2-Regular-B7gKUWhC.ttf                  11.51 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2             12.03 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2               12.22 kB
+dist/panda-wiki-admin-assets/KaTeX_Size1-Regular-Dbsnue_I.ttf                  12.23 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff             12.32 kB
+dist/panda-wiki-admin-assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf            12.34 kB
+dist/panda-wiki-admin-assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf               12.37 kB
+dist/panda-wiki-admin-assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff               13.21 kB
+dist/panda-wiki-admin-assets/KaTeX_Fraktur-Bold-BsDP51OF.woff                  13.30 kB
+dist/panda-wiki-admin-assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2           13.57 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Italic-DN2j7dab.woff              14.11 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff                14.41 kB
+dist/panda-wiki-admin-assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff            16.03 kB
+dist/panda-wiki-admin-assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2              16.40 kB
+dist/panda-wiki-admin-assets/KaTeX_Math-Italic-t53AETM-.woff2                  16.44 kB
+dist/panda-wiki-admin-assets/KaTeX_Script-Regular-C5JkGWo-.ttf                 16.65 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2              16.78 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Italic-NWA7e6Wa.woff2                  16.99 kB
+dist/panda-wiki-admin-assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff               18.67 kB
+dist/panda-wiki-admin-assets/KaTeX_Math-Italic-DA0__PXp.woff                   18.75 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-BoldItalic-SpSLRI95.woff               19.41 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf              19.44 kB
+dist/panda-wiki-admin-assets/KaTeX_Fraktur-Regular-CB_wures.ttf                19.57 kB
+dist/panda-wiki-admin-assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf                   19.58 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Italic-BMLOBm91.woff                   19.68 kB
+dist/panda-wiki-admin-assets/Assistant-SemiBold-SCI4bEL9.woff2                 20.21 kB
+dist/panda-wiki-admin-assets/Assistant-Regular-DVxZuzxb.woff2                  20.23 kB
+dist/panda-wiki-admin-assets/Assistant-Medium-DrcxCXg3.woff2                   20.32 kB
+dist/panda-wiki-admin-assets/Assistant-Bold-gm-uSS1B.woff2                     20.38 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf               22.36 kB
+dist/panda-wiki-admin-assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf                 24.50 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Bold-Cx986IdX.woff2                    25.32 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Regular-B22Nviop.woff2                 26.27 kB
+dist/panda-wiki-admin-assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf             27.56 kB
+dist/panda-wiki-admin-assets/KaTeX_AMS-Regular-BQhdFMY1.woff2                  28.08 kB
+dist/panda-wiki-admin-assets/purpleCard-DXCMCQ9C.png                           29.78 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Bold-Jm3AIy58.woff                     29.91 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Regular-Dr94JaBh.woff                  30.77 kB
+dist/panda-wiki-admin-assets/blueCard-CzQKUszb.png                             30.91 kB
+dist/panda-wiki-admin-assets/nodata-rFEgplZb.png                               31.01 kB
+dist/panda-wiki-admin-assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf                31.20 kB
+dist/panda-wiki-admin-assets/KaTeX_Math-Italic-flOr_0UB.ttf                    31.31 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf                32.97 kB
+dist/panda-wiki-admin-assets/KaTeX_AMS-Regular-DMm9YOAa.woff                   33.52 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Italic-3WenGoN9.ttf                    33.58 kB
+dist/panda-wiki-admin-assets/welcome-D-0p5mWW.png                              42.82 kB
+dist/panda-wiki-admin-assets/document-DtxKpyAt.png                             44.05 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Bold-waoOVXN0.ttf                      51.34 kB
+dist/panda-wiki-admin-assets/KaTeX_Main-Regular-ypZvNtVU.ttf                   53.58 kB
+dist/panda-wiki-admin-assets/disk-5WwjX5QJ.png                                 60.07 kB
+dist/panda-wiki-admin-assets/KaTeX_AMS-Regular-DRggAlZN.ttf                    63.63 kB
+dist/panda-wiki-admin-assets/logo-UHaR3f7c.png                                 79.53 kB
+dist/panda-wiki-admin-assets/no-permission-BpRX53sj.png                        99.23 kB
+dist/panda-wiki-admin-assets/login-bgi-BMIuckZT.png                         1,113.09 kB
+dist/panda-wiki-admin-assets/AlibabaPuHuiTi-Bold-C-TcPdep.ttf               8,289.19 kB
+dist/panda-wiki-admin-assets/AlibabaPuHuiTi-Regular-v0Jvxhj3.ttf            8,449.68 kB
+dist/panda-wiki-admin-assets/index-BAWdjCWF.css                                 3.00 kB │ gzip:   0.92 kB
+dist/panda-wiki-admin-assets/index-B0XFqDuM.css                                 9.43 kB │ gzip:   1.89 kB
+dist/panda-wiki-admin-assets/katex-DFPoQwGv.css                                30.20 kB │ gzip:   8.06 kB
+dist/panda-wiki-admin-assets/index-CeIjOBC5.css                                79.04 kB │ gzip:  18.50 kB
+dist/panda-wiki-admin-assets/index-DCEMwfSU.css                               152.06 kB │ gzip:  24.17 kB
+dist/panda-wiki-admin-assets/nodata-Dj4TMZb1.js                                 0.07 kB │ gzip:   0.09 kB
+dist/panda-wiki-admin-assets/katex.min-CgSvzpvd.js                              0.14 kB │ gzip:   0.15 kB
+dist/panda-wiki-admin-assets/ArrowForwardIos-BugMdLfl.js                        0.15 kB │ gzip:   0.15 kB
+dist/panda-wiki-admin-assets/union-Bb-xIYjT.js                                  0.16 kB │ gzip:   0.15 kB
+dist/panda-wiki-admin-assets/clone-BA2LOIZb.js                                  0.19 kB │ gzip:   0.18 kB
+dist/panda-wiki-admin-assets/Error-f3g04bjZ.js                                  0.19 kB │ gzip:   0.18 kB
+dist/panda-wiki-admin-assets/channel-DzEp7n37.js                                0.19 kB │ gzip:   0.18 kB
+dist/panda-wiki-admin-assets/TableChartOutlined-CF1_eAZg.js                     0.23 kB │ gzip:   0.20 kB
+dist/panda-wiki-admin-assets/chunk-55IACEB6-DSADV8Q5.js                         0.23 kB │ gzip:   0.21 kB
+dist/panda-wiki-admin-assets/init-GRbUuopv.js                                   0.24 kB │ gzip:   0.19 kB
+dist/panda-wiki-admin-assets/Tableau10-BP4b7qUi.js                              0.28 kB │ gzip:   0.25 kB
+dist/panda-wiki-admin-assets/chunk-QZHKN3VN-QCVjg8c2.js                         0.29 kB │ gzip:   0.22 kB
+dist/panda-wiki-admin-assets/has-DIsQiT9e.js                                    0.29 kB │ gzip:   0.22 kB
+dist/panda-wiki-admin-assets/index-BBVF7Tgw.js                                  0.36 kB │ gzip:   0.28 kB
+dist/panda-wiki-admin-assets/chunk-FMBD7UC4-CwJAyo33.js                         0.36 kB │ gzip:   0.27 kB
+dist/panda-wiki-admin-assets/index-Ce2--Iki.js                                  0.37 kB │ gzip:   0.29 kB
+dist/panda-wiki-admin-assets/useDebounceAppPreviewData-HDJfl9xj.js              0.37 kB │ gzip:   0.28 kB
+dist/panda-wiki-admin-assets/chunk-4BX2VUAB-BXa94l0t.js                         0.39 kB │ gzip:   0.26 kB
+dist/panda-wiki-admin-assets/index-D8k1gHk6.js                                  0.41 kB │ gzip:   0.33 kB
+dist/panda-wiki-admin-assets/useURLSearchParams-DrlKqeym.js                     0.43 kB │ gzip:   0.32 kB
+dist/panda-wiki-admin-assets/index-CBqzuMOM.js                                  0.43 kB │ gzip:   0.36 kB
+dist/panda-wiki-admin-assets/chunk-QN33PNHL-B3t8NuqK.js                         0.53 kB │ gzip:   0.37 kB
+dist/panda-wiki-admin-assets/file-open-7c801643-CSoDzaBp.js                     0.55 kB │ gzip:   0.38 kB
+dist/panda-wiki-admin-assets/file-open-002ab408-Q92OgXup.js                     0.63 kB │ gzip:   0.40 kB
+dist/panda-wiki-admin-assets/Ellipsis-044E5YOQ.js                               0.64 kB │ gzip:   0.46 kB
+dist/panda-wiki-admin-assets/directory-open-01563666-Bfcdvrjf.js                0.68 kB │ gzip:   0.42 kB
+dist/panda-wiki-admin-assets/file-save-3189631c-Bk2v-J_x.js                     0.82 kB │ gzip:   0.53 kB
+dist/panda-wiki-admin-assets/file-save-745eba88-CUNUVjnb.js                     0.95 kB │ gzip:   0.56 kB
+dist/panda-wiki-admin-assets/stateDiagram-v2-4FDKWEC3-BmXd-uSp.js               1.01 kB │ gzip:   0.55 kB
+dist/panda-wiki-admin-assets/classDiagram-2ON5EDUG-DurQ3kPq.js                  1.04 kB │ gzip:   0.56 kB
+dist/panda-wiki-admin-assets/classDiagram-v2-WZHVMYZB-DurQ3kPq.js               1.04 kB │ gzip:   0.56 kB
+dist/panda-wiki-admin-assets/subset-worker.chunk-NVJ6xTlU.js                    1.07 kB │ gzip:   0.60 kB
+dist/panda-wiki-admin-assets/index-DDI16NtL.js                                  1.12 kB │ gzip:   0.64 kB
+dist/panda-wiki-admin-assets/StyledCommon-D8o8B4mV.js                           1.24 kB │ gzip:   0.63 kB
+dist/panda-wiki-admin-assets/index-DUSMYxTa.js                                  1.28 kB │ gzip:   0.68 kB
+dist/panda-wiki-admin-assets/index-THbzpVde.js                                  1.31 kB │ gzip:   0.83 kB
+dist/panda-wiki-admin-assets/infoDiagram-WHAUD3N6-CCZtiaOf.js                   1.32 kB │ gzip:   0.73 kB
+dist/panda-wiki-admin-assets/pie-ByHuW-lx.js                                    1.33 kB │ gzip:   0.63 kB
+dist/panda-wiki-admin-assets/index-4LoXLVDM.js                                  1.38 kB │ gzip:   0.73 kB
+dist/panda-wiki-admin-assets/ordinal-CzvP-XYS.js                                1.40 kB │ gzip:   0.68 kB
+dist/panda-wiki-admin-assets/index-Bo_nL4OA.js                                  1.40 kB │ gzip:   0.75 kB
+dist/panda-wiki-admin-assets/index-DcRsxFqm.js                                  1.42 kB │ gzip:   0.69 kB
+dist/panda-wiki-admin-assets/chunk-TZMSLE5B-DD1PW2H6.js                         1.43 kB │ gzip:   0.63 kB
+dist/panda-wiki-admin-assets/band-CrcQ1EJy.js                                   1.45 kB │ gzip:   0.70 kB
+dist/panda-wiki-admin-assets/Table-CvCdpxYY.js                                  1.58 kB │ gzip:   0.90 kB
+dist/panda-wiki-admin-assets/index-DxM6z-L8.js                                  1.58 kB │ gzip:   0.75 kB
+dist/panda-wiki-admin-assets/svgDrawCommon-08f97a94-CYyDMl4Y.js                 1.59 kB │ gzip:   0.71 kB
+dist/panda-wiki-admin-assets/flowDiagram-v2-96b9c2cf-DgXlaJPv.js                1.64 kB │ gzip:   0.83 kB
+dist/panda-wiki-admin-assets/index-DwaLYhiT.js                                  1.65 kB │ gzip:   0.85 kB
+dist/panda-wiki-admin-assets/index-kqBbQafk.js                                  1.70 kB │ gzip:   0.90 kB
+dist/panda-wiki-admin-assets/directory-open-4ed118d0-o1Mk0y2t.js                1.71 kB │ gzip:   0.86 kB
+dist/panda-wiki-admin-assets/index-Cws3Une5.js                                  1.79 kB │ gzip:   0.88 kB
+dist/panda-wiki-admin-assets/SortableItem-CWCBe8Wk.js                           1.81 kB │ gzip:   0.97 kB
+dist/panda-wiki-admin-assets/debounce-ymtl4jxA.js                               1.83 kB │ gzip:   1.00 kB
+dist/panda-wiki-admin-assets/min-DU43aNnR.js                                    1.84 kB │ gzip:   0.99 kB
+dist/panda-wiki-admin-assets/index-CDKW3UGw.js                                  2.00 kB │ gzip:   1.01 kB
+dist/panda-wiki-admin-assets/index-DYRYsrY7.js                                  2.04 kB │ gzip:   1.03 kB
+dist/panda-wiki-admin-assets/index-044dtXZB.js                                  2.14 kB │ gzip:   1.10 kB
+dist/panda-wiki-admin-assets/index-ZySSAZ44.js                                  2.21 kB │ gzip:   0.88 kB
+dist/panda-wiki-admin-assets/index-ChRg98yo.js                                  2.44 kB │ gzip:   1.14 kB
+dist/panda-wiki-admin-assets/index-qonV58yX.js                                  2.63 kB │ gzip:   1.18 kB
+dist/panda-wiki-admin-assets/zipObject-SVHxjrJa.js                              2.71 kB │ gzip:   1.34 kB
+dist/panda-wiki-admin-assets/index-CnWxPPFZ.js                                  2.72 kB │ gzip:   1.24 kB
+dist/panda-wiki-admin-assets/roundRect-Bl5lWvvs.js                              3.33 kB │ gzip:   1.25 kB
+dist/panda-wiki-admin-assets/arc-C8Sg0s7l.js                                    3.68 kB │ gzip:   1.61 kB
+dist/panda-wiki-admin-assets/AddRecommendContent-DOxVEKUt.js                    3.76 kB │ gzip:   1.93 kB
+dist/panda-wiki-admin-assets/index-cDqgkCUG.js                                  3.86 kB │ gzip:   1.89 kB
+dist/panda-wiki-admin-assets/index-DFmE2573.js                                  4.03 kB │ gzip:   1.96 kB
+dist/panda-wiki-admin-assets/index--Cdt4FlS.js                                  4.13 kB │ gzip:   1.96 kB
+dist/panda-wiki-admin-assets/index-4TcGotno.js                                  4.21 kB │ gzip:   1.92 kB
+dist/panda-wiki-admin-assets/index-B9cJ10f0.js                                  4.21 kB │ gzip:   1.92 kB
+dist/panda-wiki-admin-assets/index-DU_-phZK.js                                  4.21 kB │ gzip:   1.92 kB
+dist/panda-wiki-admin-assets/index-CY8rqHpG.js                                  4.23 kB │ gzip:   1.93 kB
+dist/panda-wiki-admin-assets/index-D3hSn2_2.js                                  4.31 kB │ gzip:   2.03 kB
+dist/panda-wiki-admin-assets/index-CE8m_V9x.js                                  4.43 kB │ gzip:   1.76 kB
+dist/panda-wiki-admin-assets/staticFileUrl-CxzOEpST.js                          4.63 kB │ gzip:   2.04 kB
+dist/panda-wiki-admin-assets/index-Tur8Pwck.js                                  4.75 kB │ gzip:   2.07 kB
+dist/panda-wiki-admin-assets/pieDiagram-ADFJNKIX-Cm8_drnA.js                    4.77 kB │ gzip:   2.19 kB
+dist/panda-wiki-admin-assets/index-CUZmSM9F.js                                  4.89 kB │ gzip:   2.20 kB
+dist/panda-wiki-admin-assets/defaultLocale-BAh5bDOb.js                          5.03 kB │ gzip:   2.36 kB
+dist/panda-wiki-admin-assets/index-FxgUnYp6.js                                  5.03 kB │ gzip:   2.26 kB
+dist/panda-wiki-admin-assets/index-0glje86z.js                                  5.05 kB │ gzip:   2.07 kB
+dist/panda-wiki-admin-assets/customParseFormat-bTuou9yp.js                      5.06 kB │ gzip:   2.43 kB
+dist/panda-wiki-admin-assets/diagram-S2PKOQOG-CG4P5vkN.js                       5.07 kB │ gzip:   2.25 kB
+dist/panda-wiki-admin-assets/cose-bilkent-S5V4N54A-B9vstX-n.js                  5.10 kB │ gzip:   2.21 kB
+dist/panda-wiki-admin-assets/index-CG2Y42Zb.js                                  5.53 kB │ gzip:   2.42 kB
+dist/panda-wiki-admin-assets/index-DdDuV8zy.js                                  5.66 kB │ gzip:   2.60 kB
+dist/panda-wiki-admin-assets/stateDiagram-v2-d93cdb3a-DkDFy9me.js               5.91 kB │ gzip:   2.81 kB
+dist/panda-wiki-admin-assets/graph-DnY2PiMX.js                                  5.95 kB │ gzip:   2.00 kB
+dist/panda-wiki-admin-assets/_baseUniq-OdWSfSCg.js                              5.99 kB │ gzip:   2.55 kB
+dist/panda-wiki-admin-assets/classDiagram-v2-f2320105-BtS0SBCg.js               6.05 kB │ gzip:   2.70 kB
+dist/panda-wiki-admin-assets/index-DP3w9URx.js                                  6.17 kB │ gzip:   2.43 kB
+dist/panda-wiki-admin-assets/graph-M_usXgmD.js                                  6.18 kB │ gzip:   2.00 kB
+dist/panda-wiki-admin-assets/linear-DvM6izuV.js                                 6.39 kB │ gzip:   2.68 kB
+dist/panda-wiki-admin-assets/VersionPublish-DpiR-4E-.js                         6.52 kB │ gzip:   2.92 kB
+dist/panda-wiki-admin-assets/index-By65AsoY.js                                  6.70 kB │ gzip:   2.64 kB
+dist/panda-wiki-admin-assets/diagram-QEK2KX5R-DmN47Crf.js                       6.85 kB │ gzip:   2.91 kB
+dist/panda-wiki-admin-assets/index-BB2lCe6y.js                                  7.14 kB │ gzip:   3.13 kB
+dist/panda-wiki-admin-assets/index-Obg7yA7R.js                                  7.16 kB │ gzip:   2.54 kB
+dist/panda-wiki-admin-assets/index-CXcPbLku.js                                  7.68 kB │ gzip:   3.28 kB
+dist/panda-wiki-admin-assets/si-LK-N5RQ5JYF-RevgccWd.js                         9.27 kB │ gzip:   3.66 kB
+dist/panda-wiki-admin-assets/az-AZ-76LH7QW2-Cbaz63Gy.js                         9.29 kB │ gzip:   3.88 kB
+dist/panda-wiki-admin-assets/index-CxwX1Ojv.js                                  9.52 kB │ gzip:   2.46 kB
+dist/panda-wiki-admin-assets/sankeyLinkHorizontal-Cj_PTCMs.js                   9.70 kB │ gzip:   3.43 kB
+dist/panda-wiki-admin-assets/HeaderConfig-CR9AnNOV.js                           9.73 kB │ gzip:   3.35 kB
+dist/panda-wiki-admin-assets/zh-HK-E62DVLB3-Dj-fhP8P.js                         9.77 kB │ gzip:   4.40 kB
+dist/panda-wiki-admin-assets/infoDiagram-f8f76790-QGLnkYE5.js                   9.80 kB │ gzip:   3.77 kB
+dist/panda-wiki-admin-assets/classDiagram-70f12bd4-0M-rKyeV.js                 10.26 kB │ gzip:   3.34 kB
+dist/panda-wiki-admin-assets/index-CZpFk7mB.js                                 10.32 kB │ gzip:   4.15 kB
+dist/panda-wiki-admin-assets/styles-c10674c1-BeFGdnYv.js                       10.46 kB │ gzip:   3.88 kB
+dist/panda-wiki-admin-assets/FilePreview-D_qyjN8U.js                           10.64 kB │ gzip:   4.40 kB
+dist/panda-wiki-admin-assets/CusTabs-_0yl62Fv.js                               10.65 kB │ gzip:   4.10 kB
+dist/panda-wiki-admin-assets/kk-KZ-P5N5QNE5-BkfwlhiD.js                        10.81 kB │ gzip:   4.51 kB
+dist/panda-wiki-admin-assets/kaa-6HZHGXH3-CP-qYONN.js                          10.85 kB │ gzip:   4.48 kB
+dist/panda-wiki-admin-assets/stateDiagram-FKZM4ZOC-BRE3X9tl.js                 11.08 kB │ gzip:   3.96 kB
+dist/panda-wiki-admin-assets/stateDiagram-587899a1-DxIzTrOP.js                 11.31 kB │ gzip:   4.06 kB
+dist/panda-wiki-admin-assets/dagre-6UL2VRFP-DvkhE4Y9.js                        12.09 kB │ gzip:   4.60 kB
+dist/panda-wiki-admin-assets/index-3862675e-_sWnZaiy.js                        12.55 kB │ gzip:   4.37 kB
+dist/panda-wiki-admin-assets/lt-LT-XHIRWOB4-BteuL_Hf.js                        13.19 kB │ gzip:   5.66 kB
+dist/panda-wiki-admin-assets/sankeyDiagram-04a897e0-CWv6EFhN.js                14.32 kB │ gzip:   5.64 kB
+dist/panda-wiki-admin-assets/vi-VN-M7AON7JQ-CvWX3NyR.js                        14.55 kB │ gzip:   6.09 kB
+dist/panda-wiki-admin-assets/sankeyDiagram-TZEHDZUN-Bz9ndlMe.js                14.71 kB │ gzip:   5.74 kB
+dist/panda-wiki-admin-assets/da-DK-5WZEPLOC-C1tFFssv.js                        15.10 kB │ gzip:   6.36 kB
+dist/panda-wiki-admin-assets/pieDiagram-8a3498a8-BgH6qXVe.js                   15.14 kB │ gzip:   5.75 kB
+dist/panda-wiki-admin-assets/index-CkkNSRGw.js                                 15.73 kB │ gzip:   5.75 kB
+dist/panda-wiki-admin-assets/th-TH-HPSO5L25-DbBwV2xY.js                        16.21 kB │ gzip:   5.50 kB
+dist/panda-wiki-admin-assets/nn-NO-6E72VCQL-DgGYvX8w.js                        16.64 kB │ gzip:   7.01 kB
+dist/panda-wiki-admin-assets/diagram-PSM6KHXK-CU6KjNCV.js                      17.39 kB │ gzip:   6.33 kB
+dist/panda-wiki-admin-assets/nl-NL-IS3SIHDZ-DY9A64v5.js                        17.41 kB │ gzip:   7.22 kB
+dist/panda-wiki-admin-assets/my-MM-5M5IBNSE-hS3ikU_f.js                        18.26 kB │ gzip:   5.63 kB
+dist/panda-wiki-admin-assets/hu-HU-A5ZG7DT2-BHDCO7nj.js                        18.77 kB │ gzip:   7.89 kB
+dist/panda-wiki-admin-assets/fi-FI-Z5N7JZ37-Dxf6PUtX.js                        19.09 kB │ gzip:   7.82 kB
+dist/panda-wiki-admin-assets/kab-KAB-ZGHBKWFO-DmnowEVb.js                      19.47 kB │ gzip:   7.83 kB
+dist/panda-wiki-admin-assets/zh-TW-RAJ6MFWO-CLJXTGLO.js                        19.68 kB │ gzip:   9.20 kB
+dist/panda-wiki-admin-assets/zh-CN-LNUGB5OW-Dj43cSSw.js                        19.74 kB │ gzip:   9.22 kB
+dist/panda-wiki-admin-assets/lv-LV-5QDEKY6T-C3bU-IOS.js                        19.82 kB │ gzip:   8.09 kB
+dist/panda-wiki-admin-assets/gl-ES-HMX3MZ6V-BNoH56l_.js                        20.07 kB │ gzip:   8.05 kB
+dist/panda-wiki-admin-assets/tr-TR-DEFEU3FU-DosctqIU.js                        20.19 kB │ gzip:   8.27 kB
+dist/panda-wiki-admin-assets/cs-CZ-2BRQDIVT-2OUIcJZS.js                        20.21 kB │ gzip:   8.69 kB
+dist/panda-wiki-admin-assets/pt-PT-UZXXM6DQ-8D8EFhbH.js                        20.34 kB │ gzip:   8.09 kB
+dist/panda-wiki-admin-assets/id-ID-SAP4L64H-Dzc27CXZ.js                        20.37 kB │ gzip:   7.99 kB
+dist/panda-wiki-admin-assets/ca-ES-6MX7JW3Y-BBGyUYip.js                        20.48 kB │ gzip:   8.20 kB
+dist/panda-wiki-admin-assets/oc-FR-POXYY2M6-tOADHKds.js                        20.53 kB │ gzip:   8.12 kB
+dist/panda-wiki-admin-assets/nb-NO-T6EIAALU-BUN_uxfi.js                        20.79 kB │ gzip:   8.51 kB
+dist/panda-wiki-admin-assets/he-IL-6SHJWFNN-DxblPkdD.js                        21.01 kB │ gzip:   7.89 kB
+dist/panda-wiki-admin-assets/mindmap-definition-VGOIOE7T-Cf7Wyvv_.js           21.08 kB │ gzip:   7.34 kB
+dist/panda-wiki-admin-assets/bg-BG-XCXSNQG7-Doy9J9jk.js                        21.45 kB │ gzip:   7.70 kB
+dist/panda-wiki-admin-assets/kanban-definition-3W4ZIXB7-B0Rc74gx.js            21.53 kB │ gzip:   7.64 kB
+dist/panda-wiki-admin-assets/pt-BR-5N22H2LF-WlL9POpu.js                        21.73 kB │ gzip:   8.51 kB
+dist/panda-wiki-admin-assets/eu-ES-A7QVB2H4-CEqweNH6.js                        21.89 kB │ gzip:   8.53 kB
+dist/panda-wiki-admin-assets/es-ES-U4NZUMDT-BtABpAu5.js                        22.04 kB │ gzip:   8.78 kB
+dist/panda-wiki-admin-assets/sl-SI-NN7IZMDC-D327hAoA.js                        22.05 kB │ gzip:   8.86 kB
+dist/panda-wiki-admin-assets/sv-SE-XGPEYMSR-lHFwwpUL.js                        22.20 kB │ gzip:   8.86 kB
+dist/panda-wiki-admin-assets/FooterConfig-Bse6jzuH.js                          22.61 kB │ gzip:   5.83 kB
+dist/panda-wiki-admin-assets/it-IT-JPQ66NNP-GpFb9q7b.js                        22.75 kB │ gzip:   8.88 kB
+dist/panda-wiki-admin-assets/sk-SK-C5VTKIMK-C4YsLU2g.js                        23.00 kB │ gzip:   9.39 kB
+dist/panda-wiki-admin-assets/pl-PL-T2D74RX3-kGvAe7yh.js                        23.16 kB │ gzip:   9.52 kB
+dist/panda-wiki-admin-assets/index-BW2duz4B.js                                 23.26 kB │ gzip:   9.07 kB
+dist/panda-wiki-admin-assets/journeyDiagram-49397b02-CPiQnR2F.js               23.47 kB │ gzip:   8.37 kB
+dist/panda-wiki-admin-assets/ro-RO-JPDTUUEW-Db4NBG6M.js                        23.83 kB │ gzip:   9.24 kB
+dist/panda-wiki-admin-assets/flowDiagram-66a62f08-NFK_yIO7.js                  23.90 kB │ gzip:   8.06 kB
+dist/panda-wiki-admin-assets/de-DE-XR44H4JA-cC61Nhan.js                        24.03 kB │ gzip:   9.28 kB
+dist/panda-wiki-admin-assets/ja-JP-DBVTYXUO-BKLfZUmi.js                        24.09 kB │ gzip:   9.14 kB
+dist/panda-wiki-admin-assets/fr-FR-RHASNOE6-EamhN4aA.js                        24.13 kB │ gzip:   9.18 kB
+dist/panda-wiki-admin-assets/isoWeek-B80DJn7B.js                               24.16 kB │ gzip:   8.34 kB
+dist/panda-wiki-admin-assets/bn-BD-2XOGV67Q-DjATk1f1.js                        24.29 kB │ gzip:   7.02 kB
+dist/panda-wiki-admin-assets/mindmap-definition-fc14e90a-03KaCO1x.js           24.35 kB │ gzip:   8.37 kB
+dist/panda-wiki-admin-assets/timeline-definition-85554ec2-CgpQlgo7.js          24.37 kB │ gzip:   8.62 kB
+dist/panda-wiki-admin-assets/ko-KR-MTYHY66A-C6tsLaKA.js                        24.57 kB │ gzip:   9.50 kB
+dist/panda-wiki-admin-assets/journeyDiagram-XKPGCS4Q-BsCfpk58.js               24.65 kB │ gzip:   8.75 kB
+dist/panda-wiki-admin-assets/timeline-definition-IT6M3QCI-wkN8k9aK.js          24.91 kB │ gzip:   8.73 kB
+dist/panda-wiki-admin-assets/fa-IR-HGAKTJCU-C65TtoMm.js                        24.93 kB │ gzip:   8.78 kB
+dist/panda-wiki-admin-assets/gitGraphDiagram-NY62KEGX-DePKaKZI.js              25.52 kB │ gzip:   7.97 kB
+dist/panda-wiki-admin-assets/erDiagram-Q2GNP2WA-xj-b79Qv.js                    26.29 kB │ gzip:   9.25 kB
+dist/panda-wiki-admin-assets/ar-SA-G6X2FPQ2-C5gjKCdL.js                        26.35 kB │ gzip:   9.45 kB
+dist/panda-wiki-admin-assets/requirementDiagram-deff3bca-BNYrneyy.js           26.38 kB │ gzip:   9.17 kB
+dist/panda-wiki-admin-assets/styles-6aaf32cf-Di7LJzoQ.js                       27.46 kB │ gzip:   8.82 kB
+dist/panda-wiki-admin-assets/layout-ZK-I0_yK.js                                27.69 kB │ gzip:  10.10 kB
+dist/panda-wiki-admin-assets/layout-CaS-wjll.js                                28.32 kB │ gzip:  10.18 kB
+dist/panda-wiki-admin-assets/pa-IN-N4M65BXN-ChtDVl-2.js                        28.66 kB │ gzip:   8.30 kB
+dist/panda-wiki-admin-assets/ku-TR-6OUDTVRD-l5xkXiWG.js                        30.01 kB │ gzip:   9.60 kB
+dist/panda-wiki-admin-assets/el-GR-BZB4AONW-CKeEAC00.js                        30.36 kB │ gzip:   9.94 kB
+dist/panda-wiki-admin-assets/quadrantDiagram-120e2f19-Bjdluaw5.js              31.07 kB │ gzip:   9.03 kB
+dist/panda-wiki-admin-assets/requirementDiagram-UZGBJVZJ-DAVcmblL.js           31.23 kB │ gzip:   9.88 kB
+dist/panda-wiki-admin-assets/index-CcCaBYnn.js                                 31.28 kB │ gzip:  12.30 kB
+dist/panda-wiki-admin-assets/ru-RU-B4JR7IUQ-CrnnDbYh.js                        31.43 kB │ gzip:  10.22 kB
+dist/panda-wiki-admin-assets/uk-UA-QMV73CPH-CLDyvmFy.js                        32.33 kB │ gzip:  10.45 kB
+dist/panda-wiki-admin-assets/erDiagram-9861fffd-fMvRrVqZ.js                    32.53 kB │ gzip:  10.75 kB
+dist/panda-wiki-admin-assets/hi-IN-IWLTKZ5I-kay48igG.js                        33.04 kB │ gzip:   9.48 kB
+dist/panda-wiki-admin-assets/index-GLH4H6uc.js                                 33.67 kB │ gzip:  11.86 kB
+dist/panda-wiki-admin-assets/pica-C4V26jaf.js                                  33.81 kB │ gzip:  13.42 kB
+dist/panda-wiki-admin-assets/quadrantDiagram-AYHSOK5B-BHiVyPji.js              35.79 kB │ gzip:  10.57 kB
+dist/panda-wiki-admin-assets/edges-e0da2a9e-fIdgKIlf.js                        35.80 kB │ gzip:   9.44 kB
+dist/panda-wiki-admin-assets/ta-IN-2NMHFXQM-CY2po33K.js                        35.95 kB │ gzip:   8.89 kB
+dist/panda-wiki-admin-assets/ganttDiagram-c361ad54-Bz8kK2K8.js                 37.10 kB │ gzip:  12.37 kB
+dist/panda-wiki-admin-assets/chunk-DI55MBZ5-DeEy5XMd.js                        37.23 kB │ gzip:  12.08 kB
+dist/panda-wiki-admin-assets/km-KH-HSX4SM5Z-KS6q7Iy_.js                        37.33 kB │ gzip:   9.63 kB
+dist/panda-wiki-admin-assets/xychartDiagram-e933f94c-CZpLY-fp.js               38.34 kB │ gzip:  10.91 kB
+dist/panda-wiki-admin-assets/styles-9a916d00-B2pF0WqP.js                       38.95 kB │ gzip:  12.94 kB
+dist/panda-wiki-admin-assets/ganttDiagram-JELNMOA3-BVtLGUfY.js                 39.14 kB │ gzip:  13.09 kB
+dist/panda-wiki-admin-assets/blockDiagram-38ab4fdb-jmY7zouv.js                 39.65 kB │ gzip:  12.74 kB
+dist/panda-wiki-admin-assets/gitGraphDiagram-72cf32ee-CZcPbWji.js              40.51 kB │ gzip:  12.30 kB
+dist/panda-wiki-admin-assets/xychartDiagram-PRI3JC2R-CFZcNRoH.js               40.90 kB │ gzip:  11.52 kB
+dist/panda-wiki-admin-assets/mr-IN-CRQNXWMA-I7_pzXZD.js                        42.93 kB │ gzip:  11.03 kB
+dist/panda-wiki-admin-assets/chunk-B4BG7PRW-D9-m74iV.js                        45.75 kB │ gzip:  14.81 kB
+dist/panda-wiki-admin-assets/image-blob-reduce.esm-Cery8CHi.js                 47.56 kB │ gzip:  17.40 kB
+dist/panda-wiki-admin-assets/flowDb-956e92f1-C9TMR5WS.js                       47.92 kB │ gzip:  15.66 kB
+dist/panda-wiki-admin-assets/index-PyS_QAmX.js                                 48.65 kB │ gzip:  17.68 kB
+dist/panda-wiki-admin-assets/flowDiagram-NV44I4VS-DY-oD1EV.js                  62.06 kB │ gzip:  19.97 kB
+dist/panda-wiki-admin-assets/createText-2e5e7dd3-CMrjj7PT.js                   63.40 kB │ gzip:  19.11 kB
+dist/panda-wiki-admin-assets/DocAddByCustomText-CYDlHGKM.js                    68.89 kB │ gzip:  20.63 kB
+dist/panda-wiki-admin-assets/DeleteOutline-CzSgQLYY.js                         69.42 kB │ gzip:  21.37 kB
+dist/panda-wiki-admin-assets/c4Diagram-3d4e48cf-n0bBP2RK.js                    70.81 kB │ gzip:  20.02 kB
+dist/panda-wiki-admin-assets/c4Diagram-YG6GDRKO-D6cPl99E.js                    71.24 kB │ gzip:  20.09 kB
+dist/panda-wiki-admin-assets/blockDiagram-VD42YOAC-CkHkmLqp.js                 74.75 kB │ gzip:  21.34 kB
+dist/panda-wiki-admin-assets/vendor-react-CeOF_oFR.js                          77.65 kB │ gzip:  27.94 kB
+dist/panda-wiki-admin-assets/cytoscape-cose-bilkent-BUPq3TRx.js                79.44 kB │ gzip:  21.43 kB
+dist/panda-wiki-admin-assets/index-B-hD5exE.js                                 80.09 kB │ gzip:  30.90 kB
+dist/panda-wiki-admin-assets/index-DQjTRmHd.js                                 82.58 kB │ gzip:  29.69 kB
+dist/panda-wiki-admin-assets/index.esm-YOnEBAPw.js                             85.74 kB │ gzip:  29.26 kB
+dist/panda-wiki-admin-assets/sequenceDiagram-704730f1-DQlf4QpI.js              87.66 kB │ gzip:  25.44 kB
+dist/panda-wiki-admin-assets/sequenceDiagram-WL72ISMW-C0igx5En.js              99.51 kB │ gzip:  27.41 kB
+dist/panda-wiki-admin-assets/jszip.min-BsgwyeOQ.js                             99.89 kB │ gzip:  30.96 kB
+dist/panda-wiki-admin-assets/index-_H17eQ8G.js                                102.96 kB │ gzip:  32.06 kB
+dist/panda-wiki-admin-assets/index-BaVbKS1x.js                                121.34 kB │ gzip:  39.28 kB
+dist/panda-wiki-admin-assets/architectureDiagram-VXUJARFQ-BpOMpfD5.js         152.51 kB │ gzip:  43.53 kB
+dist/panda-wiki-admin-assets/index-CVpdU93K.js                                178.24 kB │ gzip:  56.37 kB
+dist/panda-wiki-admin-assets/index-xY98XQRr.js                                208.11 kB │ gzip:  55.86 kB
+dist/panda-wiki-admin-assets/Table-LqsHPliX.js                                273.80 kB │ gzip:  85.66 kB
+dist/panda-wiki-admin-assets/treemap-KMMF4GRG-DZOxTQs9.js                     351.25 kB │ gzip:  88.05 kB
+dist/panda-wiki-admin-assets/vendor-markdown-DYB7jINh.js                      381.58 kB │ gzip: 118.54 kB
+dist/panda-wiki-admin-assets/vendor-mui-GJ3RUBYy.js                           447.51 kB │ gzip: 134.82 kB
+dist/panda-wiki-admin-assets/cytoscape.esm-Ddied83B.js                        468.72 kB │ gzip: 150.17 kB
+dist/panda-wiki-admin-assets/index-CQpdOn8F.js                                519.76 kB │ gzip: 115.00 kB
+dist/panda-wiki-admin-assets/index-aPH2EHVU.js                                763.91 kB │ gzip: 203.24 kB
+dist/panda-wiki-admin-assets/index-BUr31mvs.js                                800.01 kB │ gzip: 277.95 kB
+dist/panda-wiki-admin-assets/index-CVi9-Ke1.js                                928.74 kB │ gzip: 302.97 kB
+dist/panda-wiki-admin-assets/vendor-echarts-wnhR3MT9.js                     1,094.69 kB │ gzip: 367.19 kB
+dist/panda-wiki-admin-assets/percentages-BXMCSKIN-48h-dd64.js               1,163.34 kB │ gzip: 380.67 kB
+dist/panda-wiki-admin-assets/vendor-editor-DqxkC6No.js                      1,326.14 kB │ gzip: 413.21 kB
+dist/panda-wiki-admin-assets/flowchart-elk-definition-4a651766-4fVFXQqa.js  1,575.45 kB │ gzip: 497.65 kB
+dist/panda-wiki-admin-assets/index.es-Cz3qR1ba.js                           1,704.32 kB │ gzip: 964.48 kB
+dist/panda-wiki-admin-assets/subset-shared.chunk-CjPoHZCn.js                1,826.36 kB │ gzip: 738.44 kB
+dist/panda-wiki-admin-assets/index-BL5DqOiN.js                              3,544.23 kB │ gzip: 922.90 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 8m 15s

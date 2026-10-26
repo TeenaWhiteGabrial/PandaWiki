@@ -322,15 +322,6 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(messageBuildStarted).Milliseconds()
 
 		u.logger.Debug("message:", log.Any("schema", messages))
-		for _, node := range rankedNodes {
-			chunkResult := domain.NodeContentChunkSSE{
-				NodeID:        node.NodeID,
-				Name:          node.NodeName,
-				Summary:       node.NodeSummary,
-				NodePathNames: node.NodePathNames,
-			}
-			eventCh <- domain.SSEEvent{Type: "chunk_result", ChunkResult: &chunkResult}
-		}
 		// 5. LLM inference (streaming callback), message storage, token statistics
 		answer := ""
 		usage := schema.TokenUsage{}
@@ -426,11 +417,66 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		trace.add("update_model_usage", "completed", nil, map[string]any{"total_tokens": usage.TotalTokens}, nil)
 		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(usageUpdateStarted).Milliseconds()
 
+		for _, node := range rankedNodesCitedByAnswer(answer, rankedNodes) {
+			chunkResult := domain.NodeContentChunkSSE{
+				NodeID:        node.NodeID,
+				Name:          node.NodeName,
+				Summary:       node.NodeSummary,
+				NodePathNames: node.NodePathNames,
+			}
+			eventCh <- domain.SSEEvent{Type: "chunk_result", ChunkResult: &chunkResult}
+		}
+
 		trace.finish("completed")
 		persistTrace()
 		eventCh <- domain.SSEEvent{Type: "done"}
 	}()
 	return eventCh, nil
+}
+
+func rankedNodesCitedByAnswer(answer string, nodes []*domain.RankedNodeChunks) []*domain.RankedNodeChunks {
+	answer = strings.TrimSpace(answerAfterReasoning(answer))
+	if isKnowledgeInsufficientAnswer(answer) {
+		return nil
+	}
+
+	cited := make([]*domain.RankedNodeChunks, 0, len(nodes))
+	seen := make(map[string]struct{}, len(nodes))
+	for _, node := range nodes {
+		if node == nil || node.NodeID == "" || !strings.Contains(answer, "node/"+node.NodeID) {
+			continue
+		}
+		if _, exists := seen[node.NodeID]; exists {
+			continue
+		}
+		seen[node.NodeID] = struct{}{}
+		cited = append(cited, node)
+	}
+	return cited
+}
+
+func answerAfterReasoning(answer string) string {
+	start := strings.LastIndex(answer, "<think>")
+	end := strings.LastIndex(answer, "</think>")
+	if start >= 0 && end < start {
+		return ""
+	}
+	if end >= 0 {
+		return answer[end+len("</think>"):]
+	}
+	return answer
+}
+
+func isKnowledgeInsufficientAnswer(answer string) bool {
+	for _, phrase := range []string{
+		"抱歉，我当前的知识不足以回答这个问题",
+		"抱歉，我的知识范围不足以回答这个问题",
+	} {
+		if strings.Contains(answer, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildFallbackAnswerFromRankedNodes(rankedNodes []*domain.RankedNodeChunks) string {
@@ -653,17 +699,30 @@ func (u *ChatUsecase) Search(ctx context.Context, req *domain.ChatSearchReq) (*d
 	}
 	for _, nodeInfo := range nodesMap {
 		resolvedPermissions, resolveErr := u.enterpriseUsecase.ResolveNodePermissions(ctx, nodeInfo)
-		if resolveErr == nil {
-			nodeInfo.Permissions = resolvedPermissions
+		if resolveErr != nil {
+			delete(nodesMap, nodeInfo.ID)
+			continue
 		}
+		if nodeInfo.NavId != "" {
+			if u.enterpriseUsecase.navRepo == nil {
+				delete(nodesMap, nodeInfo.ID)
+				continue
+			}
+			nav, navErr := u.enterpriseUsecase.navRepo.GetById(ctx, nodeInfo.NavId)
+			if navErr != nil || nav.KbID != req.KBID {
+				delete(nodesMap, nodeInfo.ID)
+				continue
+			}
+			resolvedPermissions = u.enterpriseUsecase.MergeNodeAndNavPermissions(resolvedPermissions, nav.Permissions)
+		}
+		nodeInfo.Permissions = resolvedPermissions
 	}
 
 	resp := domain.ChatSearchResp{}
 	for _, node := range rankedNodes {
-		if nodeInfo, ok := nodesMap[node.NodeID]; ok {
-			if !u.enterpriseUsecase.CanVisitable(nodeInfo.Permissions, shareAccess) {
-				continue
-			}
+		nodeInfo, ok := nodesMap[node.NodeID]
+		if !ok || !u.enterpriseUsecase.CanVisitable(nodeInfo.Permissions, shareAccess) {
+			continue
 		}
 
 		chunkResult := domain.NodeContentChunkSSE{

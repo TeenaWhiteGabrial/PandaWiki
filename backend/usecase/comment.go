@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -36,9 +37,23 @@ func NewCommentUsecase(commentRepo *pg.CommentRepository, logger *log.Logger,
 
 func (u *CommentUsecase) CreateComment(ctx context.Context, commentReq *domain.CommentReq, KbID string, remoteIP string,
 	status domain.CommentStatus, userID string) (string, error) {
-	// node
-	if _, err := u.NodeRepo.GetNodeByID(ctx, commentReq.NodeID); err != nil {
+	if userID == "" {
+		return "", fmt.Errorf("请登录后发表评论")
+	}
+	user, err := u.userRepo.GetUser(ctx, userID)
+	if err != nil {
 		return "", err
+	}
+	node, err := u.NodeRepo.GetNodeByID(ctx, commentReq.NodeID)
+	if err != nil {
+		return "", err
+	}
+	if node.KBID != KbID {
+		return "", fmt.Errorf("文档不属于当前知识库")
+	}
+	displayName := user.Name
+	if displayName == "" {
+		displayName = user.Account
 	}
 
 	// 构造结构体给下方数据库进行插入
@@ -53,7 +68,7 @@ func (u *CommentUsecase) CreateComment(ctx context.Context, commentReq *domain.C
 		PicUrls: commentReq.PicUrls,
 		NodeID:  commentReq.NodeID,
 		Info: domain.CommentInfo{
-			UserName: commentReq.UserName,
+			UserName: displayName,
 			RemoteIP: remoteIP,
 			UserID:   userID,
 		},

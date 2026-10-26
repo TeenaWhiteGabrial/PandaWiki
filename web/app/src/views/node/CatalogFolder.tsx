@@ -4,7 +4,7 @@ import { useStore } from '@/provider';
 import { useBasePath } from '@/hooks';
 import { addOpacityToColor } from '@/utils';
 import { Ellipsis } from '@ctzhian/ui';
-import { Box, Stack, useTheme, IconButton } from '@mui/material';
+import { Box, Chip, Stack, useTheme, IconButton } from '@mui/material';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -95,6 +95,14 @@ const CatalogFolder = ({ item, depth = 1 }: CatalogFolderProps) => {
                 <Ellipsis sx={{ flex: 1, width: 0, pr: 1 }}>
                   {item.name}
                 </Ellipsis>
+                {item.pathOnly && (
+                  <Chip
+                    label='仅定位'
+                    size='small'
+                    variant='outlined'
+                    sx={{ height: 20, fontSize: 11, flexShrink: 0 }}
+                  />
+                )}
               </Stack>
             </Link>
 

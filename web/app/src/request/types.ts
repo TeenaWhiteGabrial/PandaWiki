@@ -1072,6 +1072,7 @@ export interface DomainNodeListItemResp {
   nav_id?: string;
   parent_id?: string;
   permissions?: DomainNodePermissions;
+  path_only?: boolean;
   position?: number;
   publisher_id?: string;
   rag_info?: DomainRagInfo;
@@ -1107,6 +1108,7 @@ export interface DomainNodePermissions {
   visible?: ConstsNodeAccessPerm;
   /** 可被访问 */
   visitable?: ConstsNodeAccessPerm;
+  deny_descendant_overrides?: boolean;
 }
 
 export interface DomainNodeSummaryReq {
@@ -1228,6 +1230,7 @@ export interface DomainPWResponse {
   data?: unknown;
   message?: string;
   success?: boolean;
+  trace_id?: string;
 }
 
 export interface DomainPaginatedResultArrayDomainConversationMessageListItem {
@@ -1310,6 +1313,7 @@ export interface DomainShareNodeDetailItem {
   name?: string;
   parent_id?: string;
   permissions?: DomainNodePermissions;
+  path_only?: boolean;
   position?: number;
   type?: DomainNodeType;
   updated_at?: string;
@@ -1724,6 +1728,7 @@ export interface V1CrawlerResultsResp {
 }
 
 export interface V1CreateUserReq {
+  permission_level_id?: string;
   account: string;
   /** @minLength 8 */
   password: string;
@@ -1764,6 +1769,7 @@ export interface V1LoginReq {
 }
 
 export interface V1LoginResp {
+ password_change_required?: boolean;
   token?: string;
 }
 
@@ -1898,6 +1904,7 @@ export interface V1ShareNodeDetailResp {
   name?: string;
   parent_id?: string;
   permissions?: DomainNodePermissions;
+  path_only?: boolean;
   publisher_account?: string;
   publisher_id?: string;
   pv?: number;
@@ -1919,6 +1926,8 @@ export interface V1StatCountResp {
 }
 
 export interface V1UserInfoResp {
+  session_expires_at?: number;
+ password_change_required?: boolean;
   account?: string;
   created_at?: string;
   id?: string;

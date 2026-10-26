@@ -146,12 +146,18 @@ const Conversation = () => {
   }, [page, pageSize, subject, remoteIp, kb_id]);
 
   return (
-    <Card>
+    <Card
+      sx={{
+        height: 'calc(100vh - 80px)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       <Stack
         direction='row'
         alignItems={'center'}
         justifyContent={'space-between'}
-        sx={{ p: 2 }}
+        sx={{ p: 2, flexShrink: 0 }}
       >
         <Search />
       </Stack>
@@ -159,10 +165,31 @@ const Conversation = () => {
         columns={columns}
         dataSource={data}
         rowKey='id'
-        height='calc(100vh - 148px)'
+        height='calc(100vh - 168px)'
+        scrollY='calc(100vh - 272px)'
         size='small'
         sx={{
-          overflow: 'hidden',
+          minHeight: 0,
+          '& .ant-table-wrapper': {
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+          },
+          '& .ant-spin-nested-loading, & .ant-spin-container': {
+            height: '100%',
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+          },
+          '& .ant-table': {
+            flex: 1,
+            minHeight: 0,
+          },
+          '& .ant-table-pagination': {
+            marginBlockStart: 'auto',
+            flexShrink: 0,
+          },
         }}
         pagination={{
           total,

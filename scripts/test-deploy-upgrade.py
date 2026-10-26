@@ -15,6 +15,15 @@ project_name() { echo pandawiki; }
 docker() {
   echo "docker $*" >> "$CALL_LOG"
   case "$1" in
+    exec)
+      # Model an actual schema version rather than returning an empty string.
+      # Unknown versions must continue to block unsafe automatic rollback.
+      if [[ -f "${UP_COUNT}" ]]; then
+        printf '%s\n' "${SCHEMA_AFTER:-55}"
+      else
+        printf '%s\n' "${SCHEMA_BEFORE:-55}"
+      fi
+      ;;
     inspect)
       local container="${@: -1}"
       [[ "$container" != pandawiki-pdf-parser ]] || return 1
@@ -109,10 +118,41 @@ class UpgradeTest(unittest.TestCase):
         self.assertEqual(calls.count("compose rm -sf pdf-parser api consumer"), 1)
         self.assertFalse(any(line.startswith("docker rmi") for line in calls))
 
-    def test_base_upgrade_does_not_build(self):
+    def test_base_upgrade_builds_only_monitor_proxy(self):
         result, calls = self.run_upgrade(TEST_TARGET="base")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertFalse(any(line.startswith("compose build") for line in calls))
+        self.assertEqual([line for line in calls if line.startswith("compose build")], ["compose build nats-monitor"])
+
+    def test_security_migration_blocks_binary_only_rollback(self):
+        result, calls = self.run_upgrade(FAIL_UP="1", SCHEMA_AFTER="56")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("compose up -d --no-build --no-deps api consumer", calls)
+        self.assertFalse(any(line.startswith("docker rmi") for line in calls))
+
+    def test_unknown_schema_blocks_automatic_rollback(self):
+        result, calls = self.run_upgrade(FAIL_UP="1", SCHEMA_AFTER="unknown")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("compose up -d --no-build --no-deps api consumer", calls)
+        self.assertFalse(any(line.startswith("docker rmi") for line in calls))
+
+    def test_internal_credentials_generated_once_without_printing_secrets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / "deployment.env"
+            env_path.write_text("EXISTING=value\nPREVIEW_PASSWORD=\n")
+            command = 'source "$DEPLOY_SCRIPT"; ENV_FILE="$TEST_ENV_FILE"; ensure_internal_credentials'
+            env = dict(os.environ, DEPLOY_SCRIPT=str(DEPLOY_SCRIPT), TEST_ENV_FILE=str(env_path))
+            first = subprocess.run(["bash", "-c", command], env=env, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            contents = env_path.read_text()
+            values = dict(line.split("=", 1) for line in contents.splitlines() if "=" in line)
+            self.assertEqual(values["EXISTING"], "value")
+            for key in ["PREVIEW_PASSWORD", "NATS_MONITOR_PASSWORD"]:
+                self.assertRegex(values[key], r"^[0-9a-f]{48}$")
+                self.assertNotIn(values[key], first.stdout + first.stderr)
+            second = subprocess.run(["bash", "-c", command], env=env, capture_output=True, text=True)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertEqual(env_path.read_text(), contents)
+            self.assertEqual(env_path.stat().st_mode & 0o777, 0o600)
 
 
 if __name__ == "__main__":

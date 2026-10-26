@@ -57,7 +57,7 @@ func TestAdministratorLoginPostgres(t *testing.T) {
 			kbID := uuid.NewString()
 			tokenCtx := context.WithValue(context.Background(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{UserId: id, KBId: kbID, IsToken: true, Permission: consts.UserKBPermissionFullControl})
 			managementAccess, accessErr := enterprise.ManagementAccess(tokenCtx, kbID)
-			if accessErr != nil || managementAccess.Global != consts.IsAdministrator(role) {
+			if accessErr != nil || managementAccess.Global != consts.IsSuperAdmin(role) {
 				t.Fatalf("API token management access violates owner role: %v", accessErr)
 			}
 			token, err := u.VerifyUserAndGenerateToken(context.Background(), userV1.LoginReq{Account: user.Account, Password: "temporary-test-password"})

@@ -61,7 +61,9 @@ func (u *APITokenUsecase) CreateMCPToken(ctx context.Context, userID string, req
 	if err := u.repo.Create(ctx, model); err != nil {
 		return nil, err
 	}
-	return toAPITokenListItem(model), nil
+	result := toAPITokenListItem(model)
+	result.Token = tokenValue // Only this create response can reveal the raw credential.
+	return result, nil
 }
 
 func (u *APITokenUsecase) ListMCPToken(ctx context.Context, userID, kbID string) ([]tokenV1.APITokenListItem, error) {
@@ -93,7 +95,7 @@ func toAPITokenListItem(token *domain.APIToken) *tokenV1.APITokenListItem {
 	return &tokenV1.APITokenListItem{
 		ID:         token.ID,
 		Name:       token.Name,
-		Token:      token.Token,
+		TokenHint:  token.TokenHint,
 		Permission: token.Permission,
 		CreatedAt:  token.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:  token.UpdatedAt.Format(time.RFC3339),

@@ -1,6 +1,7 @@
 import { ITreeItem } from '@/api';
 import { type DragTreeHandle } from '@/components/Drag/DragTree';
 import { postApiV1NodeRestudy } from '@/request/Node';
+import { getNodePermissionOptions } from '@/request/NodeManagement';
 import { DomainNodeListItemResp } from '@/request/types';
 import { useAppSelector } from '@/store';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
@@ -17,6 +18,14 @@ import {
   removeDeep,
   reopenFolders,
 } from './utils';
+import { addDocumentPermissionTags } from '../../utils/permissionTags';
+import type { PermissionAudienceCatalog } from '../../utils/permissionTags';
+
+const emptyPermissionCatalog = (): PermissionAudienceCatalog => ({
+  departments: {},
+  levels: {},
+  users: {},
+});
 
 const DocPageListContainer = ({
   groups,
@@ -48,6 +57,44 @@ const DocPageListContainer = ({
   const [key, setKey] = useState<string | null>(null);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [isBatch, setIsBatch] = useState(false);
+  const permissionCatalogRef = useRef<PermissionAudienceCatalog>(
+    emptyPermissionCatalog(),
+  );
+
+  useEffect(() => {
+    if (!kb_id) return;
+    let active = true;
+    permissionCatalogRef.current = emptyPermissionCatalog();
+    getNodePermissionOptions(kb_id)
+      .then(options => {
+        const catalog: PermissionAudienceCatalog = {
+          departments: Object.fromEntries(
+            [
+              ...(options.departments || []),
+              ...(options.management_departments || []),
+            ].map(item => [item.id, item.name] as const),
+          ),
+          levels: Object.fromEntries(
+            (options.levels || []).map(item => [item.id, item.name] as const),
+          ),
+          users: Object.fromEntries(
+            [...(options.users || []), ...(options.management_users || [])].map(
+              item => [item.id, item.name || item.account] as const,
+            ),
+          ),
+        };
+        permissionCatalogRef.current = catalog;
+        if (active) {
+          setData(previous => addDocumentPermissionTags(previous, catalog));
+        }
+      })
+      .catch(() => {
+        // Keep generic permission tags visible if the audience catalog is unavailable.
+      });
+    return () => {
+      active = false;
+    };
+  }, [kb_id]);
 
   const getOperationData = useCallback(
     (item: ITreeItem): DomainNodeListItemResp[] => {
@@ -155,7 +202,13 @@ const DocPageListContainer = ({
     const nodeList = curGroup?.list || [];
     setList(nodeList);
     const openIds = collectOpenFolderIds(data);
-    const collapsedAll = collapseAllFolders(convertToTree(nodeList), true);
+    const collapsedAll = collapseAllFolders(
+      addDocumentPermissionTags(
+        convertToTree(nodeList),
+        permissionCatalogRef.current,
+      ),
+      true,
+    );
     const next = openIds.size
       ? reopenFolders(collapsedAll, openIds)
       : collapsedAll;

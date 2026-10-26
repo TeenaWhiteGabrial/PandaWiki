@@ -987,9 +987,17 @@ func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*doma
 
 	for i, node := range nodes {
 		resolvedPermissions, resolveErr := u.nodeUsecase.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
-		if resolveErr == nil {
-			node.Permissions = resolvedPermissions
+		if resolveErr != nil {
+			continue
 		}
+		if node.NavId != "" {
+			nav, navErr := u.navRepo.GetById(ctx, node.NavId)
+			if navErr != nil {
+				continue
+			}
+			resolvedPermissions = u.nodeUsecase.enterprise.MergeNodeAndNavPermissions(resolvedPermissions, nav.Permissions)
+		}
+		node.Permissions = resolvedPermissions
 
 		if u.nodeUsecase.enterprise.CanVisible(node.Permissions, shareAccess) {
 			filteredNodes = append(filteredNodes, nodes[i])
@@ -1009,9 +1017,17 @@ func (u *AppUsecase) filterNodesByPermissions(ctx context.Context, nodes []*doma
 					node.RecommendNodes[i2].ParentID,
 					node.RecommendNodes[i2].Permissions,
 				)
-				if resolveErr == nil {
-					node.RecommendNodes[i2].Permissions = resolvedChildPermissions
+				if resolveErr != nil {
+					continue
 				}
+				if node.RecommendNodes[i2].NavId != "" {
+					nav, navErr := u.navRepo.GetById(ctx, node.RecommendNodes[i2].NavId)
+					if navErr != nil {
+						continue
+					}
+					resolvedChildPermissions = u.nodeUsecase.enterprise.MergeNodeAndNavPermissions(resolvedChildPermissions, nav.Permissions)
+				}
+				node.RecommendNodes[i2].Permissions = resolvedChildPermissions
 				if u.nodeUsecase.enterprise.CanVisible(node.RecommendNodes[i2].Permissions, shareAccess) {
 					newFileNodes = append(newFileNodes, node.RecommendNodes[i2])
 				}

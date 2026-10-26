@@ -194,11 +194,11 @@ function parseRoutes(content) {
 }
 
 /**
- * 更新 index.html 中的路由列表
+ * 更新 bootstrap.js 中的路由列表
  */
 function updateIndexHtml() {
   const routerPath = resolve(__dirname, '../src/router.tsx');
-  const indexPath = resolve(__dirname, '../index.html');
+  const indexPath = resolve(__dirname, '../public/bootstrap.js');
 
   // 读取 router.tsx 文件
   const routerContent = readFileSync(routerPath, 'utf-8');
@@ -218,7 +218,7 @@ function updateIndexHtml() {
   const uniqueRoutes = [...new Set(extractedRoutes)];
   const sortedRoutes = sortRoutesBySpecificity(uniqueRoutes);
 
-  // 读取 index.html
+  // 读取独立的同源启动脚本
   const htmlContent = readFileSync(indexPath, 'utf-8');
 
   // 生成新的路由数组字符串

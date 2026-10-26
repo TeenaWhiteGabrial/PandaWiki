@@ -24,6 +24,8 @@ export interface DepartmentTreeSelectProps {
   placeholder?: string;
   disabled?: boolean;
   excludeIds?: string[];
+  /** Show descendants as inherited selections when an ancestor is selected. */
+  cascadeDisplay?: boolean;
   error?: boolean;
   helperText?: string;
   size?: 'small' | 'medium';
@@ -53,23 +55,28 @@ const formatSelectedNames = (items: Department[], multiple: boolean) => {
 const DepartmentTreeItem = ({
   dept,
   selectedIds,
+  inheritedSelectedIds,
   excludeIds,
   onSelect,
 }: {
   dept: Department;
   selectedIds: string[];
+  inheritedSelectedIds: Set<string>;
   excludeIds: Set<string>;
   onSelect: (id: string) => void;
 }) => {
   const isSelected = selectedIds.includes(dept.id);
+  const isInheritedSelected = !isSelected && inheritedSelectedIds.has(dept.id);
   const isExcluded = excludeIds.has(dept.id);
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!isExcluded) onSelect(dept.id);
+      if ((!isExcluded && !isInheritedSelected) || isSelected) {
+        onSelect(dept.id);
+      }
     },
-    [isExcluded, onSelect, dept.id],
+    [isExcluded, isInheritedSelected, isSelected, onSelect, dept.id],
   );
 
   return (
@@ -82,19 +89,23 @@ const DepartmentTreeItem = ({
             alignItems: 'center',
             gap: 0.5,
             py: 0.25,
-            opacity: isExcluded ? 0.5 : 1,
-            cursor: isExcluded ? 'not-allowed' : 'pointer',
+            opacity: isExcluded || isInheritedSelected ? 0.65 : 1,
+            cursor:
+              isExcluded || isInheritedSelected ? 'not-allowed' : 'pointer',
           }}
           onClick={handleClick}
         >
           <Checkbox
             size='small'
-            checked={isSelected}
-            disabled={isExcluded}
+            checked={isSelected || isInheritedSelected}
+            disabled={isExcluded || isInheritedSelected}
             onClick={handleClick}
             sx={{ p: 0.25 }}
           />
-          <Typography variant='body2'>{dept.name}</Typography>
+          <Typography variant='body2'>
+            {dept.name}
+            {isInheritedSelected ? '（随上级授权）' : ''}
+          </Typography>
         </Box>
       }
     >
@@ -104,6 +115,7 @@ const DepartmentTreeItem = ({
               key={child.id}
               dept={child}
               selectedIds={selectedIds}
+              inheritedSelectedIds={inheritedSelectedIds}
               excludeIds={excludeIds}
               onSelect={onSelect}
             />
@@ -127,6 +139,7 @@ const DepartmentTreeSelect = forwardRef<
       placeholder = '请选择部门',
       disabled = false,
       excludeIds = [],
+      cascadeDisplay = false,
       error,
       helperText,
       size = 'small',
@@ -154,11 +167,30 @@ const DepartmentTreeSelect = forwardRef<
       () => formatSelectedNames(selectedItems, multiple),
       [selectedItems, multiple],
     );
+    const inheritedSelectedIds = useMemo(() => {
+      if (!cascadeDisplay || !value.length) return new Set<string>();
+      const selected = new Set(value);
+      const departmentByID = new Map(
+        flatDepartments.map(department => [department.id, department]),
+      );
+      const inherited = new Set<string>();
+      for (const department of flatDepartments) {
+        let parentID = department.parent_id;
+        while (parentID) {
+          if (selected.has(parentID)) {
+            inherited.add(department.id);
+            break;
+          }
+          parentID = departmentByID.get(parentID)?.parent_id;
+        }
+      }
+      return inherited;
+    }, [cascadeDisplay, flatDepartments, value]);
 
     const handleSelect = useCallback(
       (nodeId: string) => {
         if (disabled) return;
-        if (excludeIdSet.has(nodeId)) return;
+        if (excludeIdSet.has(nodeId) && !value.includes(nodeId)) return;
 
         let newValue: string[];
         if (!multiple) {
@@ -308,6 +340,7 @@ const DepartmentTreeSelect = forwardRef<
                   key={dept.id}
                   dept={dept}
                   selectedIds={value}
+                  inheritedSelectedIds={inheritedSelectedIds}
                   excludeIds={excludeIdSet}
                   onSelect={handleSelect}
                 />

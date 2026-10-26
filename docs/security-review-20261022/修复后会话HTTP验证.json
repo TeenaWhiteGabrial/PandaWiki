@@ -1,0 +1,140 @@
+[
+  {
+    "label": "dedicated account login",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "authenticated user info",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "server logout",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "logout replay denied: /api/v1/user",
+    "status": 401,
+    "code": 40101,
+    "passed": true
+  },
+  {
+    "label": "logout replay denied: /share/v1/auth/user",
+    "status": 401,
+    "code": 40101,
+    "passed": true
+  },
+  {
+    "label": "dedicated account login",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "idle timeout",
+    "status": 401,
+    "code": 40101,
+    "passed": true
+  },
+  {
+    "label": "dedicated account login",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "absolute expiry",
+    "status": 401,
+    "code": 40101,
+    "passed": true
+  },
+  {
+    "label": "dedicated account login",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "initial password business guard",
+    "status": 403,
+    "code": 40302,
+    "passed": true
+  },
+  {
+    "label": "weak replacement rejected",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "own password rotation",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "old session invalidated by rotation",
+    "status": 401,
+    "code": 40101,
+    "passed": true
+  },
+  {
+    "label": "dedicated account login",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "create one-time MCP key",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "MCP list excludes credential",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "MCP raw key authenticates",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "delete MCP key",
+    "status": 200,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "deleted MCP key rejected",
+    "status": 401,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "restricted document comments denied",
+    "status": 200,
+    "code": 40003,
+    "passed": true
+  },
+  {
+    "label": "comment rate limit before captcha/write",
+    "status": 429,
+    "code": 0,
+    "passed": true
+  },
+  {
+    "label": "anonymous comment denied before captcha or insert",
+    "status": 401,
+    "code": 0,
+    "passed": true
+  }
+]

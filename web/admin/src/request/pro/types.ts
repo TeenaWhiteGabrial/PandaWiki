@@ -163,6 +163,7 @@ export interface DomainPWResponse {
   data?: unknown;
   message?: string;
   success?: boolean;
+  trace_id?: string;
 }
 
 export interface DomainPrompt {
@@ -553,6 +554,7 @@ export type GithubComChaitinPandaWikiProApiShareV1WecomCallbackResp = Record<
 >;
 
 export interface GithubComChaitinPandaWikiProApiTokenV1APITokenListItem {
+ token_hint?: string;
   created_at?: string;
   id?: string;
   name?: string;

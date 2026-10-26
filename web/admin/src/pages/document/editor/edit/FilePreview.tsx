@@ -1,7 +1,9 @@
 import { V1NodeDetailResp } from '@/request/types';
+import { getApiV1FileDownloadUrl } from '@/request/File';
 import { resolveStaticFileUrl } from '@/utils/staticFileUrl';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
+import FileStorageInfo from './FileStorageInfo';
 
 interface FilePreviewProps {
   detail: V1NodeDetailResp;
@@ -82,6 +84,7 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
   const fileType = getFileType(detail);
   const fileName = detail.meta?.file_name || detail.name || '原始文件';
   const [fileUrl, setFileUrl] = useState('');
+  const [downloadUrl, setDownloadUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
   const effectivePreviewUrl = previewUrl || fileUrl;
   const canImagePreview = IMAGE_PREVIEW_TYPES.has(fileType);
@@ -95,6 +98,7 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
   useEffect(() => {
     let cancelled = false;
     setFileUrl('');
+    setDownloadUrl('');
     setPreviewUrl('');
 
     resolveStaticFileUrl(fileKey)
@@ -108,6 +112,22 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
           setFileUrl('');
         }
       });
+
+    if (fileKey && !/^(https?:|blob:|data:)/i.test(fileKey)) {
+      getApiV1FileDownloadUrl({
+        key: fileKey.replace(/^\/+/, ''),
+        attachment: true,
+        filename: fileName,
+      })
+        .then(({ url }) => {
+          if (!cancelled) setDownloadUrl(url);
+        })
+        .catch(() => {
+          if (!cancelled) setDownloadUrl('');
+        });
+    } else if (fileKey) {
+      setDownloadUrl(fileKey);
+    }
 
     if (previewKey) {
       resolveStaticFileUrl(previewKey)
@@ -126,7 +146,7 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
     return () => {
       cancelled = true;
     };
-  }, [fileKey, previewKey]);
+  }, [fileKey, fileName, previewKey]);
 
   return (
     <Stack
@@ -158,12 +178,18 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
             当前文件仅支持预览和下载，不支持在线编辑
           </Typography> */}
         </Box>
-        {fileUrl && (
-          <Button href={fileUrl} target='_blank' rel='noreferrer'>
+        {(downloadUrl || fileUrl) && (
+          <Button
+            href={downloadUrl || fileUrl}
+            target={downloadUrl ? undefined : '_blank'}
+            rel='noreferrer'
+          >
             下载原文件
           </Button>
         )}
       </Stack>
+
+      <FileStorageInfo fileKey={fileKey} />
 
       {!effectivePreviewUrl ? (
         <Stack
@@ -237,7 +263,7 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
             component='iframe'
             src={effectivePreviewUrl}
             title={fileName}
-            sandbox={fileType === 'html' || fileType === 'htm' ? '' : undefined}
+            sandbox='allow-downloads'
             sx={{
               width: '100%',
               flexGrow: 1,

@@ -2,8 +2,10 @@ package s3
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -23,6 +25,7 @@ type MinioClient struct {
 	bucket       string
 	objectPrefix string
 	downloadURL  string
+	storageType  string
 }
 
 func NewMinioClient(appConfig *config.Config) (*MinioClient, error) {
@@ -68,12 +71,22 @@ func NewMinioClient(appConfig *config.Config) (*MinioClient, error) {
 		}
 	}
 
-	return &MinioClient{
+	storageType := strings.ToLower(strings.TrimSpace(storage.Type))
+	if storageType != "oss" && storageType != "minio" {
+		if strings.Contains(strings.ToLower(storage.Endpoint), "minio") {
+			storageType = "minio"
+		} else {
+			storageType = "oss"
+		}
+	}
+	result := &MinioClient{
 		client:       client,
 		bucket:       bucket,
 		objectPrefix: prefix,
 		downloadURL:  strings.TrimRight(storage.DownloadURL, "/"),
-	}, nil
+		storageType:  storageType,
+	}
+	return result, nil
 }
 
 func normalizeEndpoint(raw string) (string, bool, error) {
@@ -106,7 +119,10 @@ func (c *MinioClient) physicalObject(object string) string {
 }
 
 func (c *MinioClient) PutObject(ctx context.Context, _ string, object string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
-	info, err := c.client.PutObject(ctx, c.bucket, c.physicalObject(object), reader, size, opts)
+	if err := c.ensurePrivateMinioBucket(ctx); err != nil {
+		return minio.UploadInfo{}, err
+	}
+	info, err := c.client.PutObject(ctx, c.bucket, c.physicalObject(object), reader, size, privateObjectOptions(opts))
 	if err == nil {
 		info.Bucket = c.bucket
 		info.Key = strings.TrimLeft(object, "/")
@@ -114,10 +130,118 @@ func (c *MinioClient) PutObject(ctx context.Context, _ string, object string, re
 	return info, err
 }
 
+// MinIO does not implement per-object ACLs. Refuse private-document writes to
+// an anonymously readable bucket instead of silently relying on x-amz-acl.
+// The application's image/display-asset path is intentionally separate.
+func (c *MinioClient) ensurePrivateMinioBucket(ctx context.Context) error {
+	if c.storageType != "minio" {
+		return nil
+	}
+	policy, err := c.client.GetBucketPolicy(ctx, c.bucket)
+	if err != nil {
+		if minio.ToErrorResponse(err).Code == "NoSuchBucketPolicy" {
+			return nil
+		}
+		return fmt.Errorf("cannot verify private MinIO bucket policy: %w", err)
+	}
+	if strings.TrimSpace(policy) == "" {
+		return nil
+	}
+	var document struct {
+		Statement []struct {
+			Effect       string
+			Principal    json.RawMessage
+			NotPrincipal json.RawMessage
+			Action       json.RawMessage
+		}
+	}
+	if err := json.Unmarshal([]byte(policy), &document); err != nil {
+		return fmt.Errorf("cannot verify MinIO bucket policy: %w", err)
+	}
+	for _, statement := range document.Statement {
+		if !strings.EqualFold(statement.Effect, "Allow") {
+			continue
+		}
+		// Reject any public-read statement conservatively, even if its resource
+		// is narrower. It is unsafe to claim an object ACL makes such a bucket private.
+		var principal any
+		if err := json.Unmarshal(statement.Principal, &principal); err != nil && len(statement.NotPrincipal) == 0 {
+			return fmt.Errorf("cannot verify MinIO principal")
+		}
+		public := len(statement.NotPrincipal) > 0
+		switch value := principal.(type) {
+		case string:
+			public = public || value == "*"
+		case map[string]any:
+			for _, entry := range value {
+				if entry == "*" {
+					public = true
+				}
+				if list, ok := entry.([]any); ok {
+					for _, member := range list {
+						if member == "*" {
+							public = true
+						}
+					}
+				}
+			}
+		}
+		if !public {
+			continue
+		}
+		var actions any
+		if err := json.Unmarshal(statement.Action, &actions); err != nil {
+			return fmt.Errorf("cannot verify MinIO actions")
+		}
+		entries, ok := actions.([]any)
+		if !ok {
+			entries = []any{actions}
+		}
+		for _, entry := range entries {
+			action, _ := entry.(string)
+			matches, _ := path.Match(strings.ToLower(action), "s3:getobject")
+			if action == "*" || matches {
+				return fmt.Errorf("MinIO bucket permits anonymous reads; configure a private document bucket before uploading")
+			}
+		}
+	}
+	return nil
+}
+
+// privateObjectOptions applies to documents, imports, previews and generated ZIPs.
+// S3 ACL/grant headers from a caller cannot broaden a managed document's ACL.
+func privateObjectOptions(opts minio.PutObjectOptions) minio.PutObjectOptions {
+	metadata := make(map[string]string, len(opts.UserMetadata)+1)
+	for key, value := range opts.UserMetadata {
+		lower := strings.ToLower(key)
+		if lower == "x-amz-acl" || strings.HasPrefix(lower, "x-amz-grant-") {
+			continue
+		}
+		metadata[key] = value
+	}
+	metadata["X-Amz-Acl"] = "private"
+	opts.UserMetadata = metadata
+	return opts
+}
+
+// PutDisplayImage preserves the existing ACL behavior of validated display
+// assets (e.g. the login-page logo). Documents must always use PutObject.
+func (c *MinioClient) PutDisplayImage(ctx context.Context, object string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
+	info, err := c.client.PutObject(ctx, c.bucket, c.physicalObject(object), reader, size, opts)
+	info.Key = strings.TrimLeft(object, "/")
+	return info, err
+}
+
 // PresignedPutURL returns a short-lived URL that allows the browser to upload
 // an object directly to the configured S3-compatible storage.
 func (c *MinioClient) PresignedPutURL(ctx context.Context, object string, expires time.Duration) (string, error) {
-	result, err := c.client.PresignedPutObject(ctx, c.bucket, c.physicalObject(object), expires)
+	if err := c.ensurePrivateMinioBucket(ctx); err != nil {
+		return "", err
+	}
+	// Bind the download-only MIME type into the upload signature. A client
+	// cannot turn a staged archive into an inline HTML object by spoofing MIME.
+	headers := http.Header{"Content-Type": []string{"application/octet-stream"}, "X-Amz-Acl": []string{"private"}}
+	result, err := c.client.PresignHeader(ctx, http.MethodPut, c.bucket, c.physicalObject(object), expires, nil, headers)
 	if err != nil {
 		return "", err
 	}
@@ -147,11 +271,17 @@ func (c *MinioClient) UploadMultipartPart(ctx context.Context, object, uploadID 
 
 // MultipartUpload starts an S3 multipart upload and returns its opaque ID.
 func (c *MinioClient) MultipartUpload(ctx context.Context, object string) (string, error) {
+	if err := c.ensurePrivateMinioBucket(ctx); err != nil {
+		return "", err
+	}
 	core := minio.Core{Client: c.client}
-	return core.NewMultipartUpload(ctx, c.bucket, c.physicalObject(object), minio.PutObjectOptions{})
+	return core.NewMultipartUpload(ctx, c.bucket, c.physicalObject(object), privateObjectOptions(minio.PutObjectOptions{ContentType: "application/octet-stream", ContentDisposition: "attachment"}))
 }
 
 func (c *MinioClient) CompleteMultipartUpload(ctx context.Context, object, uploadID string, parts []minio.CompletePart) error {
+	if err := c.ensurePrivateMinioBucket(ctx); err != nil {
+		return err
+	}
 	core := minio.Core{Client: c.client}
 	_, err := core.CompleteMultipartUpload(ctx, c.bucket, c.physicalObject(object), uploadID, parts, minio.PutObjectOptions{})
 	return err
@@ -180,11 +310,52 @@ func (c *MinioClient) GetObject(ctx context.Context, _ string, object string, op
 }
 
 func (c *MinioClient) SignURL(ctx context.Context, _ string, object string, expires time.Duration) (string, error) {
-	result, err := c.client.PresignedGetObject(ctx, c.bucket, c.physicalObject(object), expires, nil)
+	url, _, err := c.SignURLWithStorageType(ctx, object, expires)
+	return url, err
+}
+
+// SignDownloadURL returns a signed object URL that asks the browser to
+// download the file instead of rendering it inline.
+func (c *MinioClient) SignDownloadURL(ctx context.Context, object, filename string, expires time.Duration) (string, error) {
+	filename = path.Base(strings.TrimSpace(filename))
+	if filename == "." || filename == "/" || filename == "" {
+		filename = path.Base(object)
+	}
+	params := url.Values{}
+	params.Set("response-content-disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
+	result, err := c.client.PresignedGetObject(ctx, c.bucket, c.physicalObject(object), expires, params)
 	if err != nil {
 		return "", err
 	}
 	return result.String(), nil
+}
+
+func (c *MinioClient) SignURLWithStorageType(ctx context.Context, object string, expires time.Duration) (string, string, error) {
+	result, err := c.client.PresignedGetObject(ctx, c.bucket, c.physicalObject(object), expires, nil)
+	if err != nil {
+		return "", "", err
+	}
+	return result.String(), c.Type(), nil
+}
+
+func (c *MinioClient) Type() string {
+	if c == nil || c.storageType == "" {
+		return "minio"
+	}
+	return c.storageType
+}
+
+func (c *MinioClient) ObjectExists(ctx context.Context, object string) (bool, error) {
+	_, err := c.client.StatObject(ctx, c.bucket, c.physicalObject(object), minio.StatObjectOptions{})
+	if err != nil && isObjectNotFound(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func isObjectNotFound(err error) bool {
+	response := minio.ToErrorResponse(err)
+	return response.StatusCode == http.StatusNotFound || response.Code == "NoSuchKey" || response.Code == "NoSuchObject"
 }
 
 func (c *MinioClient) RemoveObject(ctx context.Context, object string) error {
@@ -196,6 +367,12 @@ func (c *MinioClient) PublicURL(object string) string {
 		return ""
 	}
 	return c.downloadURL + "/" + c.physicalObject(object)
+}
+
+// ObjectLocation returns the bucket and physical object key used by the
+// configured storage backend. It does not include credentials or a signature.
+func (c *MinioClient) ObjectLocation(object string) string {
+	return c.bucket + "/" + c.physicalObject(object)
 }
 
 func (c *MinioClient) IsPublicURL(rawURL string) bool {

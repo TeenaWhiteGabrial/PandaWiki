@@ -35,6 +35,7 @@ type TablePagination = {
 export type TableProps<T> = {
   showHeader?: boolean;
   height?: number | string;
+  scrollY?: number | string;
   virtual?: boolean;
   columns: ColumnsType<T>;
   dataSource: T[];
@@ -56,6 +57,7 @@ type AntdTableProps<T> = Pick<
   | 'columns'
   | 'dataSource'
   | 'height'
+  | 'scrollY'
   | 'rowKey'
   | 'size'
   | 'pagination'
@@ -100,6 +102,7 @@ export const AntdTable = ({
   columns,
   dataSource,
   height,
+  scrollY,
   rowKey = 'id',
   size = 'medium',
   pagination,
@@ -151,6 +154,7 @@ export const AntdTable = ({
         rowKey={rowKey as string | ((record: any) => string)}
         loading={loading}
         size={sizeMap[size]}
+        scroll={scrollY === undefined ? undefined : { y: scrollY }}
         pagination={paginationConfig}
         locale={{
           emptyText: renderEmpty || defaultEmpty,

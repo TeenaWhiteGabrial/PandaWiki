@@ -42,6 +42,8 @@ deploy/server/*
 !deploy/server/docker-compose.yml
 !deploy/server/postgres-init/
 !deploy/server/postgres-init/01-create-raglite-db.sql
+!deploy/server/security/
+!deploy/server/security/nats.conf
 !deploy/server/logging/
 !deploy/server/logging/config.alloy
 !deploy/server/logging/config.local.alloy
@@ -63,3 +65,11 @@ backend/migration/migration
 .gocache/
 .pnpm-store/
 web/packages/collab-service/data/
+
+# Local-only verification binaries and ephemeral service credentials.
+tmp/security-followup-20261026/*.env
+tmp/security-followup-20261026/credentials.txt
+tmp/security-followup-20261026/security-proxy
+
+# Local verification scripts, captures, and compiled artifacts.
+/tmp/

@@ -1,0 +1,147 @@
+{
+  "time": "2026-10-22T14:32:31.940559+08:00",
+  "scope": "仅本地；响应头、空请求鉴权、Redis PING、NATS 初始握手。未上传文件、未执行漏洞利用。",
+  "results": [
+    {
+      "label": "local_admin",
+      "host": "127.0.0.1",
+      "port": 5173,
+      "path": "/login",
+      "method": "HEAD",
+      "status": 200,
+      "headers": {
+        "content-type": "text/html"
+      }
+    },
+    {
+      "label": "local_user",
+      "host": "127.0.0.1",
+      "port": 3010,
+      "path": "/auth/login",
+      "method": "HEAD",
+      "status": 200,
+      "headers": {
+        "x-powered-by": "Next.js",
+        "content-type": "text/html; charset=utf-8"
+      }
+    },
+    {
+      "label": "local_api_cors",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "path": "/share/v1/app/web/info",
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "access-control-allow-origin": "*",
+        "content-type": "application/json"
+      },
+      "body_bytes_read": 2048
+    },
+    {
+      "label": "local_user_wrong_host",
+      "host": "127.0.0.1",
+      "port": 3010,
+      "path": "/",
+      "method": "HEAD",
+      "status": 200,
+      "headers": {
+        "x-powered-by": "Next.js",
+        "content-type": "text/html; charset=utf-8"
+      }
+    },
+    {
+      "label": "local_empty_unauthenticated_upload",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "path": "/api/v1/file/upload",
+      "method": "POST",
+      "status": 401,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "response": {
+        "message": "Unauthorized",
+        "success": false,
+        "code": 0
+      }
+    },
+    {
+      "label": "local_empty_unauthenticated_upload",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "path": "/api/v1/file/upload/attachment",
+      "method": "POST",
+      "status": 401,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "response": {
+        "message": "Unauthorized",
+        "success": false,
+        "code": 0
+      }
+    },
+    {
+      "label": "local_empty_unauthenticated_upload",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "path": "/api/v1/file/upload/image",
+      "method": "POST",
+      "status": 401,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "response": {
+        "message": "Unauthorized",
+        "success": false,
+        "code": 0
+      }
+    },
+    {
+      "label": "local_empty_unauthenticated_upload",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "path": "/api/v1/file/upload/url",
+      "method": "POST",
+      "status": 401,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "response": {
+        "message": "Unauthorized",
+        "success": false,
+        "code": 0
+      }
+    },
+    {
+      "label": "local_empty_unauthenticated_upload",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "path": "/share/v1/common/file/upload",
+      "method": "POST",
+      "status": 200,
+      "headers": {
+        "access-control-allow-origin": "*",
+        "content-type": "application/json"
+      },
+      "response": {
+        "message": "validate request body failed",
+        "success": false,
+        "code": 0
+      }
+    },
+    {
+      "label": "local_redis",
+      "port": 16379,
+      "ping_response": "+PONG"
+    },
+    {
+      "label": "local_nats",
+      "port": 4222,
+      "version": "2.14.1",
+      "auth_required": null,
+      "tls_required": null
+    }
+  ]
+}

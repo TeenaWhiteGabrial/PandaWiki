@@ -853,7 +853,7 @@ const AiQaContent: React.FC<{
                           color: alpha(theme.palette.text.primary, 0.5),
                         })}
                       >
-                        共找到 {item.chunk_result.length} 个结果
+                        本回答引用了 {item.chunk_result.length} 份文档
                       </Typography>
                     </StyledChunkAccordionSummary>
 

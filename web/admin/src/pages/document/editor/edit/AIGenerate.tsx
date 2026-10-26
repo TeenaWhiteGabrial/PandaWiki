@@ -72,7 +72,7 @@ const AIGenerate = ({
       url: '/api/v1/creation/text',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('panda_wiki_token')}`,
+        'X-PW-CSRF': '1',
       },
       onComplete: () => setLoading(false),
       onError: () => setLoading(false),

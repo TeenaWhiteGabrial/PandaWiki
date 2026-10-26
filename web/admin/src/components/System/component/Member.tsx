@@ -5,6 +5,7 @@ import type { ColumnType } from '@/components/ui';
 import {
   getApiV1EnterpriseDepartments,
   getApiV1EnterprisePermissionLevels,
+  type Department,
 } from '@/request/Enterprise';
 import {
   getApiV1UserListCompat,
@@ -12,11 +13,13 @@ import {
 } from '@/request/userCompat';
 import { ConstsUserRole } from '@/request/types';
 import { useAppSelector } from '@/store';
+import { formatDepartmentOptionLabel } from '@/utils/enterprise';
 import { Select } from 'antd';
 import { Box, Button, Stack, TextField, Tooltip } from '@mui/material';
 import dayjs from 'dayjs';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MemberAdd from './MemberAdd';
+import MemberBulkImport from './MemberBulkImport';
 import MemberDelete from './MemberDelete';
 import MemberEnterpriseAccess from './MemberEnterpriseAccess';
 import MemberUpdate from './MemberUpdate';
@@ -27,18 +30,35 @@ const ConstsUserRoleMap = {
   [ConstsUserRole.UserRoleUser]: '普通用户',
 };
 
+const isAncestorDepartment = (
+  ancestorID: string,
+  descendantID: string,
+  departments: Map<string, Department>,
+) => {
+  let current = departments.get(descendantID);
+  const visited = new Set<string>();
+  while (current?.parent_id && !visited.has(current.id)) {
+    if (current.parent_id === ancestorID) return true;
+    visited.add(current.id);
+    current = departments.get(current.parent_id);
+  }
+  return false;
+};
+
 const Member = () => {
   const { user } = useAppSelector(state => state.config);
+  const userListRequestId = useRef(0);
   const [loading, setLoading] = useState(false);
   const [userList, setUserList] = useState<UserListItemCompat[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
   const [curUser, setCurUser] = useState<UserListItemCompat | null>(null);
   const [curType, setCurType] = useState<'delete' | 'reset-password' | null>(
     null,
   );
   const [enterpriseOpen, setEnterpriseOpen] = useState(false);
-  const [departmentNameMap, setDepartmentNameMap] = useState<
-    Record<string, string>
-  >({});
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [levelNameMap, setLevelNameMap] = useState<Record<string, string>>({});
   const [filters, setFilters] = useState<{
     keyword: string;
@@ -49,6 +69,50 @@ const Member = () => {
     role: '',
     department_id: '',
   });
+  const departmentMap = useMemo(
+    () => new Map(departments.map(item => [item.id, item])),
+    [departments],
+  );
+  const managerDepartmentIDs = useMemo(() => {
+    if (user?.role !== ConstsUserRole.UserRoleManager) return [];
+    const assignedIDs = user.department_ids || [];
+    return assignedIDs.filter(
+      id =>
+        !assignedIDs.some(
+          otherID =>
+            otherID !== id && isAncestorDepartment(id, otherID, departmentMap),
+        ),
+    );
+  }, [departmentMap, user?.department_ids, user?.role]);
+
+  const formatUserDepartments = (departmentIDs?: string[]) => {
+    const selectedIDs = [...new Set(departmentIDs || [])];
+    if (selectedIDs.length > 0 && departments.length === 0) return '加载中…';
+    const leafIDs = selectedIDs.filter(
+      id =>
+        !selectedIDs.some(
+          otherID =>
+            otherID !== id && isAncestorDepartment(id, otherID, departmentMap),
+        ),
+    );
+    return (
+      leafIDs
+        .map(id => {
+          const names: string[] = [];
+          const visited = new Set<string>();
+          let current = departmentMap.get(id);
+          while (current && !visited.has(current.id)) {
+            names.push(current.name);
+            visited.add(current.id);
+            current = current.parent_id
+              ? departmentMap.get(current.parent_id)
+              : undefined;
+          }
+          return names.reverse().join(' / ') || id;
+        })
+        .join('、') || '-'
+    );
+  };
 
   const columns: ColumnType<UserListItemCompat>[] = [
     {
@@ -94,12 +158,7 @@ const Member = () => {
     {
       title: '所属部门',
       dataIndex: 'department_ids',
-      render: (value?: string[]) => (
-        <Box>
-          {(value || []).map(id => departmentNameMap[id] || id).join('、') ||
-            '-'}
-        </Box>
-      ),
+      render: (value?: string[]) => <Box>{formatUserDepartments(value)}</Box>,
     },
     {
       title: '上次使用时间',
@@ -249,49 +308,65 @@ const Member = () => {
     },
   ];
 
-  const getData = () => {
+  const getData = useCallback(() => {
+    const requestId = ++userListRequestId.current;
     setLoading(true);
-    Promise.all([
-      getApiV1UserListCompat(filters),
-      getApiV1EnterpriseDepartments(),
-      getApiV1EnterprisePermissionLevels(),
-    ])
-      .then(([data, departments, levels]) => {
-        const res = data.users || [];
-        setDepartmentNameMap(
-          (departments.departments || []).reduce(
-            (acc, item) => {
-              acc[item.id] = item.name;
-              return acc;
-            },
-            {} as Record<string, string>,
-          ),
-        );
-        setLevelNameMap(
-          (levels.levels || []).reduce(
-            (acc, item) => {
-              acc[item.id] = item.name;
-              return acc;
-            },
-            {} as Record<string, string>,
-          ),
-        );
-        const idx = res.findIndex(item => item.id === user?.id);
-        if (idx !== -1) {
-          setUserList([res[idx], ...res.slice(0, idx), ...res.slice(idx + 1)]);
-        } else {
-          setUserList(res);
+    getApiV1UserListCompat({
+      ...filters,
+      page,
+      page_size: pageSize,
+    })
+      .then(data => {
+        if (requestId !== userListRequestId.current) return;
+        const lastPage = Math.max(1, Math.ceil(data.total / pageSize));
+        if (page > lastPage) {
+          setPage(lastPage);
+          return;
         }
+        const users = data.users || [];
+        const currentUserIndex = users.findIndex(item => item.id === user?.id);
+        setUserList(
+          currentUserIndex > 0
+            ? [
+                users[currentUserIndex],
+                ...users.slice(0, currentUserIndex),
+                ...users.slice(currentUserIndex + 1),
+              ]
+            : users,
+        );
+        setTotal(data.total);
       })
       .finally(() => {
-        setLoading(false);
+        if (requestId === userListRequestId.current) setLoading(false);
       });
+  }, [filters, page, pageSize, user?.id]);
+
+  const updateFilters = (patch: Partial<typeof filters>) => {
+    setPage(1);
+    setFilters(prev => ({ ...prev, ...patch }));
   };
 
   useEffect(() => {
-    getData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+    void getData();
+  }, [getData]);
+
+  useEffect(() => {
+    Promise.all([
+      getApiV1EnterpriseDepartments(),
+      getApiV1EnterprisePermissionLevels(),
+    ]).then(([departments, levels]) => {
+      setDepartments(departments.departments || []);
+      setLevelNameMap(
+        (levels.levels || []).reduce(
+          (acc, item) => {
+            acc[item.id] = item.name;
+            return acc;
+          },
+          {} as Record<string, string>,
+        ),
+      );
+    });
+  }, []);
 
   return (
     <Card
@@ -308,29 +383,24 @@ const Member = () => {
         direction={'row'}
         justifyContent={'space-between'}
         alignItems={'center'}
-        sx={{ mb: 2, px: 2 }}
+        sx={{ mb: 2, px: 2, flexWrap: 'wrap', rowGap: 1 }}
       >
         <Box sx={{ fontSize: 14, lineHeight: '24px', fontWeight: 'bold' }}>
           用户管理
         </Box>
-        <Stack direction='row' gap={2} sx={{ mb: 2 }}>
+        <Stack direction='row' gap={2} sx={{ mb: 2, flexWrap: 'wrap' }}>
           <TextField
             size='small'
             placeholder='按账号或姓名搜索'
             value={filters.keyword}
-            onChange={event =>
-              setFilters(prev => ({ ...prev, keyword: event.target.value }))
-            }
+            onChange={event => updateFilters({ keyword: event.target.value })}
             sx={{ width: 220 }}
           />
           <Select
             size='middle'
             value={filters.role}
             onChange={value =>
-              setFilters(prev => ({
-                ...prev,
-                role: value as ConstsUserRole | '',
-              }))
+              updateFilters({ role: value as ConstsUserRole | '' })
             }
             style={{ width: 160 }}
             options={[
@@ -346,23 +416,32 @@ const Member = () => {
           <Select
             size='middle'
             value={filters.department_id}
-            onChange={value =>
-              setFilters(prev => ({
-                ...prev,
-                department_id: value,
-              }))
-            }
+            onChange={value => updateFilters({ department_id: value })}
             style={{ width: 200 }}
             options={[
-              { value: '', label: '全部部门' },
-              ...Object.entries(departmentNameMap).map(([id, name]) => ({
-                value: id,
-                label: name,
+              {
+                value: '',
+                label:
+                  user?.role === ConstsUserRole.UserRoleManager
+                    ? '本部门'
+                    : '全部部门',
+              },
+              ...(user?.role === ConstsUserRole.UserRoleManager
+                ? departments.filter(item =>
+                    managerDepartmentIDs.includes(item.id),
+                  )
+                : departments
+              ).map(item => ({
+                value: item.id,
+                label: formatDepartmentOptionLabel(item),
               })),
             ]}
           />
         </Stack>
-        <MemberAdd refresh={getData} />
+        <Stack direction='row' gap={1}>
+          <MemberBulkImport refresh={getData} />
+          <MemberAdd refresh={getData} />
+        </Stack>
       </Stack>
       <AntdTable
         columns={columns.filter(
@@ -373,9 +452,20 @@ const Member = () => {
         dataSource={userList}
         rowKey='id'
         size='small'
-        height='338px'
-        sx={{ overflow: 'hidden' }}
-        pagination={false}
+        pagination={{
+          page,
+          pageSize,
+          total,
+          pageSizeOptions: [10, 20, 50, 100],
+          onChange: (nextPage, nextPageSize) => {
+            if (nextPageSize !== pageSize) {
+              setPageSize(nextPageSize);
+              setPage(1);
+              return;
+            }
+            setPage(nextPage);
+          },
+        }}
         renderEmpty={
           loading ? (
             <Box></Box>

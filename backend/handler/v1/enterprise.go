@@ -61,11 +61,30 @@ func (h *EnterpriseHandler) validateManagerDepartmentScope(c echo.Context, targe
 	if targetUser.Role != consts.UserRoleUser {
 		return fmt.Errorf("manager can only manage normal users")
 	}
-	managerDepartments, _, err := h.userUsecase.GetUserDepartments(c.Request().Context(), operator.ID)
+	managerDepartments, err := h.userUsecase.GetEffectiveDepartmentIDs(c.Request().Context(), operator.ID)
 	if err != nil {
 		return err
 	}
-	for _, departmentID := range targetDepartmentIDs {
+	if len(managerDepartments) == 0 {
+		return fmt.Errorf("manager has no department")
+	}
+	currentDepartments, err := h.userUsecase.GetEffectiveDepartmentIDs(c.Request().Context(), targetUserID)
+	if err != nil {
+		return err
+	}
+	requestedDepartments, err := h.userUsecase.ResolveEffectiveDepartmentIDs(c.Request().Context(), targetDepartmentIDs)
+	if err != nil {
+		return err
+	}
+	if len(currentDepartments) == 0 || len(requestedDepartments) == 0 {
+		return fmt.Errorf("user has no department in manager scope")
+	}
+	for _, departmentID := range currentDepartments {
+		if !slices.Contains(managerDepartments, departmentID) {
+			return fmt.Errorf("target user is outside manager scope")
+		}
+	}
+	for _, departmentID := range requestedDepartments {
 		if !slices.Contains(managerDepartments, departmentID) {
 			return fmt.Errorf("department out of manager scope")
 		}

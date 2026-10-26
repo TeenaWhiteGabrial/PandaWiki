@@ -12,6 +12,7 @@ import {
   AccordionDetails,
   AccordionSummary,
   Box,
+  Chip,
   Stack,
   alpha,
   styled,
@@ -298,6 +299,14 @@ const FolderList: React.FC<FolderListProps> = ({ list = [] }) => {
               </StyledLink>
               {item.type === 2 && (
                 <StyledSummaryBox>{summary || '暂无摘要'}</StyledSummaryBox>
+              )}
+              {item.path_only && (
+                <Chip
+                  label='仅用于定位'
+                  size='small'
+                  variant='outlined'
+                  sx={{ mt: 1, height: 22, fontSize: 11 }}
+                />
               )}
             </StyledContentBox>
           </StyledStack>

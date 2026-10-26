@@ -1,0 +1,1383 @@
+[
+  {
+    "id": "CVE-1999-0632",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/1999/0xxx/CVE-1999-0632.json",
+    "state": "PUBLISHED",
+    "published": "2000-02-04T05:00:00.000Z",
+    "affected": [
+      {
+        "product": "n/a",
+        "vendor": "n/a",
+        "versions": [
+          {
+            "status": "affected",
+            "version": "n/a"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.cve.org/CVERecord?id=CVE-1999-0632"
+    ]
+  },
+  {
+    "id": "CVE-2023-28531",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/28xxx/CVE-2023-28531.json",
+    "state": "PUBLISHED",
+    "published": "2023-03-17T00:00:00.000Z",
+    "affected": [
+      {
+        "vendor": "n/a",
+        "product": "n/a",
+        "versions": [
+          {
+            "version": "n/a",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2023/03/15/8",
+      "https://security.netapp.com/advisory/ntap-20230413-0008/",
+      "https://security.gentoo.org/glsa/202307-01",
+      "https://www.debian.org/security/2023/dsa-5586",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/AN2UDTXEUSKFIOIYMV6JNI5VSBMYZOFT/"
+    ]
+  },
+  {
+    "id": "CVE-2023-38408",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/38xxx/CVE-2023-38408.json",
+    "state": "PUBLISHED",
+    "published": "2023-07-20T00:00:00.000Z",
+    "affected": [
+      {
+        "vendor": "n/a",
+        "product": "n/a",
+        "versions": [
+          {
+            "version": "n/a",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://news.ycombinator.com/item?id=36790196",
+      "https://blog.qualys.com/vulnerabilities-threat-research/2023/07/19/cve-2023-38408-remote-code-execution-in-opensshs-forwarded-ssh-agent",
+      "https://www.qualys.com/2023/07/19/cve-2023-38408/rce-openssh-forwarded-ssh-agent.txt",
+      "https://github.com/openbsd/src/commit/f8f5a6b003981bb824329dc987d101977beda7ca",
+      "https://github.com/openbsd/src/commit/7bc29a9d5cd697290aa056e94ecee6253d3425f8",
+      "https://github.com/openbsd/src/commit/f03a4faa55c4ce0818324701dadbf91988d7351d",
+      "https://www.openssh.com/txt/release-9.3p2",
+      "https://www.openssh.com/security.html",
+      "https://security.gentoo.org/glsa/202307-01",
+      "http://www.openwall.com/lists/oss-security/2023/07/20/1",
+      "http://www.openwall.com/lists/oss-security/2023/07/20/2",
+      "http://packetstormsecurity.com/files/173661/OpenSSH-Forwarded-SSH-Agent-Remote-Code-Execution.html",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/RAXVQS6ZYTULFAK3TEJHRLKZALJS3AOU/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/CEBTJJINE2I3FHAUKKNQWMFGYMLSMWKQ/",
+      "https://security.netapp.com/advisory/ntap-20230803-0010/",
+      "https://lists.debian.org/debian-lts-announce/2023/08/msg00021.html",
+      "http://www.openwall.com/lists/oss-security/2023/09/22/9",
+      "http://www.openwall.com/lists/oss-security/2023/09/22/11",
+      "https://support.apple.com/kb/HT213940",
+      "https://www.vicarius.io/vsociety/posts/exploring-opensshs-agent-forwarding-rce-cve-2023-38408"
+    ]
+  },
+  {
+    "id": "CVE-2023-48795",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/48xxx/CVE-2023-48795.json",
+    "state": "PUBLISHED",
+    "published": "2023-12-18T00:00:00.000Z",
+    "affected": [
+      {
+        "vendor": "n/a",
+        "product": "n/a",
+        "versions": [
+          {
+            "version": "n/a",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.chiark.greenend.org.uk/~sgtatham/putty/changes.html",
+      "https://matt.ucc.asn.au/dropbear/CHANGES",
+      "https://github.com/proftpd/proftpd/blob/master/RELEASE_NOTES",
+      "https://www.netsarang.com/en/xshell-update-history/",
+      "https://www.paramiko.org/changelog.html",
+      "https://www.openssh.com/openbsd.html",
+      "https://github.com/openssh/openssh-portable/commits/master",
+      "https://groups.google.com/g/golang-announce/c/-n5WqVC18LQ",
+      "https://www.bitvise.com/ssh-server-version-history",
+      "https://github.com/ronf/asyncssh/tags",
+      "https://gitlab.com/libssh/libssh-mirror/-/tags",
+      "https://www.reddit.com/r/sysadmin/comments/18idv52/cve202348795_why_is_this_cve_still_undisclosed/",
+      "https://github.com/erlang/otp/blob/d1b43dc0f1361d2ad67601169e90a7fc50bb0369/lib/ssh/doc/src/notes.xml#L39-L42",
+      "https://www.openssh.com/txt/release-9.6",
+      "https://jadaptive.com/important-java-ssh-security-update-new-ssh-vulnerability-discovered-cve-2023-48795/",
+      "https://www.terrapin-attack.com",
+      "https://github.com/mkj/dropbear/blob/17657c36cce6df7716d5ff151ec09a665382d5dd/CHANGES#L25",
+      "https://github.com/ronf/asyncssh/blob/develop/docs/changes.rst",
+      "https://thorntech.com/cve-2023-48795-and-sftp-gateway/",
+      "https://github.com/warp-tech/russh/releases/tag/v0.40.2",
+      "https://github.com/TeraTermProject/teraterm/commit/7279fbd6ef4d0c8bdd6a90af4ada2899d786eec0",
+      "https://www.openwall.com/lists/oss-security/2023/12/18/2",
+      "https://twitter.com/TrueSkrillor/status/1736774389725565005",
+      "https://github.com/golang/crypto/commit/9d2ee975ef9fe627bf0a6f01c1f69e8ef1d4f05d",
+      "https://github.com/paramiko/paramiko/issues/2337",
+      "https://groups.google.com/g/golang-announce/c/qA3XtxvMUyg",
+      "https://news.ycombinator.com/item?id=38684904",
+      "https://news.ycombinator.com/item?id=38685286",
+      "http://www.openwall.com/lists/oss-security/2023/12/18/3",
+      "https://github.com/mwiede/jsch/issues/457",
+      "https://git.libssh.org/projects/libssh.git/commit/?h=stable-0.10&id=10e09e273f69e149389b3e0e5d44b8c221c2e7f6",
+      "https://github.com/erlang/otp/releases/tag/OTP-26.2.1",
+      "https://github.com/advisories/GHSA-45x7-px36-x8w8",
+      "https://security-tracker.debian.org/tracker/source-package/libssh2",
+      "https://security-tracker.debian.org/tracker/source-package/proftpd-dfsg",
+      "https://security-tracker.debian.org/tracker/CVE-2023-48795",
+      "https://bugzilla.suse.com/show_bug.cgi?id=1217950",
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2254210",
+      "https://bugs.gentoo.org/920280",
+      "https://ubuntu.com/security/CVE-2023-48795",
+      "https://www.suse.com/c/suse-addresses-the-ssh-v2-protocol-terrapin-attack-aka-cve-2023-48795/",
+      "https://access.redhat.com/security/cve/cve-2023-48795",
+      "https://github.com/mwiede/jsch/pull/461",
+      "https://github.com/drakkan/sftpgo/releases/tag/v2.5.6",
+      "https://github.com/libssh2/libssh2/pull/1291",
+      "https://forum.netgate.com/topic/184941/terrapin-ssh-attack",
+      "https://github.com/jtesta/ssh-audit/commit/8e972c5e94b460379fe0c7d20209c16df81538a5",
+      "https://github.com/rapier1/hpn-ssh/releases",
+      "https://github.com/proftpd/proftpd/issues/456",
+      "https://github.com/TeraTermProject/teraterm/releases/tag/v5.1",
+      "https://github.com/mwiede/jsch/compare/jsch-0.2.14...jsch-0.2.15",
+      "https://oryx-embedded.com/download/#changelog",
+      "https://www.crushftp.com/crush10wiki/Wiki.jsp?page=Update",
+      "https://github.com/connectbot/sshlib/compare/2.2.21...2.2.22",
+      "https://github.com/connectbot/sshlib/commit/5c8b534f6e97db7ac0e0e579331213aa25c173ab",
+      "https://github.com/mscdex/ssh2/commit/97b223f8891b96d6fc054df5ab1d5a1a545da2a3",
+      "https://nest.pijul.com/pijul/thrussh/changes/D6H7OWTTMHHX6BTB3B6MNBOBX2L66CBL4LGSEUSAI2MCRCJDQFRQC",
+      "https://crates.io/crates/thrussh/versions",
+      "https://github.com/NixOS/nixpkgs/pull/275249",
+      "http://www.openwall.com/lists/oss-security/2023/12/19/5",
+      "https://www.freebsd.org/security/advisories/FreeBSD-SA-23:19.openssh.asc",
+      "https://arstechnica.com/security/2023/12/hackers-can-break-ssh-channel-integrity-using-novel-data-corruption-attack/",
+      "http://www.openwall.com/lists/oss-security/2023/12/20/3",
+      "http://packetstormsecurity.com/files/176280/Terrapin-SSH-Connection-Weakening.html",
+      "https://github.com/proftpd/proftpd/blob/d21e7a2e47e9b38f709bec58e3fa711f759ad0e1/RELEASE_NOTES",
+      "https://github.com/proftpd/proftpd/blob/0a7ea9b0ba9fcdf368374a226370d08f10397d99/RELEASE_NOTES",
+      "https://github.com/apache/mina-sshd/issues/445",
+      "https://github.com/hierynomus/sshj/issues/916",
+      "https://github.com/janmojzis/tinyssh/issues/81",
+      "https://www.openwall.com/lists/oss-security/2023/12/20/3",
+      "https://security-tracker.debian.org/tracker/source-package/trilead-ssh2",
+      "https://github.com/net-ssh/net-ssh/blob/2e65064a52d73396bfc3806c9196fc8108f33cd8/CHANGES.txt#L14-L16",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/MKQRBF3DWMWPH36LBCOBUTSIZRTPEZXB/",
+      "https://www.debian.org/security/2023/dsa-5586",
+      "https://www.lancom-systems.de/service-support/allgemeine-sicherheitshinweise#c243508",
+      "https://www.theregister.com/2023/12/20/terrapin_attack_ssh",
+      "https://filezilla-project.org/versions.php",
+      "https://nova.app/releases/#v11.8",
+      "https://roumenpetrov.info/secsh/#news20231220",
+      "https://www.vandyke.com/products/securecrt/history.txt",
+      "https://help.panic.com/releasenotes/transmit5/",
+      "https://github.com/PowerShell/Win32-OpenSSH/releases/tag/v9.5.0.0p1-Beta",
+      "https://github.com/PowerShell/Win32-OpenSSH/issues/2189",
+      "https://winscp.net/eng/docs/history#6.2.2",
+      "https://www.bitvise.com/ssh-client-version-history#933",
+      "https://github.com/cyd01/KiTTY/issues/520",
+      "https://www.debian.org/security/2023/dsa-5588",
+      "https://github.com/ssh-mitm/ssh-mitm/issues/165",
+      "https://news.ycombinator.com/item?id=38732005",
+      "https://lists.debian.org/debian-lts-announce/2023/12/msg00017.html",
+      "https://security.gentoo.org/glsa/202312-16",
+      "https://security.gentoo.org/glsa/202312-17",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/3YQLUQWLIHDB5QCXQEX7HXHAWMOKPP5O/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/F7EYCFQCTSGJXWO3ZZ44MGKFC5HA7G3Y/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/APYIXIQOVDCRWLHTGB4VYMAUIAQLKYJ3/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/QI3EHAHABFQK7OABNCSF5GMYP6TONTI7/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/KMZCVGUGJZZVDPCVDA7TEB22VUCNEXDD/",
+      "https://security.netapp.com/advisory/ntap-20240105-0004/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/3CAYYW35MUTNO65RVAELICTNZZFMT2XS/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/LZQVUHWVWRH73YBXUQJOD6CKHDQBU3DM/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/C3AFMZ6MH2UHHOPIWT5YLSFV3D2VB3AC/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/BL5KTLOSLH2KHRN4HCXJPK3JUVLDGEL6/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/33XHJUB6ROFUOH2OQNENFROTVH6MHSHA/",
+      "https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2024-0002",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/CHHITS4PUOZAKFIUBQAQZC7JWXMOYE4B/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/I724O3LSRCPO4WNVIXTZCT4VVRMXMMSG/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/KEOTKBUPZXHE3F352JBYNTSNRXYLWD6P/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/HYEDEXIKFKTUJIN43RG4B7T5ZS6MHUSP/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/6Y74KVCPEPT4MVU3LHDWCNNOXOE5ZLUR/",
+      "https://lists.debian.org/debian-lts-announce/2024/01/msg00013.html",
+      "https://lists.debian.org/debian-lts-announce/2024/01/msg00014.html",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/L5Y6MNNVAPIJSXJERQ6PKZVCIUXSNJK7/",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/3JIMLVBDWOP4FUPXPTB4PGHHIOMGFLQE/",
+      "https://support.apple.com/kb/HT214084",
+      "http://seclists.org/fulldisclosure/2024/Mar/21",
+      "https://lists.debian.org/debian-lts-announce/2024/04/msg00016.html",
+      "http://www.openwall.com/lists/oss-security/2024/04/17/8",
+      "http://www.openwall.com/lists/oss-security/2024/03/06/3"
+    ]
+  },
+  {
+    "id": "CVE-2023-51384",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/51xxx/CVE-2023-51384.json",
+    "state": "PUBLISHED",
+    "published": "2023-12-18T00:00:00.000Z",
+    "affected": [
+      {
+        "vendor": "n/a",
+        "product": "n/a",
+        "versions": [
+          {
+            "version": "n/a",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openssh.com/txt/release-9.6",
+      "https://www.openwall.com/lists/oss-security/2023/12/18/2",
+      "https://github.com/openssh/openssh-portable/commit/881d9c6af9da4257c69c327c4e2f1508b2fa754b",
+      "https://www.debian.org/security/2023/dsa-5586",
+      "https://security.netapp.com/advisory/ntap-20240105-0005/",
+      "https://support.apple.com/kb/HT214084",
+      "http://seclists.org/fulldisclosure/2024/Mar/21"
+    ]
+  },
+  {
+    "id": "CVE-2023-51385",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/51xxx/CVE-2023-51385.json",
+    "state": "PUBLISHED",
+    "published": "2023-12-18T00:00:00.000Z",
+    "affected": [
+      {
+        "vendor": "n/a",
+        "product": "n/a",
+        "versions": [
+          {
+            "version": "n/a",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openssh.com/txt/release-9.6",
+      "https://www.openwall.com/lists/oss-security/2023/12/18/2",
+      "https://github.com/openssh/openssh-portable/commit/7ef3787c84b6b524501211b11a26c742f829af1a",
+      "https://www.debian.org/security/2023/dsa-5586",
+      "https://vin01.github.io/piptagole/ssh/security/openssh/libssh/remote-code-execution/2023/12/20/openssh-proxycommand-libssh-rce.html",
+      "https://lists.debian.org/debian-lts-announce/2023/12/msg00017.html",
+      "http://www.openwall.com/lists/oss-security/2023/12/26/4",
+      "https://security.gentoo.org/glsa/202312-17",
+      "https://security.netapp.com/advisory/ntap-20240105-0005/",
+      "https://support.apple.com/kb/HT214084",
+      "http://seclists.org/fulldisclosure/2024/Mar/21"
+    ]
+  },
+  {
+    "id": "CVE-2023-51767",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/51xxx/CVE-2023-51767.json",
+    "state": "PUBLISHED",
+    "published": "2023-12-24T00:00:00.000Z",
+    "affected": [
+      {
+        "vendor": "n/a",
+        "product": "n/a",
+        "versions": [
+          {
+            "version": "n/a",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://arxiv.org/abs/2309.02545",
+      "https://github.com/openssh/openssh-portable/blob/8241b9c0529228b4b86d88b1a6076fb9f97e4a99/monitor.c#L878",
+      "https://github.com/openssh/openssh-portable/blob/8241b9c0529228b4b86d88b1a6076fb9f97e4a99/auth-passwd.c#L77",
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2255850",
+      "https://access.redhat.com/security/cve/CVE-2023-51767",
+      "https://ubuntu.com/security/CVE-2023-51767",
+      "https://security.netapp.com/advisory/ntap-20240125-0006/",
+      "https://www.openwall.com/lists/oss-security/2025/09/22/1"
+    ]
+  },
+  {
+    "id": "CVE-2024-6387",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2024/6xxx/CVE-2024-6387.json",
+    "state": "PUBLISHED",
+    "published": "2024-07-01T12:37:25.431Z",
+    "affected": [
+      {
+        "repo": "https://anongit.mindrot.org/openssh.git",
+        "versions": [
+          {
+            "status": "affected",
+            "version": "8.5p1",
+            "versionType": "custom",
+            "lessThanOrEqual": "9.7p1"
+          }
+        ],
+        "packageName": "OpenSSH",
+        "collectionURL": "https://www.openssh.com/",
+        "defaultStatus": "unaffected"
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.7p1-38.el9_4.1",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:enterprise_linux:9::appstream",
+          "cpe:/o:redhat:enterprise_linux:9::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.7p1-38.el9_4.1",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:enterprise_linux:9::appstream",
+          "cpe:/o:redhat:enterprise_linux:9::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9.0 Update Services for SAP Solutions",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.7p1-12.el9_0.1",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:rhel_e4s:9.0::appstream",
+          "cpe:/o:redhat:rhel_e4s:9.0::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9.2 Extended Update Support",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.7p1-30.el9_2.4",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:rhel_eus:9.2::appstream",
+          "cpe:/o:redhat:rhel_eus:9.2::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4.13",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "openshift/ose-rhel-coreos-9",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "413.92.202407091321-0",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:openshift:4.13::el8",
+          "cpe:/a:redhat:openshift:4.13::el9"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4.14",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "openshift/ose-rhel-coreos-9",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "414.92.202407091253-0",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:openshift:4.14::el8",
+          "cpe:/a:redhat:openshift:4.14::el9"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4.15",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "openshift/ose-rhel-coreos-9",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "415.92.202407091355-0",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:openshift:4.15::el8",
+          "cpe:/a:redhat:openshift:4.15::el9"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4.16",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "openshift/ose-rhel-coreos-9",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "416.94.202407081958-0",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:openshift:4.16::el9"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Ceph Storage 5",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unaffected",
+        "cpes": [
+          "cpe:/a:redhat:ceph_storage:5"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Ceph Storage 6",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unaffected",
+        "cpes": [
+          "cpe:/a:redhat:ceph_storage:6"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Ceph Storage 7",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unaffected",
+        "cpes": [
+          "cpe:/a:redhat:ceph_storage:7"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 10",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unaffected",
+        "cpes": [
+          "cpe:/o:redhat:enterprise_linux:10"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 6",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unaffected",
+        "cpes": [
+          "cpe:/o:redhat:enterprise_linux:6"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 7",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unaffected",
+        "cpes": [
+          "cpe:/o:redhat:enterprise_linux:7"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 8",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unaffected",
+        "cpes": [
+          "cpe:/o:redhat:enterprise_linux:8"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openshift/ose-rhel-coreos-8",
+        "defaultStatus": "affected",
+        "cpes": [
+          "cpe:/a:redhat:openshift:4"
+        ]
+      }
+    ],
+    "references": [
+      "https://access.redhat.com/errata/RHSA-2024:4312",
+      "https://access.redhat.com/errata/RHSA-2024:4340",
+      "https://access.redhat.com/errata/RHSA-2024:4389",
+      "https://access.redhat.com/errata/RHSA-2024:4469",
+      "https://access.redhat.com/errata/RHSA-2024:4474",
+      "https://access.redhat.com/errata/RHSA-2024:4479",
+      "https://access.redhat.com/errata/RHSA-2024:4484",
+      "https://access.redhat.com/security/cve/CVE-2024-6387",
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2294604",
+      "https://santandersecurityresearch.github.io/blog/sshing_the_masses.html",
+      "https://www.openssh.com/txt/release-9.8",
+      "https://www.qualys.com/2024/07/01/cve-2024-6387/regresshion.txt"
+    ]
+  },
+  {
+    "id": "CVE-2025-26465",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2025/26xxx/CVE-2025-26465.json",
+    "state": "PUBLISHED",
+    "published": "2025-02-18T18:27:16.843Z",
+    "affected": [
+      {
+        "repo": "https://anongit.mindrot.org/openssh.git",
+        "versions": [
+          {
+            "status": "affected",
+            "version": "6.8p1",
+            "versionType": "custom",
+            "lessThanOrEqual": "9.9p1"
+          }
+        ],
+        "packageName": "OpenSSH",
+        "collectionURL": "https://www.openssh.com/",
+        "defaultStatus": "unaffected"
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 8",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.0p1-26.el8_10",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:enterprise_linux:8::appstream",
+          "cpe:/o:redhat:enterprise_linux:8::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 8",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.0p1-26.el8_10",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:enterprise_linux:8::appstream",
+          "cpe:/o:redhat:enterprise_linux:8::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.7p1-45.el9",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:enterprise_linux:9::appstream",
+          "cpe:/o:redhat:enterprise_linux:9::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.7p1-45.el9",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:enterprise_linux:9::appstream",
+          "cpe:/o:redhat:enterprise_linux:9::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9.4 Extended Update Support",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "0:8.7p1-38.el9_4.5",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:rhel_eus:9.4::appstream",
+          "cpe:/o:redhat:rhel_eus:9.4::baseos"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Discovery 1.14",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "discovery/discovery-server-rhel9",
+        "defaultStatus": "affected",
+        "versions": [
+          {
+            "version": "1.14.3-1748529279",
+            "lessThan": "*",
+            "versionType": "rpm",
+            "status": "unaffected"
+          }
+        ],
+        "cpes": [
+          "cpe:/a:redhat:discovery:1.14::el9"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 10",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unaffected",
+        "cpes": [
+          "cpe:/o:redhat:enterprise_linux:10"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 6",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unknown",
+        "cpes": [
+          "cpe:/o:redhat:enterprise_linux:6"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 7",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "defaultStatus": "unknown",
+        "cpes": [
+          "cpe:/o:redhat:enterprise_linux:7"
+        ]
+      },
+      {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openshift/ose-rhel-coreos-9",
+        "defaultStatus": "affected",
+        "cpes": [
+          "cpe:/a:redhat:openshift:4"
+        ]
+      }
+    ],
+    "references": [
+      "https://access.redhat.com/errata/RHSA-2025:16823",
+      "https://access.redhat.com/errata/RHSA-2025:3837",
+      "https://access.redhat.com/errata/RHSA-2025:6993",
+      "https://access.redhat.com/errata/RHSA-2025:8385",
+      "https://access.redhat.com/security/cve/CVE-2025-26465",
+      "https://access.redhat.com/solutions/7109879",
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2344780",
+      "https://seclists.org/oss-sec/2025/q1/144"
+    ]
+  },
+  {
+    "id": "CVE-2025-32728",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2025/32xxx/CVE-2025-32728.json",
+    "state": "PUBLISHED",
+    "published": "2025-04-10T00:00:00.000Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.0",
+            "status": "affected",
+            "version": "7.4",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://lists.mindrot.org/pipermail/openssh-unix-dev/2025-April/041879.html",
+      "https://www.openssh.com/txt/release-10.0",
+      "https://github.com/openssh/openssh-portable/commit/fc86875e6acb36401dfc1dfb6b628a9d1460f367",
+      "https://ftp.openbsd.org/pub/OpenBSD/patches/7.6/common/013_ssh.patch.sig",
+      "https://www.openssh.com/txt/release-7.4"
+    ]
+  },
+  {
+    "id": "CVE-2025-61984",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2025/61xxx/CVE-2025-61984.json",
+    "state": "PUBLISHED",
+    "published": "2025-10-06T00:00:00.000Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.1",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2025/10/06/1",
+      "https://marc.info/?l=openssh-unix-dev&m=175974522032149&w=2",
+      "https://www.openssh.com/releasenotes.html#10.1p1"
+    ]
+  },
+  {
+    "id": "CVE-2025-61985",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2025/61xxx/CVE-2025-61985.json",
+    "state": "PUBLISHED",
+    "published": "2025-10-06T00:00:00.000Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.1",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2025/10/06/1",
+      "https://marc.info/?l=openssh-unix-dev&m=175974522032149&w=2",
+      "https://www.openssh.com/releasenotes.html#10.1p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-23479",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/23xxx/CVE-2026-23479.json",
+    "state": "PUBLISHED",
+    "published": "2026-05-05T16:36:05.486Z",
+    "affected": [
+      {
+        "vendor": "redis",
+        "product": "redis",
+        "versions": [
+          {
+            "version": ">= 7.2.0, < 8.6.3",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://github.com/redis/redis/security/advisories/GHSA-93m2-935m-8rj3",
+      "https://github.com/redis/redis/releases/tag/8.6.3"
+    ]
+  },
+  {
+    "id": "CVE-2026-23631",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/23xxx/CVE-2026-23631.json",
+    "state": "PUBLISHED",
+    "published": "2026-05-05T16:39:32.337Z",
+    "affected": [
+      {
+        "vendor": "redis",
+        "product": "redis",
+        "versions": [
+          {
+            "version": "< 8.6.3",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://github.com/redis/redis/security/advisories/GHSA-8ghh-qpmp-7826",
+      "https://github.com/redis/redis/releases/tag/8.6.3"
+    ]
+  },
+  {
+    "id": "CVE-2026-25243",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/25xxx/CVE-2026-25243.json",
+    "state": "PUBLISHED",
+    "published": "2026-05-05T16:44:57.306Z",
+    "affected": [
+      {
+        "vendor": "redis",
+        "product": "redis",
+        "versions": [
+          {
+            "version": "< 8.6.3",
+            "status": "affected"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://github.com/redis/redis/security/advisories/GHSA-c8h9-259x-jff4",
+      "https://github.com/redis/redis/releases/tag/8.6.3"
+    ]
+  },
+  {
+    "id": "CVE-2026-35385",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/35xxx/CVE-2026-35385.json",
+    "state": "PUBLISHED",
+    "published": "2026-04-02T16:30:59.615Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.3",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openssh.org/releasenotes.html#10.3p1",
+      "https://marc.info/?l=openssh-unix-dev&m=177513443901484&w=2",
+      "https://www.openwall.com/lists/oss-security/2026/04/02/3"
+    ]
+  },
+  {
+    "id": "CVE-2026-35387",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/35xxx/CVE-2026-35387.json",
+    "state": "PUBLISHED",
+    "published": "2026-04-02T16:52:53.623Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.3",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openssh.org/releasenotes.html#10.3p1",
+      "https://marc.info/?l=openssh-unix-dev&m=177513443901484&w=2",
+      "https://www.openwall.com/lists/oss-security/2026/04/02/3"
+    ]
+  },
+  {
+    "id": "CVE-2026-35388",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/35xxx/CVE-2026-35388.json",
+    "state": "PUBLISHED",
+    "published": "2026-04-02T16:57:31.073Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.3",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openssh.org/releasenotes.html#10.3p1",
+      "https://marc.info/?l=openssh-unix-dev&m=177513443901484&w=2",
+      "https://www.openwall.com/lists/oss-security/2026/04/02/3"
+    ]
+  },
+  {
+    "id": "CVE-2026-35414",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/35xxx/CVE-2026-35414.json",
+    "state": "PUBLISHED",
+    "published": "2026-04-02T17:08:15.628Z",
+    "verified_via": "web tool; official CVEProject JSON",
+    "affected": [
+      {
+        "vendor": "OpenBSD",
+        "product": "OpenSSH",
+        "versions": [
+          {
+            "version": "0",
+            "lessThan": "10.3",
+            "status": "affected"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "CVE-2026-42055",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/42xxx/CVE-2026-42055.json",
+    "state": "PUBLISHED",
+    "published": "2026-06-17T14:04:32.520Z",
+    "affected": [
+      {
+        "defaultStatus": "unknown",
+        "modules": [
+          "ngx_http_proxy_v2_module",
+          "ngx_http_grpc_module"
+        ],
+        "product": "NGINX Open Source",
+        "vendor": "F5",
+        "versions": [
+          {
+            "lessThan": "1.31.2",
+            "status": "affected",
+            "version": "1.13.10",
+            "versionType": "custom"
+          },
+          {
+            "lessThan": "1.30.3",
+            "status": "affected",
+            "version": "1.30.2",
+            "versionType": "custom"
+          }
+        ]
+      },
+      {
+        "defaultStatus": "unaffected",
+        "modules": [
+          "ngx_http_proxy_v2_module",
+          "ngx_http_grpc_module"
+        ],
+        "product": "NGINX Plus",
+        "vendor": "F5",
+        "versions": [
+          {
+            "lessThan": "37.0.2.1",
+            "status": "affected",
+            "version": "37.0",
+            "versionType": "custom"
+          },
+          {
+            "lessThan": "R36 P6",
+            "status": "affected",
+            "version": "R36",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://my.f5.com/manage/s/article/K000161584"
+    ]
+  },
+  {
+    "id": "CVE-2026-42530",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/42xxx/CVE-2026-42530.json",
+    "state": "PUBLISHED",
+    "published": "2026-06-17T14:04:32.173Z",
+    "affected": [
+      {
+        "defaultStatus": "unknown",
+        "modules": [
+          "ngx_http_v3_module"
+        ],
+        "product": "NGINX Open Source",
+        "vendor": "F5",
+        "versions": [
+          {
+            "lessThan": "1.31.2",
+            "status": "affected",
+            "version": "1.31.0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://my.f5.com/manage/s/article/K000161616"
+    ]
+  },
+  {
+    "id": "CVE-2026-48142",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/48xxx/CVE-2026-48142.json",
+    "state": "PUBLISHED",
+    "published": "2026-06-17T14:04:32.856Z",
+    "affected": [
+      {
+        "defaultStatus": "unknown",
+        "modules": [
+          "ngx_http_charset_module"
+        ],
+        "product": "NGINX Open Source",
+        "vendor": "F5",
+        "versions": [
+          {
+            "lessThan": "1.31.2",
+            "status": "affected",
+            "version": "1.13.10",
+            "versionType": "custom"
+          },
+          {
+            "lessThan": "1.30.3",
+            "status": "affected",
+            "version": "1.30.0",
+            "versionType": "custom"
+          }
+        ]
+      },
+      {
+        "defaultStatus": "unaffected",
+        "modules": [
+          "ngx_http_charset_module"
+        ],
+        "product": "NGINX Plus",
+        "vendor": "F5",
+        "versions": [
+          {
+            "lessThan": "37.0.2.1",
+            "status": "affected",
+            "version": "37.0",
+            "versionType": "custom"
+          },
+          {
+            "lessThan": "R36 P6",
+            "status": "affected",
+            "version": "R36",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://my.f5.com/manage/s/article/K000161585"
+    ]
+  },
+  {
+    "id": "CVE-2026-59995",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/59xxx/CVE-2026-59995.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-08T00:04:49.995Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.4",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2026/07/06/5",
+      "https://marc.info/?l=openssh-unix-dev&m=178333966933090&w=2",
+      "https://www.openssh.org/releasenotes.html#10.4p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-59996",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/59xxx/CVE-2026-59996.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-08T00:07:07.759Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.4",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2026/07/06/5",
+      "https://marc.info/?l=openssh-unix-dev&m=178333966933090&w=2",
+      "https://www.openssh.org/releasenotes.html#10.4p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-59997",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/59xxx/CVE-2026-59997.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-08T00:09:04.920Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.4",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2026/07/06/5",
+      "https://marc.info/?l=openssh-unix-dev&m=178333966933090&w=2",
+      "https://www.openssh.org/releasenotes.html#10.4p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-59998",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/59xxx/CVE-2026-59998.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-08T00:11:05.183Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.4",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2026/07/06/5",
+      "https://marc.info/?l=openssh-unix-dev&m=178333966933090&w=2",
+      "https://www.openssh.org/releasenotes.html#10.4p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-59999",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/59xxx/CVE-2026-59999.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-08T00:13:08.397Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.4",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2026/07/06/5",
+      "https://marc.info/?l=openssh-unix-dev&m=178333966933090&w=2",
+      "https://www.openssh.org/releasenotes.html#10.4p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-60000",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/60xxx/CVE-2026-60000.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-08T00:14:31.230Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.4",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2026/07/06/5",
+      "https://marc.info/?l=openssh-unix-dev&m=178333966933090&w=2",
+      "https://www.openssh.org/releasenotes.html#10.4p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-60001",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/60xxx/CVE-2026-60001.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-08T00:16:15.497Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.4",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2026/07/06/5",
+      "https://marc.info/?l=openssh-unix-dev&m=178333966933090&w=2",
+      "https://www.openssh.org/releasenotes.html#10.4p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-60002",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/60xxx/CVE-2026-60002.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-08T00:17:33.058Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "OpenSSH",
+        "vendor": "OpenBSD",
+        "versions": [
+          {
+            "lessThan": "10.4",
+            "status": "affected",
+            "version": "0",
+            "versionType": "custom"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://www.openwall.com/lists/oss-security/2026/07/06/5",
+      "https://marc.info/?l=openssh-unix-dev&m=178333966933090&w=2",
+      "https://www.openssh.org/releasenotes.html#10.4p1"
+    ]
+  },
+  {
+    "id": "CVE-2026-66373",
+    "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/66xxx/CVE-2026-66373.json",
+    "state": "PUBLISHED",
+    "published": "2026-07-25T00:08:35.982Z",
+    "affected": [
+      {
+        "defaultStatus": "unaffected",
+        "product": "Redis",
+        "vendor": "Redis",
+        "versions": [
+          {
+            "lessThan": "8.8.0",
+            "status": "affected",
+            "version": "0",
+            "versionType": "semver"
+          }
+        ]
+      }
+    ],
+    "references": [
+      "https://github.com/redis/redis/pull/15081",
+      "https://github.com/redis/redis/compare/8.6.4...8.8.0",
+      "https://x.com/Fried_rice/status/2080059356322918777",
+      "https://github.com/berabuddies/redis-poc",
+      "https://news.ycombinator.com/item?id=49024938"
+    ]
+  }
+]

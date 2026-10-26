@@ -1,10 +1,26 @@
 package config
 
 import (
-	"github.com/spf13/viper"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
+
+func TestDefaultStorageBackendIsOSS(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	t.Setenv("S3_ENDPOINT", "")
+	t.Setenv("OSS_ENDPOINT", "")
+
+	config, err := NewConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.S3.Type != "oss" {
+		t.Fatalf("expected OSS as the default storage backend, got %q", config.S3.Type)
+	}
+}
 
 func TestPermissionsConfigAndEnvironmentOverride(t *testing.T) {
 	viper.Reset()

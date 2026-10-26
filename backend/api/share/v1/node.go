@@ -11,6 +11,7 @@ type ShareNodeDetailResp struct {
 	KbID             string                        `json:"kb_id"`
 	NavID            string                        `json:"nav_id"`
 	Type             domain.NodeType               `json:"type"`
+	PathOnly         bool                          `json:"path_only,omitempty"`
 	Status           domain.NodeStatus             `json:"status"`
 	Name             string                        `json:"name"`
 	Content          string                        `json:"content"`

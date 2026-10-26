@@ -14,7 +14,7 @@ import {
   Dispatch,
   SetStateAction,
 } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   filterEmptyFolders,
   convertToTree,
@@ -23,9 +23,15 @@ import {
   type NavItem,
 } from '@/utils/tree';
 import { usePathname } from 'next/navigation';
+import {
+  AUTH_CLEARED_EVENT,
+  clearAuthStorage,
+  clearLegacyCredentials,
+} from '@/utils/auth';
 
 interface StoreContextType {
   authInfo?: V1UserInfoResp;
+  authRevision?: number;
   setAuthInfo?: Dispatch<SetStateAction<V1UserInfoResp | undefined>>;
   widget?: WidgetInfo;
   kbDetail?: KBDetail;
@@ -54,6 +60,11 @@ export const StoreContext = createContext<StoreContextType | undefined>(
   undefined,
 );
 
+const EMPTY_NODE_LIST: NodeListItem[] = [];
+const EMPTY_TREE: ITreeItem[] = [];
+const EMPTY_NAV_LIST: NavItem[] = [];
+const EMPTY_NAV_DATA: Record<string, NodeListItem[]> = {};
+
 export const useStore = () => {
   const context = useContext(StoreContext);
   if (!context) {
@@ -71,17 +82,18 @@ export default function StoreProvider({
     widget = context.widget,
     kbDetail = context.kbDetail,
     themeMode = context.themeMode,
-    nodeList: initialNodeList = context.nodeList || [],
+    nodeList: initialNodeList = context.nodeList || EMPTY_NODE_LIST,
     mobile = context.mobile,
     authInfo = context.authInfo,
-    tree: initialTree = context.tree || [],
-    navList: initialNavList = context.navList || [],
+    tree: initialTree = context.tree || EMPTY_TREE,
+    navList: initialNavList = context.navList || EMPTY_NAV_LIST,
     selectedNavId: initialSelectedNavId = context.selectedNavId,
-    navDataMap: initialNavDataMap = context.navDataMap || {},
+    navDataMap: initialNavDataMap = context.navDataMap || EMPTY_NAV_DATA,
   } = props;
 
   const NAV_ID_STORAGE_KEY = 'kb-selected-nav-id';
   const pathname = usePathname();
+  const router = useRouter();
 
   // 使用 props 传入的 defaultNavId，避免 SSR 与 CSR 不一致导致 Hydration 错误
   const initialNavId = initialSelectedNavId;
@@ -108,8 +120,9 @@ export default function StoreProvider({
   const [authInfoState, setAuthInfo] = useState<V1UserInfoResp | undefined>(
     authInfo,
   );
-  const [navList] = useState<NavItem[]>(initialNavList);
-  const [navDataMap] =
+  const [authRevision, setAuthRevision] = useState(0);
+  const [navList, setNavList] = useState<NavItem[]>(initialNavList);
+  const [navDataMap, setNavDataMap] =
     useState<Record<string, NodeListItem[]>>(initialNavDataMap);
   const [selectedNavId, setSelectedNavIdState] = useState<string | undefined>(
     initialNavId,
@@ -157,24 +170,57 @@ export default function StoreProvider({
     setAuthInfo(authInfo);
   }, [authInfo]);
 
+  // router.refresh() returns a newly permission-filtered server snapshot.
+  // Do not retain the initial navigation lists after the identity changes.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    setNodeList(initialNodeList);
+    setNavList(initialNavList);
+    setNavDataMap(initialNavDataMap);
+    setTree(initialTree);
+    setSelectedNavIdState(previous =>
+      previous && initialNavDataMap[previous] ? previous : initialSelectedNavId,
+    );
+  }, [
+    initialNodeList,
+    initialNavList,
+    initialNavDataMap,
+    initialTree,
+    initialSelectedNavId,
+  ]);
 
-    const basePath = window._BASE_PATH_ || '';
-    const normalizedPathname =
-      basePath && pathname?.startsWith(basePath)
-        ? pathname.slice(basePath.length) || '/'
-        : pathname || '/';
-    if (normalizedPathname === '/auth/login') {
-      return;
-    }
-
-    const token = window.localStorage.getItem('panda_wiki_token');
-    if (!token) {
+  useEffect(() => {
+    const handleAuthCleared = () => {
       setAuthInfo(undefined);
-      return;
-    }
+      setAuthRevision(value => value + 1);
+      setNodeList([]);
+      setTree([]);
+      setNavList([]);
+      setNavDataMap({});
+      setSelectedNavIdState(undefined);
+      setQaModalOpen(false);
+      // Only the outer store refreshes the route; nested stores all discard
+      // their old data immediately while the anonymous snapshot is loaded.
+      if (!context.setAuthInfo) router.refresh();
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === 'pw-reader-auth-change' &&
+        event.newValue !== event.oldValue
+      ) {
+        handleAuthCleared();
+      }
+    };
 
+    window.addEventListener(AUTH_CLEARED_EVENT, handleAuthCleared);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(AUTH_CLEARED_EVENT, handleAuthCleared);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [context.setAuthInfo, router]);
+
+  useEffect(() => {
+    clearLegacyCredentials();
     if (authInfoState?.id) return;
 
     let disposed = false;
@@ -194,6 +240,40 @@ export default function StoreProvider({
       disposed = true;
     };
   }, [authInfoState?.id, pathname]);
+
+  // HttpOnly credentials remain unreadable; the server returns only their
+  // non-secret absolute expiry so the username/content still clear on time.
+  useEffect(() => {
+    const expiresAt = Number(authInfoState?.session_expires_at) * 1000;
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) return;
+    let timer: number | undefined;
+    const expire = () => {
+      const remaining = expiresAt - Date.now();
+      if (remaining > 0) {
+        timer = window.setTimeout(expire, Math.min(remaining, 2_147_483_647));
+      } else {
+        clearAuthStorage();
+      }
+    };
+    expire();
+    document.addEventListener('visibilitychange', expire);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', expire);
+    };
+  }, [authInfoState?.session_expires_at]);
+
+  useEffect(() => {
+    const verifyAfterReturn = () => {
+      if (document.visibilityState !== 'visible' || !authInfoState?.id) return;
+      getApiV1User({ isAlert: false })
+        .then(setAuthInfo)
+        .catch(() => undefined);
+    };
+    document.addEventListener('visibilitychange', verifyAfterReturn);
+    return () =>
+      document.removeEventListener('visibilitychange', verifyAfterReturn);
+  }, [authInfoState?.id]);
 
   const params = useParams();
   const docId = (params?.id as string) || undefined;
@@ -231,6 +311,7 @@ export default function StoreProvider({
         setCatalogShow,
         mobile: isMobile,
         authInfo: authInfoState,
+        authRevision,
         setAuthInfo,
         setNodeList,
         catalogWidth,

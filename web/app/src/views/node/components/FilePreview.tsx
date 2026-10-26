@@ -232,7 +232,7 @@ const FilePreview = ({ info }: FilePreviewProps) => {
           component='iframe'
           src={effectivePreviewUrl}
           title={fileName}
-          sandbox={fileType === 'html' || fileType === 'htm' ? '' : undefined}
+          sandbox='allow-downloads'
           sx={{
             width: '100%',
             minHeight: '80vh',

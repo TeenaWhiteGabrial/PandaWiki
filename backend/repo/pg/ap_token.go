@@ -4,9 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -23,6 +21,12 @@ type APITokenRepo struct {
 }
 
 func NewAPITokenRepo(db *pg.DB, logger *log.Logger, cache *cache.Cache) *APITokenRepo {
+	// Remove the old plaintext credential cache namespace during rollout.
+	if cache != nil {
+		if err := cache.DeleteKeysWithPrefix(context.Background(), "api_token:"); err != nil {
+			logger.Warn("clear legacy API token cache failed", log.Error(err))
+		}
+	}
 	return &APITokenRepo{
 		db:     db,
 		logger: logger,
@@ -30,36 +34,22 @@ func NewAPITokenRepo(db *pg.DB, logger *log.Logger, cache *cache.Cache) *APIToke
 	}
 }
 
+// Kept under its historical name for callers. Authentication always checks the
+// database so deletion is immediately effective and credentials never enter Redis.
 func (r *APITokenRepo) GetByTokenWithCache(ctx context.Context, token string) (*domain.APIToken, error) {
-	cacheKey := fmt.Sprintf("api_token:%s", token)
-
-	cachedData, err := r.cache.Get(ctx, cacheKey).Result()
-	if err == nil && cachedData != "" {
-		var apiToken domain.APIToken
-		if err := json.Unmarshal([]byte(cachedData), &apiToken); err == nil {
-			return &apiToken, nil
-		}
-	}
-
-	// 缓存未命中，从数据库查询
 	var apiToken domain.APIToken
-	if err := r.db.WithContext(ctx).Where("token = ?", token).First(&apiToken).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("token = ?", domain.HashAPIToken(token)).First(&apiToken).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get api token by token failed: %w", err)
+		return nil, fmt.Errorf("get api token failed: %w", err)
 	}
-
-	if tokenData, err := json.Marshal(&apiToken); err == nil {
-		if err := r.cache.Set(ctx, cacheKey, tokenData, 30*time.Minute).Err(); err != nil {
-			r.logger.Warn("failed to cache API token", log.Error(err))
-		}
-	}
-
 	return &apiToken, nil
 }
 
 func (r *APITokenRepo) Create(ctx context.Context, token *domain.APIToken) error {
+	token.TokenHint = domain.APITokenHint(token.Token)
+	token.Token = domain.HashAPIToken(token.Token)
 	if err := r.db.WithContext(ctx).Create(token).Error; err != nil {
 		return fmt.Errorf("create api token failed: %w", err)
 	}

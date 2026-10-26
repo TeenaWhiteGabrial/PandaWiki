@@ -17,7 +17,7 @@ import { copyText, findAdjacentDocuments } from '@/utils';
 import { UseTiptapReturn } from '@ctzhian/tiptap';
 import type { TocList } from '@ctzhian/tiptap';
 import { message } from '@ctzhian/ui';
-import { Box, alpha } from '@mui/material';
+import { Alert, Box, alpha } from '@mui/material';
 import { EditorContent } from '@tiptap/react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
@@ -105,34 +105,24 @@ const DocContent = ({
     if (
       docId &&
       info?.kb_id &&
+      !info?.path_only &&
       appDetail?.web_app_comment_settings?.is_enable
     ) {
       getComment();
     }
-  }, [docId, info?.kb_id, appDetail?.web_app_comment_settings?.is_enable]);
-
-  const commentUserName = useMemo(() => {
-    if (authInfo?.account) {
-      return authInfo.account;
-    }
-    const cacheKey = 'pw_guest_comment_name';
-    if (typeof window === 'undefined') {
-      return '游客0000';
-    }
-    const cached = window.sessionStorage.getItem(cacheKey);
-    if (cached) {
-      return cached;
-    }
-    const suffix = Math.floor(Math.random() * 10000)
-      .toString()
-      .padStart(4, '0');
-    const generated = `游客${suffix}`;
-    window.sessionStorage.setItem(cacheKey, generated);
-    return generated;
-  }, [authInfo?.account]);
+  }, [
+    docId,
+    info?.kb_id,
+    info?.path_only,
+    appDetail?.web_app_comment_settings?.is_enable,
+  ]);
 
   const onSubmit = handleSubmit(
     async (data: { content: string; name: string }) => {
+      if (!authInfo?.id) {
+        message.error('请登录后发表评论');
+        return;
+      }
       setCommentLoading(true);
       let token = '';
       try {
@@ -160,7 +150,7 @@ const DocContent = ({
             content: data.content,
             pic_urls: imageUrls,
             node_id: docId,
-            user_name: commentUserName,
+            user_name: authInfo?.account || '',
             captcha_token: token,
           },
           {
@@ -291,6 +281,12 @@ const DocContent = ({
             onCopyDocMd={onCopyDocMd}
           />
 
+          {info.path_only && (
+            <Alert severity='info' sx={{ mb: 3 }}>
+              此目录仅用于定位您有权查看的下级内容，目录自身内容和信息不可见。
+            </Alert>
+          )}
+
           {info?.meta?.summary && (
             <Box
               sx={{
@@ -367,22 +363,24 @@ const DocContent = ({
             />
           )}
 
-          {appDetail?.web_app_comment_settings?.is_enable && (
-            <CommentSection
-              commentList={commentList}
-              contentFocused={contentFocused}
-              control={control}
-              errors={errors}
-              onSubmit={onSubmit}
-              commentLoading={commentLoading}
-              commentInputRef={commentInputRef}
-              commentImages={commentImages}
-              onContentFocus={() => setContentFocused(true)}
-              onContentBlur={() => setContentFocused(false)}
-              onImagesChange={setCommentImages}
-              basePath={basePath}
-            />
-          )}
+          {!info.path_only &&
+            appDetail?.web_app_comment_settings?.is_enable && (
+              <CommentSection
+                commentList={commentList}
+                canComment={!!authInfo?.id}
+                contentFocused={contentFocused}
+                control={control}
+                errors={errors}
+                onSubmit={onSubmit}
+                commentLoading={commentLoading}
+                commentInputRef={commentInputRef}
+                commentImages={commentImages}
+                onContentFocus={() => setContentFocused(true)}
+                onContentBlur={() => setContentFocused(false)}
+                onImagesChange={setCommentImages}
+                basePath={basePath}
+              />
+            )}
         </>
       )}
     </Box>

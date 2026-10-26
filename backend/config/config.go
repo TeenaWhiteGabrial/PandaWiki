@@ -75,10 +75,13 @@ type AuthConfig struct {
 }
 
 type JWTConfig struct {
-	Secret string `mapstructure:"secret"`
+	Secret               string `mapstructure:"secret"`
+	SessionMaxAgeSeconds int    `mapstructure:"session_max_age_seconds"`
+	SessionIdleSeconds   int    `mapstructure:"session_idle_seconds"`
 }
 
 type S3Config struct {
+	Type        string `mapstructure:"type"`
 	Endpoint    string `mapstructure:"endpoint"`
 	AccessKey   string `mapstructure:"access_key"`
 	SecretKey   string `mapstructure:"secret_key"`
@@ -106,7 +109,9 @@ type SentryConfig struct {
 }
 
 type PreviewConfig struct {
-	BaseURL string `mapstructure:"base_url"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	BaseURL  string `mapstructure:"base_url"`
 }
 
 func NewConfig() (*Config, error) {
@@ -147,12 +152,10 @@ func NewConfig() (*Config, error) {
 		},
 		Auth: AuthConfig{
 			Type: "jwt",
-			JWT:  JWTConfig{Secret: "panda-wiki-dev-secret"},
+			JWT:  JWTConfig{Secret: "panda-wiki-dev-secret", SessionMaxAgeSeconds: 28800, SessionIdleSeconds: 1800},
 		},
 		S3: S3Config{
-			Endpoint:  "panda-wiki-minio:9000",
-			AccessKey: "s3panda-wiki",
-			SecretKey: "",
+			Type: "oss",
 		},
 		Sentry: SentryConfig{
 			Enabled: true,
@@ -195,6 +198,12 @@ func NewConfig() (*Config, error) {
 
 // overrideWithEnv override sensitive info with env variables
 func overrideWithEnv(c *Config) {
+	if value, err := strconv.Atoi(os.Getenv("AUTH_SESSION_MAX_AGE_SECONDS")); err == nil && value > 0 {
+		c.Auth.JWT.SessionMaxAgeSeconds = value
+	}
+	if value, err := strconv.Atoi(os.Getenv("AUTH_SESSION_IDLE_SECONDS")); err == nil && value > 0 {
+		c.Auth.JWT.SessionIdleSeconds = value
+	}
 	if env := os.Getenv("POSTGRES_PASSWORD"); env != "" {
 		c.PG.DSN = fmt.Sprintf("host=panda-wiki-postgres user=panda-wiki password=%s dbname=panda-wiki port=5432 sslmode=disable TimeZone=Asia/Shanghai", env)
 	}
@@ -235,12 +244,14 @@ func overrideWithEnv(c *Config) {
 	// s3
 	if env := os.Getenv("S3_ENDPOINT"); env != "" {
 		c.S3.Endpoint = env
+		c.S3.Type = "minio"
 	}
 	if env := os.Getenv("S3_ACCESS_KEY"); env != "" {
 		c.S3.AccessKey = env
 	}
 	if env := os.Getenv("OSS_ENDPOINT"); env != "" {
 		c.S3.Endpoint = env
+		c.S3.Type = "oss"
 	}
 	if env := os.Getenv("OSS_ACCESS_KEY"); env != "" {
 		c.S3.AccessKey = env
@@ -286,6 +297,8 @@ func overrideWithEnv(c *Config) {
 	if env := os.Getenv("CADDY_API"); env != "" {
 		c.CaddyAPI = env
 	}
+	c.Preview.Username = os.Getenv("PREVIEW_USERNAME")
+	c.Preview.Password = os.Getenv("PREVIEW_PASSWORD")
 	if env := os.Getenv("PREVIEW_BASE_URL"); env != "" {
 		c.Preview.BaseURL = env
 	}

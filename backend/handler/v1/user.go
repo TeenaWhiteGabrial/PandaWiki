@@ -35,14 +35,44 @@ func (h *UserHandler) validateManagerDepartmentScope(ctx context.Context, operat
 	if operator == nil || operator.Role != consts.UserRoleManager {
 		return nil
 	}
-	managerDepartments, _, err := h.usecase.GetUserDepartments(ctx, operator.ID)
+	managerDepartments, err := h.usecase.GetEffectiveDepartmentIDs(ctx, operator.ID)
 	if err != nil {
 		return err
 	}
 	if len(managerDepartments) == 0 {
 		return fmt.Errorf("manager has no department")
 	}
-	for _, departmentID := range targetDepartmentIDs {
+	targetDepartments, err := h.usecase.ResolveEffectiveDepartmentIDs(ctx, targetDepartmentIDs)
+	if err != nil {
+		return err
+	}
+	if len(targetDepartments) == 0 {
+		return fmt.Errorf("target user has no department")
+	}
+	for _, departmentID := range targetDepartments {
+		if !slices.Contains(managerDepartments, departmentID) {
+			return fmt.Errorf("department out of manager scope")
+		}
+	}
+	return nil
+}
+
+func (h *UserHandler) validateManagerUserScope(ctx context.Context, operator *domain.User, targetUserID string) error {
+	if operator == nil || operator.Role != consts.UserRoleManager {
+		return nil
+	}
+	managerDepartments, err := h.usecase.GetEffectiveDepartmentIDs(ctx, operator.ID)
+	if err != nil {
+		return err
+	}
+	targetDepartments, err := h.usecase.GetEffectiveDepartmentIDs(ctx, targetUserID)
+	if err != nil {
+		return err
+	}
+	if len(managerDepartments) == 0 || len(targetDepartments) == 0 {
+		return fmt.Errorf("user has no department in manager scope")
+	}
+	for _, departmentID := range targetDepartments {
 		if !slices.Contains(managerDepartments, departmentID) {
 			return fmt.Errorf("department out of manager scope")
 		}
@@ -62,6 +92,10 @@ func NewUserHandler(e *echo.Echo, baseHandler *handler.BaseHandler, logger *log.
 	}
 	group := e.Group("/api/v1/user")
 	group.POST("/login", h.Login)
+	group.POST("/logout", h.Logout, h.auth.Authorize)
+	group.POST("/change_password", h.ChangePassword, h.auth.Authorize)
+	e.POST("/share/v1/auth/logout/account", h.Logout, h.ShareAuthMiddleware.Authorize)
+	e.POST("/share/v1/auth/change_password", h.ChangePassword, h.ShareAuthMiddleware.Authorize)
 	// User-facing account login remains available to ordinary readers.
 	e.POST("/share/v1/auth/login/account", h.ReaderLogin, h.ShareAuthMiddleware.CheckForbidden)
 	e.GET("/share/v1/auth/user", h.ReaderUserInfo, h.ShareAuthMiddleware.Authorize)
@@ -94,6 +128,9 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 	if err := c.Validate(&req); err != nil {
 		return h.NewResponseWithError(c, "invalid request", err)
 	}
+	if !domain.ValidUserAccount(req.Account) {
+		return h.NewResponseWithError(c, "账号仅支持英文字母（大小写）、数字和下划线", nil)
+	}
 
 	authInfo := domain.GetAuthInfoFromCtx(c.Request().Context())
 	if authInfo == nil {
@@ -108,14 +145,22 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 	}
 
 	uid := uuid.New().String()
+	var permissionLevelID *string
+	if req.PermissionLevelID != "" {
+		permissionLevelID = &req.PermissionLevelID
+	}
 	err = h.usecase.CreateUser(c.Request().Context(), &domain.User{
-		ID:       uid,
-		Account:  req.Account,
-		Name:     req.Name,
-		Password: req.Password,
-		Role:     req.Role,
+		ID:                uid,
+		Account:           req.Account,
+		Name:              req.Name,
+		Password:          req.Password,
+		Role:              req.Role,
+		PermissionLevelID: permissionLevelID,
 	}, req.DepartmentIDs, consts.GetLicenseEdition(c))
 	if err != nil {
+		if errors.Is(err, domain.ErrPasswordPolicy) {
+			return h.NewResponseWithError(c, domain.PasswordPolicyMessage, err)
+		}
 		return h.NewResponseWithError(c, "failed to create user", err)
 	}
 
@@ -158,13 +203,7 @@ func (h *UserHandler) login(c echo.Context, administratorOnly bool) error {
 		return h.NewResponseWithError(c, fmt.Sprintf("账号已被锁定，请 %s 后重试", remaining.String()), nil)
 	}
 
-	var token string
-	var err error
-	if administratorOnly {
-		token, err = h.usecase.VerifyUserAndGenerateToken(ctx, req)
-	} else {
-		token, err = h.usecase.VerifyReaderAndGenerateToken(ctx, req)
-	}
+	result, err := h.usecase.AuthenticateAccount(ctx, req, administratorOnly)
 	if err != nil {
 		if errors.Is(err, usecase.ErrAdministratorOnly) {
 			return c.JSON(http.StatusForbidden, domain.PWResponse{Success: false, Message: err.Error(), Code: domain.AdministratorOnlyCode})
@@ -179,7 +218,14 @@ func (h *UserHandler) login(c echo.Context, administratorOnly bool) error {
 		}
 	}()
 
-	return h.NewResponseWithData(c, v1.LoginResp{Token: token})
+	middleware.ClearBrowserSession(c)
+	maxAge := h.config.Auth.JWT.SessionMaxAgeSeconds
+	if maxAge <= 0 {
+		maxAge = 28800
+	}
+	middleware.SetBrowserSession(c, result.Token, maxAge)
+	result.Token = ""
+	return h.NewResponseWithData(c, result)
 }
 
 func (h *UserHandler) ReaderUserInfo(c echo.Context) error {
@@ -210,6 +256,8 @@ func (h *UserHandler) GetUserInfo(c echo.Context) error {
 	}
 
 	userInfo := &v1.UserInfoResp{
+		SessionExpiresAt:         authInfo.SessionExpiresAt,
+		PasswordChangeRequired:   user.PasswordChangeRequired,
 		PermissionLevelsDisabled: config.PermissionLevelsDisabled(),
 		ID:                       user.ID,
 		Account:                  user.Account,
@@ -295,7 +343,7 @@ func (h *UserHandler) ResetPassword(c echo.Context) error {
 	if user.Account == "admin" {
 		// admin 改不了自己的密码
 		if authInfo.UserId == req.ID {
-			return h.NewResponseWithError(c, "请修改安装目录下 .env 文件中的 ADMIN_PASSWORD，并重启 panda-wiki-api 容器使更改生效。", nil)
+			return h.NewResponseWithError(c, "请使用本人修改密码功能，需要验证当前密码。", nil)
 		}
 	} else {
 		targetUser, err := h.usecase.GetUser(ctx, req.ID)
@@ -310,17 +358,16 @@ func (h *UserHandler) ResetPassword(c echo.Context) error {
 		if user.Role == consts.UserRoleManager && targetUser.Role != consts.UserRoleUser && targetUser.ID != authInfo.UserId {
 			return h.NewResponseWithError(c, "管理员无法修改该用户密码", nil)
 		}
-		targetDepartments, _, err := h.usecase.GetUserDepartments(ctx, targetUser.ID)
-		if err != nil {
-			return h.NewResponseWithError(c, "failed to get target user departments", err)
-		}
-		if err := h.validateManagerDepartmentScope(ctx, user, targetDepartments); err != nil {
+		if err := h.validateManagerUserScope(ctx, user, targetUser.ID); err != nil {
 			return h.NewResponseWithError(c, "管理员无法修改其他部门用户密码", err)
 		}
 	}
 
 	err = h.usecase.ResetPassword(c.Request().Context(), &req)
 	if err != nil {
+		if errors.Is(err, domain.ErrPasswordPolicy) {
+			return h.NewResponseWithError(c, domain.PasswordPolicyMessage, err)
+		}
 		return h.NewResponseWithError(c, "failed to reset password", err)
 	}
 
@@ -378,11 +425,7 @@ func (h *UserHandler) DeleteUser(c echo.Context) error {
 			return h.NewResponseWithError(c, "管理员无法删除该用户", nil)
 		}
 	}
-	targetDepartments, _, err := h.usecase.GetUserDepartments(ctx, targetUser.ID)
-	if err != nil {
-		return h.NewResponseWithError(c, "failed to get target user departments", err)
-	}
-	if err := h.validateManagerDepartmentScope(ctx, user, targetDepartments); err != nil {
+	if err := h.validateManagerUserScope(ctx, user, targetUser.ID); err != nil {
 		return h.NewResponseWithError(c, "管理员无法删除其他部门用户", err)
 	}
 
@@ -391,5 +434,35 @@ func (h *UserHandler) DeleteUser(c echo.Context) error {
 		return h.NewResponseWithError(c, "failed to delete user", err)
 	}
 
+	return h.NewResponseWithData(c, nil)
+}
+
+func (h *UserHandler) Logout(c echo.Context) error {
+	info := domain.GetAuthInfoFromCtx(c.Request().Context())
+	if info == nil || info.IsToken || info.SessionID == "" {
+		return c.JSON(http.StatusUnauthorized, domain.PWResponse{Success: false, Code: domain.SessionInvalidCode, Message: "请先登录"})
+	}
+	if err := h.usecase.Logout(c.Request().Context(), info.SessionID, info.UserId); err != nil {
+		return h.NewResponseWithError(c, "退出登录失败", err)
+	}
+	middleware.ClearBrowserSession(c)
+	return h.NewResponseWithData(c, nil)
+}
+func (h *UserHandler) ChangePassword(c echo.Context) error {
+	info := domain.GetAuthInfoFromCtx(c.Request().Context())
+	if info == nil || info.IsToken || info.SessionID == "" {
+		return c.JSON(http.StatusUnauthorized, domain.PWResponse{Success: false, Code: domain.SessionInvalidCode, Message: "请先登录"})
+	}
+	var req v1.ChangePasswordReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "请求参数错误", err)
+	}
+	if err := c.Validate(&req); err != nil {
+		return h.NewResponseWithError(c, "请填写当前密码和新密码", err)
+	}
+	if err := h.usecase.ChangeOwnPassword(c.Request().Context(), info.UserId, &req); err != nil {
+		return h.NewResponseWithError(c, err.Error(), err)
+	}
+	middleware.ClearBrowserSession(c)
 	return h.NewResponseWithData(c, nil)
 }

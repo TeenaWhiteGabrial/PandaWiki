@@ -8,31 +8,29 @@ import {
   patchApiV1NodePermissionEdit,
 } from '@/request/NodePermission';
 import {
+  ConstsUserRole,
   DomainNodeListItemResp,
-  DomainNodeType,
   DomainNodePermissions,
+  DomainNodeType,
 } from '@/request/types';
 import { useAppSelector } from '@/store';
+import { Alert, Button, Stack } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
-  Box,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-  Stack,
-  Typography,
-} from '@mui/material';
-import { useEffect, useState } from 'react';
+  selectableReadingDepartments,
+  selectableReadingLevels,
+} from '../utils/readingPermissionOptions';
 import NodeManagementModal from './NodeManagementModal';
 import ReadingPermissionFields, {
+  makeInheritedReadingPermissionValue,
+  normalizeReadingPermissionValue,
   ReadingPermissionValue,
-  ReadingScope,
+  readingPermissionPayload,
 } from './ReadingPermissionFields';
-import ReadingPermissionSummary from './ReadingPermissionSummary';
+import ReadingPermissionPanel from './ReadingPermissionPanel';
 import {
   ManagementPermissionSection,
   PermissionTarget,
-  ReadingPermissionSection,
 } from './PermissionSettingsSections';
 
 interface DocPropertiesModalProps {
@@ -45,10 +43,13 @@ interface DocPropertiesModalProps {
 
 const emptyValue = (): ReadingPermissionValue => ({
   scope_type: 'public',
+  level_restriction_mode: 'none',
   min_permission_level_id: '',
   allowed_permission_level_ids: [],
   allowed_department_ids: [],
   allowed_user_ids: [],
+  allow_all_users: false,
+  denied_user_ids: [],
 });
 
 const hasExplicitPermissionRule = (permissions: DomainNodePermissions) =>
@@ -58,8 +59,132 @@ const hasExplicitPermissionRule = (permissions: DomainNodePermissions) =>
   !!permissions.min_permission_level_rank ||
   !!permissions.allowed_department_ids?.length ||
   !!permissions.allowed_user_ids?.length ||
+  !!permissions.allow_all_users ||
   !!permissions.denied_department_ids?.length ||
   !!permissions.denied_user_ids?.length;
+
+const isUnrestrictedPermission = (
+  permissions: DomainNodePermissions,
+  levelsDisabled = false,
+): boolean => {
+  const scope = permissions.scope_type;
+  const ownRuleIsUnrestricted = permissions.allow_all_users
+    ? !permissions.denied_department_ids?.length &&
+      !permissions.denied_user_ids?.length
+    : (!scope || scope === 'public' || scope === 'custom') &&
+      !permissions.min_permission_level_id &&
+      !permissions.min_permission_level_rank &&
+      (levelsDisabled || !permissions.allowed_permission_level_ids?.length) &&
+      !permissions.allowed_department_ids?.length &&
+      !permissions.allowed_user_ids?.length &&
+      !permissions.denied_department_ids?.length &&
+      !permissions.denied_user_ids?.length;
+  return (
+    ownRuleIsUnrestricted &&
+    (permissions.constraints || []).every(constraint =>
+      isUnrestrictedPermission(constraint, levelsDisabled),
+    )
+  );
+};
+
+const userMatchesPermission = (
+  permissions: DomainNodePermissions,
+  user: { id: string; permission_level_id?: string; department_ids?: string[] },
+  levels: { id: string; rank: number }[],
+  departments: Department[],
+  levelsDisabled: boolean,
+): boolean => {
+  if (
+    (permissions.constraints || []).some(
+      constraint =>
+        !userMatchesPermission(
+          constraint,
+          user,
+          levels,
+          departments,
+          levelsDisabled,
+        ),
+    )
+  ) {
+    return false;
+  }
+  const rank =
+    levels.find(level => level.id === user.permission_level_id)?.rank || 0;
+  if (user.id && permissions.denied_user_ids?.includes(user.id)) return false;
+  const departmentIDs = new Set(user.department_ids || []);
+  const userDepartments = departments.filter(department =>
+    (user.department_ids || []).some(id => {
+      const assigned = departments.find(item => item.id === id);
+      return (
+        assigned &&
+        (id === department.id ||
+          assigned.ancestor_ids?.includes(department.id) ||
+          assigned.path === department.path ||
+          assigned.path.startsWith(`${department.path}/`))
+      );
+    }),
+  );
+  for (const department of userDepartments) {
+    departmentIDs.add(department.id);
+    for (const ancestorID of department.ancestor_ids || []) {
+      departmentIDs.add(ancestorID);
+    }
+  }
+  if (permissions.denied_department_ids?.some(id => departmentIDs.has(id))) {
+    return false;
+  }
+  if (permissions.allow_all_users) return true;
+  const scope = permissions.scope_type;
+  if (user.id && permissions.allowed_user_ids?.includes(user.id)) return true;
+  if (scope === 'permission_level') {
+    return (
+      levelsDisabled ||
+      (!!user.permission_level_id &&
+        !!permissions.allowed_permission_level_ids?.includes(
+          user.permission_level_id,
+        ) &&
+        (!permissions.min_permission_level_rank ||
+          rank >= permissions.min_permission_level_rank))
+    );
+  }
+  if (scope === 'user') {
+    return false;
+  }
+  if (scope === 'department') {
+    return (
+      !!permissions.allowed_department_ids?.some(id => departmentIDs.has(id)) &&
+      (levelsDisabled ||
+        !permissions.min_permission_level_rank ||
+        rank >= permissions.min_permission_level_rank)
+    );
+  }
+
+  const allowedDepartments = permissions.allowed_department_ids || [];
+  const allowedLevels = permissions.allowed_permission_level_ids || [];
+  const departmentRestricted = allowedDepartments.length > 0;
+  const levelRestricted = !levelsDisabled && allowedLevels.length > 0;
+  const minimumRank = !levelsDisabled
+    ? permissions.min_permission_level_rank || 0
+    : 0;
+  if (!departmentRestricted && !levelRestricted && !minimumRank) {
+    return !permissions.allowed_user_ids?.length;
+  }
+  if (
+    departmentRestricted &&
+    !allowedDepartments.some(id => departmentIDs.has(id))
+  ) {
+    return false;
+  }
+  if (
+    levelRestricted &&
+    (!user.permission_level_id ||
+      !allowedLevels.includes(user.permission_level_id))
+  ) {
+    return false;
+  }
+  if (minimumRank && rank < minimumRank) return false;
+  return true;
+};
 
 const DocPropertiesModal = ({
   open,
@@ -71,21 +196,182 @@ const DocPropertiesModal = ({
   const levelsDisabled = useAppSelector(
     state => state.config.user?.permission_levels_disabled,
   );
+  const publicAllowed = useAppSelector(
+    state => state.config.user?.role === ConstsUserRole.UserRoleAdmin,
+  );
   const { kb_id, nav_id } = useAppSelector(state => state.config);
   const [managementOpen, setManagementOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [readingDirty, setReadingDirty] = useState(false);
+  const [savedPermissions, setSavedPermissions] =
+    useState<DomainNodePermissions>({});
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [inherit, setInherit] = useState(true);
   const [value, setValue] = useState<ReadingPermissionValue>(emptyValue);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [levels, setLevels] = useState<
     { id: string; name: string; rank: number }[]
   >([]);
-  const [users, setUsers] = useState<{ id: string; account: string }[]>([]);
+  const [users, setUsers] = useState<
+    {
+      id: string;
+      account: string;
+      permission_level_id?: string;
+      department_ids?: string[];
+    }[]
+  >([]);
+  const canManagePermission =
+    data.length > 0 && data.every(item => item.can_manage);
   const [parentPermissions, setParentPermissions] =
     useState<DomainNodePermissions>({});
+  const [parentPermissionGroups, setParentPermissionGroups] = useState<
+    DomainNodePermissions[]
+  >([]);
   const isFolder = data[0]?.type === DomainNodeType.NodeTypeFolder;
+  const narrowedOptions = useMemo(() => {
+    const eligible = users.filter(user =>
+      parentPermissionGroups.every(parent =>
+        userMatchesPermission(
+          parent,
+          user,
+          levels,
+          departments,
+          !!levelsDisabled,
+        ),
+      ),
+    );
+    const eligibleIDs = new Set(eligible.map(user => user.id));
+    const eligibleLevels = selectableReadingLevels(
+      levels,
+      parentPermissionGroups,
+      !!levelsDisabled,
+    );
+    const activeLevels = selectableReadingLevels(levels, [], !!levelsDisabled);
+    const eligibleLevelIDs = new Set(eligibleLevels.map(level => level.id));
+    const minimumPermissionLevels = eligibleLevels.filter(level =>
+      activeLevels.every(
+        candidate =>
+          candidate.rank < level.rank || eligibleLevelIDs.has(candidate.id),
+      ),
+    );
+    const eligibleDepartments = selectableReadingDepartments(
+      departments,
+      parentPermissionGroups,
+    );
+    return {
+      users: eligible,
+      departments: eligibleDepartments,
+      permissionLevels: eligibleLevels,
+      minimumPermissionLevels,
+      restrictedUserIDs: users
+        .filter(user => !eligibleIDs.has(user.id))
+        .map(user => user.id)
+        .concat(value.allowed_user_ids.filter(id => !eligibleIDs.has(id))),
+      restrictedDepartmentIDs: departments
+        .filter(
+          department =>
+            !eligibleDepartments.some(item => item.id === department.id),
+        )
+        .map(department => department.id)
+        .concat(
+          value.allowed_department_ids.filter(
+            id => !eligibleDepartments.some(item => item.id === id),
+          ),
+        ),
+      restrictedPermissionLevelIDs: levels
+        .filter(level => !eligibleLevels.some(item => item.id === level.id))
+        .map(level => level.id)
+        .concat(
+          value.allowed_permission_level_ids.filter(
+            id => !eligibleLevels.some(item => item.id === id),
+          ),
+        ),
+      restrictedMinimumPermissionLevelIDs: levels
+        .filter(
+          level => !minimumPermissionLevels.some(item => item.id === level.id),
+        )
+        .map(level => level.id)
+        .concat(
+          value.min_permission_level_id &&
+            !minimumPermissionLevels.some(
+              item => item.id === value.min_permission_level_id,
+            )
+            ? [value.min_permission_level_id]
+            : [],
+        ),
+    };
+  }, [
+    users,
+    levels,
+    departments,
+    parentPermissionGroups,
+    levelsDisabled,
+    value.allowed_user_ids,
+    value.allowed_department_ids,
+    value.allowed_permission_level_ids,
+    value.min_permission_level_id,
+  ]);
+  const invalidAudienceSelections = useMemo(() => {
+    const restrictedUsers = new Set(narrowedOptions.restrictedUserIDs);
+    const restrictedDepartments = new Set(
+      narrowedOptions.restrictedDepartmentIDs,
+    );
+    const restrictedLevels = new Set(
+      narrowedOptions.restrictedPermissionLevelIDs,
+    );
+    return {
+      users:
+        value.scope_type === 'user' || value.scope_type === 'custom'
+          ? value.allowed_user_ids.filter(id => restrictedUsers.has(id))
+          : [],
+      departments:
+        value.scope_type === 'department' || value.scope_type === 'custom'
+          ? value.allowed_department_ids.filter(id =>
+              restrictedDepartments.has(id),
+            )
+          : [],
+      levels:
+        value.scope_type === 'custom'
+          ? value.allowed_permission_level_ids.filter(id =>
+              restrictedLevels.has(id),
+            )
+          : [],
+      minimumLevel:
+        value.scope_type === 'custom' &&
+        value.level_restriction_mode === 'minimum' &&
+        narrowedOptions.restrictedMinimumPermissionLevelIDs.includes(
+          value.min_permission_level_id,
+        ),
+    };
+  }, [value, narrowedOptions]);
+  const hasIncompleteLevelRestriction =
+    (value.level_restriction_mode === 'minimum' &&
+      !value.min_permission_level_id) ||
+    (value.level_restriction_mode === 'selected' &&
+      value.allowed_permission_level_ids.length === 0);
+  const hasInvalidAudienceSelections =
+    !!value.level_restriction_needs_review ||
+    hasIncompleteLevelRestriction ||
+    invalidAudienceSelections.users.length > 0 ||
+    invalidAudienceSelections.departments.length > 0 ||
+    invalidAudienceSelections.levels.length > 0;
+  const hasInvalidAudienceSelection =
+    hasInvalidAudienceSelections || invalidAudienceSelections.minimumLevel;
+  const incompleteAudience =
+    value.scope_type === 'custom' &&
+    !value.allow_all_users &&
+    value.level_restriction_mode === 'none' &&
+    !value.allowed_department_ids.length &&
+    !value.allowed_user_ids.length;
+  const canSetPublic =
+    publicAllowed &&
+    parentPermissionGroups.every(parent =>
+      isUnrestrictedPermission(parent, !!levelsDisabled),
+    );
+  const inheritedValue = useMemo(
+    () => makeInheritedReadingPermissionValue(parentPermissions, levels),
+    [parentPermissions, levels],
+  );
   const modalTitle = isBatch
     ? '批量设置权限'
     : isFolder
@@ -100,64 +386,73 @@ const DocPropertiesModal = ({
     let active = true;
     setReady(false);
     setLoadError(false);
-    setInherit(true);
     setValue(emptyValue());
+    setReadingDirty(false);
+    setSavedPermissions({});
     setParentPermissions({});
+    setParentPermissionGroups([]);
     const node = data[0];
-    const currentNavID = node.nav_id || nav_id;
-    // 栏目根的空 ID、栏目 ID 和旧 nav:ID 都不属于 nodes 父节点。
-    const parentNodeID =
-      node.parent_id &&
-      !node.parent_id.startsWith('nav:') &&
-      node.parent_id !== currentNavID
-        ? node.parent_id
-        : '';
+    const parentPermissionRequests = new Map<
+      string,
+      Promise<DomainNodePermissions>
+    >();
+    const loadParentPermissions = (item: DomainNodeListItemResp) => {
+      const currentNavID = item.nav_id || nav_id;
+      // 栏目根的空 ID、栏目 ID 和旧 nav:ID 都不属于 nodes 父节点。
+      const parentNodeID =
+        item.parent_id &&
+        !item.parent_id.startsWith('nav:') &&
+        item.parent_id !== currentNavID
+          ? item.parent_id
+          : '';
+      const key = parentNodeID
+        ? `node:${parentNodeID}`
+        : currentNavID
+          ? `nav:${currentNavID}`
+          : '';
+      if (!key) return Promise.resolve({});
+      const cached = parentPermissionRequests.get(key);
+      if (cached) return cached;
+      const request = parentNodeID
+        ? getApiV1NodePermission({ kb_id, id: parentNodeID }).then(
+            response =>
+              response.effective_permissions || response.permissions || {},
+          )
+        : getApiV1NavPermission({ kb_id, id: currentNavID }).then(
+            response => response.permissions || {},
+          );
+      parentPermissionRequests.set(key, request);
+      return request;
+    };
     Promise.all([
       getNodePermissionOptions(kb_id),
-      !isBatch && currentNavID
-        ? getApiV1NavPermission({ kb_id, id: currentNavID })
-        : Promise.resolve(null),
-      !isBatch && parentNodeID
-        ? getApiV1NodePermission({ kb_id, id: parentNodeID })
-        : Promise.resolve(null),
+      Promise.all(data.map(loadParentPermissions)),
       !isBatch
         ? getApiV1NodePermission({ kb_id, id: node.id! })
         : Promise.resolve(null),
     ])
-      .then(([options, navResponse, parentResponse, response]) => {
+      .then(([options, parentPermissionResults, response]) => {
         if (!active) return;
         setDepartments(options.departments || []);
         setLevels(options.levels || []);
         setUsers(options.users || []);
-        setParentPermissions(
-          parentResponse?.effective_permissions ||
-            parentResponse?.permissions ||
-            navResponse?.permissions ||
-            {},
-        );
+        setParentPermissionGroups(parentPermissionResults);
+        setParentPermissions(parentPermissionResults[0] || {});
         const permissions = response?.permissions || {};
-        setInherit(
-          permissions.inherit ?? !hasExplicitPermissionRule(permissions),
-        );
-        const scope = [
-          'custom',
-          'department',
-          'permission_level',
-          'user',
-        ].includes(permissions.scope_type || '')
-          ? (permissions.scope_type as ReadingScope)
-          : permissions.allowed_department_ids?.length ||
-              permissions.allowed_user_ids?.length
-            ? 'custom'
-            : 'public';
-        setValue({
-          scope_type: scope,
-          min_permission_level_id: permissions.min_permission_level_id || '',
-          allowed_permission_level_ids:
-            permissions.allowed_permission_level_ids || [],
-          allowed_department_ids: permissions.allowed_department_ids || [],
-          allowed_user_ids: permissions.allowed_user_ids || [],
-        });
+        setSavedPermissions(response?.effective_permissions || permissions);
+        const hasLocalRule =
+          permissions.inherit === false ||
+          (permissions.inherit === undefined &&
+            hasExplicitPermissionRule(permissions));
+        if (hasLocalRule) {
+          setValue(
+            normalizeReadingPermissionValue(permissions, options.levels),
+          );
+        } else {
+          setValue(emptyValue());
+          setReadingDirty(false);
+          setSavedPermissions({});
+        }
         setReady(true);
       })
       .catch(() => {
@@ -170,15 +465,25 @@ const DocPropertiesModal = ({
 
   const submit = async () => {
     if (!ready || saving || !kb_id) return;
+    if (value.level_restriction_needs_review || hasIncompleteLevelRestriction) {
+      message.warning('请完成等级范围选择后再保存');
+      return;
+    }
     const scope = value.scope_type;
+    const hasLevelRestriction =
+      value.level_restriction_mode === 'minimum'
+        ? !!value.min_permission_level_id
+        : value.level_restriction_mode === 'selected'
+          ? value.allowed_permission_level_ids.length > 0
+          : false;
     if (
-      !inherit &&
-      ((scope === 'permission_level' &&
-        !value.allowed_permission_level_ids.length) ||
-        (scope === 'department' && !value.allowed_department_ids.length) ||
-        (scope === 'user' && !value.allowed_user_ids.length))
+      scope === 'custom' &&
+      !value.allow_all_users &&
+      !hasLevelRestriction &&
+      !value.allowed_department_ids.length &&
+      !value.allowed_user_ids.length
     ) {
-      message.warning('请选择可以查阅的对象');
+      message.warning('请至少设置一个部门、等级限制或指定用户');
       return;
     }
     setSaving(true);
@@ -186,30 +491,10 @@ const DocPropertiesModal = ({
       await patchApiV1NodePermissionEdit({
         kb_id,
         ids: data.map(item => item.id!),
-        permissions: inherit
-          ? { inherit: true }
-          : {
-              inherit: false,
-              scope_type: scope,
-              min_permission_level_id:
-                scope === 'custom' || scope === 'public'
-                  ? value.min_permission_level_id || undefined
-                  : undefined,
-              allowed_permission_level_ids:
-                scope === 'permission_level'
-                  ? value.allowed_permission_level_ids
-                  : [],
-              allowed_department_ids:
-                scope === 'custom' || scope === 'department'
-                  ? value.allowed_department_ids
-                  : [],
-              allowed_user_ids:
-                scope === 'custom' || scope === 'user'
-                  ? value.allowed_user_ids
-                  : [],
-            },
+        permissions: readingPermissionPayload(value, true),
       });
       message.success('查阅权限已保存');
+      setReadingDirty(false);
       onOk();
     } catch {
       // 请求层已展示保存失败原因，保留当前设置以便重试。
@@ -227,7 +512,15 @@ const DocPropertiesModal = ({
         width={720}
         centered
         okText='保存查阅权限'
-        okButtonProps={{ loading: saving, disabled: !ready }}
+        okButtonProps={{
+          loading: saving,
+          disabled:
+            !ready ||
+            !canManagePermission ||
+            !readingDirty ||
+            hasInvalidAudienceSelection ||
+            incompleteAudience,
+        }}
         onOk={submit}
       >
         <Stack
@@ -241,117 +534,134 @@ const DocPropertiesModal = ({
           {loadError && (
             <Alert severity='error'>权限加载失败，请关闭窗口后重试。</Alert>
           )}
-          <ReadingPermissionSection>
-            <Typography fontSize={13} color='text.secondary'>
-              {isBatch
-                ? '以下设置会应用到全部所选文档和目录。'
-                : isFolder
-                  ? '控制哪些用户可以查看目录内的内容。'
-                  : '控制哪些用户可以查看这份文档。'}
-            </Typography>
-            <RadioGroup
-              aria-label='查阅权限设置方式'
-              value={inherit ? 'inherit' : 'custom'}
-              onChange={(_, next) => setInherit(next === 'inherit')}
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-                gap: 1.5,
-              }}
-            >
-              {[
-                {
-                  value: 'inherit',
-                  title: '跟随上级',
-                  description: '使用上级的规则，上级调整后自动跟随。',
-                },
-                {
-                  value: 'custom',
-                  title: '单独设置',
-                  description: '为当前文档或目录选择可查阅的用户。',
-                },
-              ].map(option => (
-                <FormControlLabel
-                  key={option.value}
-                  value={option.value}
-                  disabled={!ready || saving}
-                  control={<Radio size='small' />}
-                  sx={{
-                    m: 0,
-                    p: 1,
-                    alignItems: 'flex-start',
-                    border: '1px solid',
-                    borderColor:
-                      (inherit ? 'inherit' : 'custom') === option.value
-                        ? 'primary.main'
-                        : 'divider',
-                    borderRadius: 1.5,
+          <ReadingPermissionPanel
+            open={open}
+            ready={ready}
+            kbID={kb_id || ''}
+            ids={data.map(item => item.id!).filter(Boolean)}
+            canEdit={canManagePermission}
+            dirty={readingDirty}
+            invalid={
+              readingDirty &&
+              (hasInvalidAudienceSelection || incompleteAudience)
+            }
+            draft={readingPermissionPayload(value, true)}
+            saved={savedPermissions}
+            usingParent={value.scope_type === 'public'}
+            levels={levels}
+            departments={departments}
+            users={users}
+            levelsDisabled={levelsDisabled}
+            onLocate={onCancel}
+          >
+            <Form labelWidth={100} gap={2}>
+              <ReadingPermissionFields
+                value={value}
+                publicAllowed={canSetPublic}
+                neutralAudienceAllowed
+                inheritedValue={inheritedValue}
+                onChange={patch => {
+                  setValue(prev => ({ ...prev, ...patch }));
+                  setReadingDirty(true);
+                }}
+                levelsDisabled={levelsDisabled}
+                levels={levels}
+                permissionLevels={narrowedOptions.permissionLevels}
+                minimumPermissionLevels={
+                  narrowedOptions.minimumPermissionLevels
+                }
+                allPermissionLevels={levels}
+                departments={departments}
+                users={users}
+                restrictedPermissionLevelIDs={
+                  narrowedOptions.restrictedPermissionLevelIDs
+                }
+                restrictedMinimumPermissionLevelIDs={
+                  narrowedOptions.restrictedMinimumPermissionLevelIDs
+                }
+                restrictedDepartmentIDs={
+                  narrowedOptions.restrictedDepartmentIDs
+                }
+                restrictedUserIDs={narrowedOptions.restrictedUserIDs}
+                disabled={!ready || saving || !canManagePermission}
+              />
+            </Form>
+            {hasInvalidAudienceSelection && (
+              <Alert severity='warning' icon={false}>
+                请修正以下查阅规则后再保存：
+                {[
+                  value.level_restriction_needs_review &&
+                    '历史等级规则需要重新选择',
+                  invalidAudienceSelections.departments.length > 0 &&
+                    `部门（${invalidAudienceSelections.departments
+                      .map(
+                        id =>
+                          departments.find(item => item.id === id)?.name ||
+                          `ID ${id}`,
+                      )
+                      .join('、')}）`,
+                  invalidAudienceSelections.levels.length > 0 &&
+                    `用户等级（${invalidAudienceSelections.levels
+                      .map(
+                        id =>
+                          levels.find(item => item.id === id)?.name ||
+                          `ID ${id}`,
+                      )
+                      .join('、')}）`,
+                  invalidAudienceSelections.minimumLevel &&
+                    `最低等级（${levels.find(item => item.id === value.min_permission_level_id)?.name || `ID ${value.min_permission_level_id}`}）`,
+                  invalidAudienceSelections.users.length > 0 &&
+                    `用户（${invalidAudienceSelections.users
+                      .map(
+                        id =>
+                          users.find(item => item.id === id)?.account ||
+                          `ID ${id}`,
+                      )
+                      .join('、')}）`,
+                ]
+                  .filter(Boolean)
+                  .join('；')}
+                。
+                <Button
+                  size='small'
+                  onClick={() => {
+                    setReadingDirty(true);
+                    setValue(prev => ({
+                      ...prev,
+                      level_restriction_mode:
+                        prev.level_restriction_needs_review ||
+                        invalidAudienceSelections.minimumLevel
+                          ? 'none'
+                          : prev.level_restriction_mode,
+                      level_restriction_needs_review: false,
+                      min_permission_level_id:
+                        prev.level_restriction_needs_review ||
+                        invalidAudienceSelections.minimumLevel
+                          ? ''
+                          : prev.min_permission_level_id,
+                      allowed_department_ids:
+                        prev.allowed_department_ids.filter(
+                          id =>
+                            !invalidAudienceSelections.departments.includes(id),
+                        ),
+                      allowed_permission_level_ids:
+                        prev.allowed_permission_level_ids.filter(
+                          id => !invalidAudienceSelections.levels.includes(id),
+                        ),
+                      allowed_user_ids: prev.allowed_user_ids.filter(
+                        id => !invalidAudienceSelections.users.includes(id),
+                      ),
+                    }));
                   }}
-                  label={
-                    <Box sx={{ pt: 0.75 }}>
-                      <Typography fontSize={14} fontWeight={500}>
-                        {option.title}
-                      </Typography>
-                      <Typography fontSize={12} color='text.secondary'>
-                        {option.description}
-                      </Typography>
-                    </Box>
-                  }
-                />
-              ))}
-            </RadioGroup>
-            {!ready ? (
-              <Typography fontSize={13} color='text.secondary'>
-                {loadError ? '暂时无法显示查阅规则。' : '正在读取查阅规则…'}
-              </Typography>
-            ) : inherit ? (
-              isBatch ? (
-                <Alert severity='info' icon={false}>
-                  每个文档或目录将分别使用各自上级的查阅规则。
-                </Alert>
-              ) : (
-                <ReadingPermissionSummary
-                  permissions={parentPermissions}
-                  label='上级允许查阅的用户'
-                  levels={levels}
-                  departments={departments}
-                  users={users}
-                  levelsDisabled={levelsDisabled}
-                />
-              )
-            ) : (
-              <>
-                <Form labelWidth={100} gap={2}>
-                  <ReadingPermissionFields
-                    value={value}
-                    onChange={patch =>
-                      setValue(prev => ({ ...prev, ...patch }))
-                    }
-                    levelsDisabled={levelsDisabled}
-                    levels={levels}
-                    departments={departments}
-                    users={users}
-                    disabled={saving}
-                  />
-                </Form>
-                <ReadingPermissionSummary
-                  permissions={value}
-                  label='当前设置允许查阅的用户'
-                  levels={levels}
-                  departments={departments}
-                  users={users}
-                  levelsDisabled={levelsDisabled}
-                />
-              </>
+                >
+                  移除这些对象
+                </Button>
+              </Alert>
             )}
-            <Typography fontSize={12} color='text.secondary'>
-              访问文档时，还需满足所属一级栏目的查阅限制。
-              {isFolder && '下级文档和目录选择“跟随上级”时，会使用这里的规则。'}
-            </Typography>
-          </ReadingPermissionSection>
+          </ReadingPermissionPanel>
           <ManagementPermissionSection
             onConfigure={() => setManagementOpen(true)}
-            disabled={!ready || saving}
+            disabled={!ready || saving || !canManagePermission}
           />
         </Stack>
       </Modal>

@@ -37,7 +37,8 @@ func NewShareConversationHandler(
 	return h
 }
 
-// GetConversationHistory lists the authenticated user's chats or verified anonymous browser sessions.
+// GetConversationHistory requires authentication; legacy browser credentials
+// remain verifiable only after the caller has signed in.
 func (h *ShareConversationHandler) GetConversationHistory(c echo.Context) error {
 	var req domain.ShareConversationHistoryRequest
 	if err := c.Bind(&req); err != nil {

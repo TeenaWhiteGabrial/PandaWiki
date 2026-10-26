@@ -26,6 +26,7 @@ interface CommentItem {
 
 interface CommentSectionProps {
   commentList: CommentItem[];
+  canComment: boolean;
   contentFocused: boolean;
   control: Control<{ content: string; name: string }>;
   errors: FieldErrors<{ content: string; name: string }>;
@@ -41,6 +42,7 @@ interface CommentSectionProps {
 
 const CommentSection = ({
   commentList,
+  canComment,
   contentFocused,
   control,
   errors,
@@ -56,50 +58,58 @@ const CommentSection = ({
   <>
     <Divider sx={{ my: 4 }} />
     <Box sx={{ fontWeight: 700, fontSize: 18, mb: 3 }}>评论</Box>
-    <Box
-      sx={{
-        p: 2,
-        border: '1px solid',
-        borderColor: contentFocused ? 'text.primary' : 'divider',
-        borderRadius: 2,
-        transition: 'all 0.2s ease-in-out',
-      }}
-    >
-      <Controller
-        name='content'
-        control={control}
-        rules={{ required: '请输入评论' }}
-        render={({ field }) => (
-          <CommentInput
-            value={field.value}
-            onChange={field.onChange}
-            onImagesChange={onImagesChange}
-            ref={commentInputRef}
-            onFocus={() => {
-              onContentFocus();
-            }}
-            onBlur={() => {
-              onContentBlur();
-              field.onBlur();
-            }}
-            placeholder='请输入评论'
-            error={!!errors.content}
-            helperText={errors.content?.message}
-          />
-        )}
-      />
-      <Divider sx={{ my: 2 }} />
-      <Stack
-        direction='row-reverse'
-        justifyContent='space-between'
-        alignItems='center'
-        sx={{ fontSize: 14, color: 'text.secondary' }}
+    {!canComment ? (
+      <Button href={`${basePath}/auth/login`}>登录后发表评论</Button>
+    ) : (
+      <Box
+        sx={{
+          p: 2,
+          border: '1px solid',
+          borderColor: contentFocused ? 'text.primary' : 'divider',
+          borderRadius: 2,
+          transition: 'all 0.2s ease-in-out',
+        }}
       >
-        <Button variant='contained' onClick={onSubmit} loading={commentLoading}>
-          发送
-        </Button>
-      </Stack>
-    </Box>
+        <Controller
+          name='content'
+          control={control}
+          rules={{ required: '请输入评论' }}
+          render={({ field }) => (
+            <CommentInput
+              value={field.value}
+              onChange={field.onChange}
+              onImagesChange={onImagesChange}
+              ref={commentInputRef}
+              onFocus={() => {
+                onContentFocus();
+              }}
+              onBlur={() => {
+                onContentBlur();
+                field.onBlur();
+              }}
+              placeholder='请输入评论'
+              error={!!errors.content}
+              helperText={errors.content?.message}
+            />
+          )}
+        />
+        <Divider sx={{ my: 2 }} />
+        <Stack
+          direction='row-reverse'
+          justifyContent='space-between'
+          alignItems='center'
+          sx={{ fontSize: 14, color: 'text.secondary' }}
+        >
+          <Button
+            variant='contained'
+            onClick={onSubmit}
+            loading={commentLoading}
+          >
+            发送
+          </Button>
+        </Stack>
+      </Box>
+    )}
     <Stack gap={1} sx={{ mt: 4 }}>
       {commentList.map((item, index) => (
         <React.Fragment key={item.id}>

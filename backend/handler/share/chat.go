@@ -45,9 +45,6 @@ func NewShareChatHandler(
 	share := e.Group("share/v1/chat",
 		func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(c echo.Context) error {
-				c.Response().Header().Set("Access-Control-Allow-Origin", "*")
-				c.Response().Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-				c.Response().Header().Set("Access-Control-Allow-Headers", "Content-Type, Origin, Accept")
 				if c.Request().Method == "OPTIONS" {
 					return c.NoContent(http.StatusOK)
 				}
@@ -57,9 +54,9 @@ func NewShareChatHandler(
 	share.POST("/message", h.ChatMessage, h.ShareAuthMiddleware.Authorize)
 	share.POST("/search", h.ChatSearch, h.ShareAuthMiddleware.Authorize)
 	share.POST("/completions", h.ChatCompletions)
-	share.POST("/widget", h.ChatWidget)
-	share.POST("/widget/search", h.WidgetSearch)
-	share.POST("/feedback", h.FeedBack)
+	share.POST("/widget", h.ChatWidget, h.ShareAuthMiddleware.Authorize)
+	share.POST("/widget/search", h.WidgetSearch, h.ShareAuthMiddleware.Authorize)
+	share.POST("/feedback", h.FeedBack, h.ShareAuthMiddleware.Authorize)
 	return h
 }
 
@@ -175,6 +172,7 @@ func (h *ShareChatHandler) ChatWidget(c echo.Context) error {
 	}
 
 	req.RemoteIP = c.RealIP()
+	req.Info.UserInfo.UserID = domain.GetShareUserID(c)
 
 	c.Response().Header().Set("Content-Type", "text/event-stream")
 	c.Response().Header().Set("Cache-Control", "no-cache")
@@ -254,6 +252,13 @@ func (h *ShareChatHandler) FeedBack(c echo.Context) error {
 //	@Failure		400		{object}	domain.OpenAIErrorResponse
 //	@Router			/share/v1/chat/completions [post]
 func (h *ShareChatHandler) ChatCompletions(c echo.Context) error {
+	// The API integration uses its own configured secret, independently of
+	// browser sessions. Missing credentials must never reach retrieval.
+	if strings.TrimSpace(c.Request().Header.Get("Authorization")) == "" {
+		return c.JSON(http.StatusUnauthorized, domain.OpenAIErrorResponse{
+			Error: domain.OpenAIError{Message: "Authentication required", Type: "unauthorized"},
+		})
+	}
 	var req domain.OpenAICompletionsRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error("parse OpenAI request failed", log.Error(err))
@@ -516,6 +521,7 @@ func (h *ShareChatHandler) WidgetSearch(c echo.Context) error {
 	}
 
 	req.RemoteIP = c.RealIP()
+	req.UserID = domain.GetShareUserID(c)
 
 	resp, err := h.chatUsecase.Search(ctx, &req)
 	if err != nil {

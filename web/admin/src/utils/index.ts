@@ -56,25 +56,27 @@ export const formatByte = (limit: number, decimals = 1) => {
   return `${size.toFixed(decimals)} ${units[unitIndex]}`;
 };
 
-export function generatePassword(length = 8) {
-  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const numbers = '0123456789';
-
-  const password: string[] = [
-    lowercase[Math.floor(Math.random() * lowercase.length)],
-    uppercase[Math.floor(Math.random() * uppercase.length)],
-    numbers[Math.floor(Math.random() * numbers.length)],
+export function generatePassword(length = 16) {
+  const groups = [
+    'abcdefghijklmnopqrstuvwxyz',
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    '0123456789',
+    '!@#$%^&*_-+=',
   ];
-
-  const allChars = lowercase + uppercase + numbers;
-
-  for (let i = 3; i < length; i++) {
-    password.push(allChars[Math.floor(Math.random() * allChars.length)]);
-  }
-
+  const randomIndex = (size: number) => {
+    const buffer = new Uint32Array(1);
+    const bound = Math.floor(0x100000000 / size) * size;
+    do {
+      crypto.getRandomValues(buffer);
+    } while (buffer[0] >= bound);
+    return buffer[0] % size;
+  };
+  const password = groups.map(group => group[randomIndex(group.length)]);
+  const all = groups.join('');
+  while (password.length < Math.max(12, length))
+    password.push(all[randomIndex(all.length)]);
   for (let i = password.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomIndex(i + 1);
     [password[i], password[j]] = [password[j], password[i]];
   }
   return password.join('');

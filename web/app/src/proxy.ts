@@ -1,3 +1,4 @@
+import { allowedHost, pageSecurityHeaders } from '../../security.mjs';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
@@ -55,6 +56,69 @@ const stripBasePath = (pathname: string, basePath: string) => {
 
 const isLoginPath = (pathname: string) => pathname === '/auth/login';
 
+const requireReaderLogin = async (
+  request: NextRequest,
+  basePath: string,
+  pathname: string,
+): Promise<NextResponse | undefined> => {
+  const fileRequest =
+    pathname === '/static-file' || pathname.startsWith('/static-file/');
+  const loginResponse = (clearCookie = false, changePassword = false) => {
+    const login = new URL(`${basePath}/auth/login`, request.url);
+    login.searchParams.set('redirect', pathname + request.nextUrl.search);
+    if (changePassword) login.searchParams.set('change_password', '1');
+    const response = fileRequest
+      ? NextResponse.json(
+          { success: false, code: 40101, message: '请先登录后访问' },
+          { status: 401 },
+        )
+      : NextResponse.redirect(login);
+    response.headers.set('Cache-Control', 'private, no-store');
+    if (clearCookie) {
+      response.cookies.set('pw_reader_session', '', {
+        path: '/',
+        maxAge: 0,
+        httpOnly: true,
+        sameSite: 'strict',
+      });
+    }
+    return response;
+  };
+
+  if (!request.cookies.get('pw_reader_session')?.value) return loginResponse();
+
+  try {
+    const authHeaders: Record<string, string> = {
+      Cookie: request.headers.get('cookie') || '',
+    };
+    const kbID = request.headers.get('x-kb-id');
+    if (kbID) authHeaders['x-kb-id'] = kbID;
+    const auth = await fetch(`${process.env.TARGET}/share/v1/auth/user`, {
+      headers: authHeaders,
+      cache: 'no-store',
+      redirect: 'manual',
+    });
+    if (auth.status === 401) return loginResponse(true);
+    if (auth.status === 403) {
+      return NextResponse.json(
+        { success: false, message: '当前知识库禁止访问' },
+        { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
+      );
+    }
+    if (!auth.ok) throw new Error('Authentication service unavailable');
+    const result = await auth.json();
+    if (!result.success || !result.data?.id) return loginResponse(true);
+    if (result.data.password_change_required) return loginResponse(false, true);
+  } catch {
+    // An unavailable identity service must not turn a protected page public,
+    // or erase an otherwise valid login as if it were an expired session.
+    return NextResponse.json(
+      { success: false, message: '暂时无法验证登录状态，请稍后重试' },
+      { status: 503, headers: { 'Cache-Control': 'private, no-store' } },
+    );
+  }
+};
+
 const homeProxy = async (
   request: NextRequest,
   headers: Record<string, string>,
@@ -71,16 +135,21 @@ const homeProxy = async (
     if (url.pathname === '/') {
       const { homePageSetting, hasLandingConfigs } = await getHomePath();
       if (homePageSetting === 'custom' && hasLandingConfigs) {
-        return NextResponse.rewrite(new URL('/home', request.url));
+        return NextResponse.rewrite(new URL('/home', request.url), {
+          request: { headers: request.headers },
+        });
       }
 
       const firstNode = await getFirstNode();
       if (firstNode) {
         return NextResponse.rewrite(
           new URL(`/node/${firstNode.id}`, request.url),
+          { request: { headers: request.headers } },
         );
       }
-      return NextResponse.rewrite(new URL('/node', request.url));
+      return NextResponse.rewrite(new URL('/node', request.url), {
+        request: { headers: request.headers },
+      });
     }
 
     // 页面上报
@@ -103,9 +172,10 @@ const homeProxy = async (
     if (pathname && pathname !== request.nextUrl.pathname) {
       return NextResponse.rewrite(
         new URL(`${url.pathname}${url.search}`, request.url),
+        { request: { headers: request.headers } },
       );
     }
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: request.headers } });
   } catch (error) {
     if (
       typeof error === 'object' &&
@@ -125,9 +195,10 @@ const homeProxy = async (
   if (pathname && pathname !== request.nextUrl.pathname) {
     return NextResponse.rewrite(
       new URL(`${url.pathname}${url.search}`, request.url),
+      { request: { headers: request.headers } },
     );
   }
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: request.headers } });
 };
 
 const proxyShare = async (request: NextRequest, pathname?: string) => {
@@ -139,6 +210,8 @@ const proxyShare = async (request: NextRequest, pathname?: string) => {
   );
   // 构造 fetch 选项
   const fetchHeaders = new Headers(request.headers);
+  fetchHeaders.delete('content-security-policy');
+  fetchHeaders.delete('x-nonce');
   const kbID = request.headers.get('x-kb-id');
   if (kbID) {
     fetchHeaders.set('x-kb-id', kbID);
@@ -163,7 +236,7 @@ const proxyShare = async (request: NextRequest, pathname?: string) => {
   return nextRes;
 };
 
-export async function proxy(request: NextRequest) {
+async function appProxy(request: NextRequest) {
   const url = request.nextUrl.clone();
   const pathname = url.pathname;
   let basePath = '';
@@ -174,14 +247,22 @@ export async function proxy(request: NextRequest) {
     // Allow the request flow to continue even when app info is temporarily unavailable.
   }
   const appPathname = stripBasePath(pathname, basePath);
+  const apiRequest =
+    appPathname.startsWith('/api/') || appPathname.startsWith('/share/');
+  if (!apiRequest && !isLoginPath(appPathname)) {
+    const denied = await requireReaderLogin(request, basePath, appPathname);
+    if (denied) return denied;
+  }
   if (appPathname.startsWith('/widget')) {
     const widgetInfo: any = await getShareV1AppWidgetInfo();
     if (widgetInfo) {
       if (!widgetInfo?.settings?.widget_bot_settings?.is_open) {
-        return NextResponse.rewrite(new URL('/not-found', request.url));
+        return NextResponse.rewrite(new URL('/not-found', request.url), {
+          request: { headers: request.headers },
+        });
       }
     }
-    return;
+    return NextResponse.next({ request: { headers: request.headers } });
   }
 
   const headers: Record<string, string> = {};
@@ -215,6 +296,33 @@ export async function proxy(request: NextRequest) {
     response.headers.set('x-current-path', appPathname);
     response.headers.set('x-current-search', url.search);
   }
+  if (!apiRequest && !isLoginPath(appPathname)) {
+    response.headers.set('Cache-Control', 'private, no-store');
+    response.headers.append('Vary', 'Cookie');
+  }
+  return response;
+}
+
+export async function proxy(request: NextRequest) {
+  if (!allowedHost(request.headers.get('host') || ''))
+    return new NextResponse(null, { status: 421 });
+  const widget = /(?:^|\/)widget(?:\/|$)/.test(request.nextUrl.pathname);
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const headers = pageSecurityHeaders({
+    widget,
+    nonce,
+    development: process.env.NODE_ENV !== 'production',
+  });
+  request.headers.set(
+    'Content-Security-Policy',
+    headers['Content-Security-Policy'],
+  );
+  request.headers.set('x-nonce', nonce);
+  const response = await appProxy(request);
+  for (const [key, value] of Object.entries(headers))
+    response.headers.set(key, value);
+  response.headers.delete('X-Powered-By');
+  response.headers.delete('Server');
   return response;
 }
 
@@ -231,6 +339,10 @@ export const config = {
     '/:basePath/chat/:path*',
     '/widget',
     '/:basePath/widget',
+    '/widget/:path*',
+    '/:basePath/widget/:path*',
+    '/static-file/:path*',
+    '/:basePath/static-file/:path*',
     '/welcome',
     '/:basePath/welcome',
     '/auth/login',

@@ -1,0 +1,737 @@
+{
+  "application": [
+    {
+      "id": "A01",
+      "name": "管理端敏感接口明文传输",
+      "report": "管理端 p6–7，3 个接口",
+      "status": "有条件存在",
+      "finding": "本地用 HTTP 访问 API/两端，部署模板监听 HTTP；没有测试真实密码传输，不能据此确认正式入口是否有 HTTPS 网关。",
+      "evidence": "[web/admin/server.conf](/Users/topazzz/code/PandaWiki/web/admin/server.conf:7)；[deploy/server/docker-compose.yml](/Users/topazzz/code/PandaWiki/deploy/server/docker-compose.yml:25)",
+      "manual_check": "T01：在你实际使用的入口检查登录、新增、重置请求协议及 HTTP 是否跳转 HTTPS；不要只看首页。"
+    },
+    {
+      "id": "A02",
+      "name": "MCP Token 明文返回",
+      "report": "管理端 p8，创建/列表 2 个接口",
+      "status": "已修复；本地接口/数据库验证通过",
+      "finding": "创建时仅返回一次完整密钥；列表仅返回 token_hint，域模型禁止序列化哈希。新密钥入库前 SHA-256，迁移 56 将历史明文转哈希并保留原密钥验证能力；认证不再使用 Redis 密钥缓存，删除立即失效。",
+      "evidence": "[backend/usecase/api_token.go](/Users/topazzz/code/PandaWiki/backend/usecase/api_token.go)；[backend/repo/pg/ap_token.go](/Users/topazzz/code/PandaWiki/backend/repo/pg/ap_token.go)；[backend/repo/pg/account_security_test.go](/Users/topazzz/code/PandaWiki/backend/repo/pg/account_security_test.go)",
+      "manual_check": "部署相同版本后复测。T02：管理员查看 token/list 的实际响应，不能只看页面是否打码；记录完整字段是否仍返回。不要把密钥贴到测试记录中。",
+      "initial_status": "已确认（代码）",
+      "initial_finding": "列表与创建共用 toAPITokenListItem，Token: token.Token 返回完整密钥。创建时一次性展示有业务必要；列表持续返回才是已确认的问题。仓库写入也未见哈希/加密转换。",
+      "fix_verification": "修复后会话HTTP验证.json；本地集成测试结果.txt",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A03",
+      "name": "PDF 解析/预览存储型 XSS",
+      "report": "管理端 p9–10，2 个上传入口",
+      "status": "校验和预览缺口已加固；报告 XSS 仍待原样本复测",
+      "finding": "上传 PDF 解析对象图，拒绝 JavaScript、可执行自动动作、启动程序、嵌入文件及不安全 URI；两端原文件 iframe 不赋予脚本能力。新增测试含转义 PDF 名称，两份正常报告 PDF 可通过。没有扫描、重写历史 OSS 对象；未取得报告原始恶意 PDF，不能宣称原 XSS 已端到端复现并关闭。 普通 PDF 的首页与缩放定位保留。",
+      "evidence": "[backend/usecase/file_validation.go](/Users/topazzz/code/PandaWiki/backend/usecase/file_validation.go)；[backend/usecase/file_validation_test.go](/Users/topazzz/code/PandaWiki/backend/usecase/file_validation_test.go)；[web/admin/src/pages/document/editor/edit/FilePreview.tsx](/Users/topazzz/code/PandaWiki/web/admin/src/pages/document/editor/edit/FilePreview.tsx)；[web/app/src/views/node/components/FilePreview.tsx](/Users/topazzz/code/PandaWiki/web/app/src/views/node/components/FilePreview.tsx)",
+      "manual_check": "部署相同版本后复测。T03：在隔离测试环境使用测试方原始样本；记录执行域、是否为应用同源、执行能力，分别测试附件与正文文件。",
+      "initial_status": "不确定",
+      "initial_finding": "已看到文件内容校验缺口，PDF iframe 未配置 sandbox；但未取得报告原始恶意 PDF，未执行恶意样本，无法确认当前浏览器/预览链路是否仍弹窗。报告弹窗发生在 OSS 域，不足以证明可读取管理端 Cookie。",
+      "fix_verification": "本地集成测试结果.txt；后端测试结果.txt",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A04",
+      "name": "内部 IP 泄露",
+      "report": "管理端 p11",
+      "status": "示例地址已移除；真实内部信息泄露仍未确认",
+      "finding": "移除 Xinference/GPUStack 前端默认 172.17.0.1 示例；管理员填写实际模型服务地址。此项是加固，不证明报告已取得真实内部拓扑。",
+      "evidence": "[web/admin/src/constant/enums.tsx](/Users/topazzz/code/PandaWiki/web/admin/src/constant/enums.tsx)",
+      "manual_check": "部署相同版本后复测。T04：让测试方指出 bundle 中的具体字符串、上下文；区分固定示例与真实服务地址/凭据。",
+      "initial_status": "已确认示例 IP；敏感性不确定",
+      "initial_finding": "前端源码确有 172.17.0.1 默认模型服务地址，是通用 Docker 网关示例，并不能据此确认泄露了真实部署拓扑。未构建生产 bundle。",
+      "fix_verification": "管理端构建结果.txt",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A05",
+      "name": "易受攻击的 Nginx 组件",
+      "report": "管理端 p12",
+      "status": "不确定",
+      "finding": "当前本地管理端是 Vite，用户端是 Next.js，没有运行报告中的 Nginx 实例；报告也未给 18080 的这一项明确 CVE。不能仅凭 Server 字段断定组件可利用。",
+      "evidence": "[web/admin/server.conf](/Users/topazzz/code/PandaWiki/web/admin/server.conf:7)",
+      "manual_check": "T05：核对对应实例 nginx -v/-V、镜像摘要、CVE 和启用模块；18081/18082 不应自动归到本项目。"
+    },
+    {
+      "id": "A06",
+      "name": "两端本地保存明文密码",
+      "report": "管理端 p13；用户端 p12",
+      "status": "已修复；代码/类型与登录页面检查通过",
+      "finding": "两端只记住账号。读取旧 panda_wiki_remember_login 后先删除旧键，再按 account/updatedAt 白名单迁移到新键，不迁移密码；切换账号不再回填密码。旧站点数据在进入该站点登录页时清理，未读取个人浏览器的密码值。",
+      "evidence": "[web/admin/src/pages/login/index.tsx](/Users/topazzz/code/PandaWiki/web/admin/src/pages/login/index.tsx)；[web/app/src/views/auth/login.tsx](/Users/topazzz/code/PandaWiki/web/app/src/views/auth/login.tsx)",
+      "manual_check": "部署相同版本后复测。T06：用专用测试账号勾选记住密码，查看当前站点 localStorage 的 panda_wiki_remember_login；测试记录只写“有/无密码字段”。",
+      "initial_status": "已确认（代码）",
+      "initial_finding": "两端 RememberedLogin 均含 password，开启记住密码后 JSON.stringify 写入 localStorage。不是浏览器自带密码管理器。未读取你浏览器中已经保存的密码。",
+      "fix_verification": "两端 TypeScript 检查；本地开发/管理端生产构建登录页无 CSP/渲染错误",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A07",
+      "name": "密码规则简单",
+      "report": "管理端 p14",
+      "status": "已修复；密码/改密/重置测试通过",
+      "finding": "服务端统一要求 12–72 字节、大小写字母、数字、特殊字符，不能包含账号；随机密码使用 crypto.getRandomValues。保留批量添加固定初始密码 YunzhouWiki@2026，但新增、重置及迁移前已有密码账号均须首次改密，改密前业务接口返回 40302。重置与本人改密撤销全部账号 JWT 会话。默认 admin 密码仅初始化时使用，重启不再覆盖已改密码。",
+      "evidence": "[backend/domain/password_policy.go](/Users/topazzz/code/PandaWiki/backend/domain/password_policy.go)；[backend/usecase/user.go](/Users/topazzz/code/PandaWiki/backend/usecase/user.go)；[backend/repo/pg/user.go](/Users/topazzz/code/PandaWiki/backend/repo/pg/user.go)；[web/packages/ui/src/security/index.tsx](/Users/topazzz/code/PandaWiki/web/packages/ui/src/security/index.tsx)",
+      "manual_check": "部署相同版本后复测。T07：只对专用测试账号尝试 11111111，确认服务器是否接受；恢复该测试账号密码。初始密码政策另行确认。",
+      "initial_status": "已确认（代码）",
+      "initial_finding": "新增/重置仅要求长度至少 8，没有复杂度或弱口令列表校验。批量添加固定初始密码且未见强制首次改密状态。此处没有调用密码重置接口。",
+      "fix_verification": "修复后会话HTTP验证.json；本地集成测试结果.txt",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A08",
+      "name": "点击劫持",
+      "report": "管理端 p15；用户端 p13",
+      "status": "已修复防嵌入缺口；本地响应验证通过",
+      "finding": "管理页面、普通用户页面增加 X-Frame-Options 和 CSP frame-ancestors；API 不允许嵌入。明确保留公开 widget 的嵌入能力，不能把该业务例外等同于后台页面可被嵌入。未做诱导真实管理操作。",
+      "evidence": "[web/security.mjs](/Users/topazzz/code/PandaWiki/web/security.mjs)；[web/app/src/proxy.ts](/Users/topazzz/code/PandaWiki/web/app/src/proxy.ts)；[web/admin/server.conf](/Users/topazzz/code/PandaWiki/web/admin/server.conf)；[backend/middleware/http_security.go](/Users/topazzz/code/PandaWiki/backend/middleware/http_security.go)",
+      "manual_check": "部署相同版本后复测。T08：从不同源 iframe 打开页面，看浏览器是否阻止；不要在嵌入页面执行真实管理操作。",
+      "initial_status": "已确认缺少防护；攻击效果不确定",
+      "initial_finding": "本地两端 HEAD 200，未返回 X-Frame-Options 或 CSP frame-ancestors。没有进行第三方 iframe 诱导点击复现。",
+      "fix_verification": "修复后边界HTTP验证.json；本地 Nginx 临时实例 18081 响应检查",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A09",
+      "name": "退出后会话可重用",
+      "report": "管理端 p16；用户端 p15",
+      "status": "已修复；旧 JWT 退出重放被拒绝",
+      "finding": "账号 JWT 带 jti 并对应数据库会话；两端主动退出调用撤销接口，随后原 JWT 在管理端/用户端本人信息接口均为 40101。管理员重置和本人改密也撤销会话。MCP 密钥仍是独立凭据，需通过密钥删除操作撤销。",
+      "evidence": "[backend/repo/pg/account_session.go](/Users/topazzz/code/PandaWiki/backend/repo/pg/account_session.go)；[backend/middleware/account_session.go](/Users/topazzz/code/PandaWiki/backend/middleware/account_session.go)；[backend/handler/v1/user.go](/Users/topazzz/code/PandaWiki/backend/handler/v1/user.go)；[web/admin/src/components/Header/index.tsx](/Users/topazzz/code/PandaWiki/web/admin/src/components/Header/index.tsx)；[web/app/src/components/header/index.tsx](/Users/topazzz/code/PandaWiki/web/app/src/components/header/index.tsx)",
+      "manual_check": "部署相同版本后复测。T09：专用账号复制登录请求凭据，退出后用原凭据访问本人信息；令牌不可公开。仅测试账号 JWT，不与 MCP API Token 混为一谈。",
+      "initial_status": "已确认（代码）",
+      "initial_finding": "当前两端账号退出路径只清理浏览器凭据，未调用服务端撤销；JWT 检查签名/exp/角色，未见 jti 黑名单或登出版本校验。因此已复制的未过期账号 JWT 不会因点退出自动失效。未借用你的实际 Token 做重放。",
+      "fix_verification": "修复后会话HTTP验证.json；本地集成测试结果.txt",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A10",
+      "name": "会话失效时间过长/无闲置超时",
+      "report": "管理端 p17；用户端 p14",
+      "status": "已修复闲置控制缺口；本地时间边界验证通过",
+      "finding": "默认绝对期限 8 小时、最近有效认证请求后 30 分钟闲置失效，可配置。数据库原子检查并更新会话活动时间；已过期/已撤销会话不会被新请求复活。普通无权限响应不触发用户端全局退出，仅明确会话码 40101 清理；流式请求同样识别此码。测试通过移动临时会话时间字段验证边界，没有实际等待 8 小时。",
+      "evidence": "[backend/config/config.go](/Users/topazzz/code/PandaWiki/backend/config/config.go)；[backend/repo/pg/account_session.go](/Users/topazzz/code/PandaWiki/backend/repo/pg/account_session.go)；[web/app/src/utils/fetch.ts](/Users/topazzz/code/PandaWiki/web/app/src/utils/fetch.ts)",
+      "manual_check": "部署相同版本后复测。T10：先确定要求的闲置/绝对超时时长；专用会话闲置到阈值后直接重放只读请求。",
+      "initial_status": "已确认配置；是否超标取决于要求",
+      "initial_finding": "账号 JWT 固定 24 小时 exp，未见按最近业务活动拒绝闲置会话的逻辑。前端到期清理不等于服务端闲置超时。没有实际等待 1–2 小时。",
+      "fix_verification": "修复后会话HTTP验证.json；本地集成测试结果.txt",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A11",
+      "name": "Host 头注入/未校验",
+      "report": "管理端 p18；用户端 p16",
+      "status": "已加固；三处本地异常 Host 均被拒绝",
+      "finding": "API、Vite、Next.js、管理端 Nginx 均校验 Host，audit.invalid 返回 421。可用 SECURITY_ALLOWED_HOSTS 指定精确域名；默认支持本地和 IP 访问及必要内部调用名。此修复针对未校验缺口，原报告的缓存/跳转污染利用链此前未确认。",
+      "evidence": "[backend/middleware/http_security.go](/Users/topazzz/code/PandaWiki/backend/middleware/http_security.go)；[web/security.mjs](/Users/topazzz/code/PandaWiki/web/security.mjs)；[web/admin/docker-entrypoint.d/15-security-hosts.sh](/Users/topazzz/code/PandaWiki/web/admin/docker-entrypoint.d/15-security-hosts.sh)",
+      "manual_check": "部署相同版本后复测。T11：在你需核实的部署上比较正常/异常 Host 的状态、Location、绝对链接和缓存键；仅正常响应不等同于注入成功。",
+      "initial_status": "部分成立",
+      "initial_finding": "本地用户端收到 Host: audit.invalid 仍返回 200；Nginx 模板为 default_server 并转发 $http_host。未复现恶意 Location、缓存污染、邮件链接污染，200 本身不证明这些利用链成立。",
+      "fix_verification": "修复后边界HTTP验证.json；Nginx 语法及 421 检查",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A12",
+      "name": "Content-Security-Policy 缺失",
+      "report": "管理端 p19–20；用户端 p17–18",
+      "status": "已修复缺头；本地响应与页面检查通过",
+      "finding": "API、Vite、Next.js、Nginx 增加 CSP；Next 页面按请求生成 nonce，生产不启用 unsafe-eval；管理端生产启动脚本改为同源独立文件。开发环境为 HMR 保留开发所需策略，样式保留 MUI 所需 inline。不是宣称 CSP 可以取代 XSS 修复。",
+      "evidence": "[web/security.mjs](/Users/topazzz/code/PandaWiki/web/security.mjs)；[web/app/src/proxy.ts](/Users/topazzz/code/PandaWiki/web/app/src/proxy.ts)；[web/admin/public/bootstrap.js](/Users/topazzz/code/PandaWiki/web/admin/public/bootstrap.js)；[web/admin/server.conf](/Users/topazzz/code/PandaWiki/web/admin/server.conf)",
+      "manual_check": "部署相同版本后复测。T12：检查最终页面响应头；启用策略后的功能兼容性需另测。",
+      "initial_status": "已确认（本地响应）",
+      "initial_finding": "本地两端登录页面响应没有 CSP，部署模板也未配置统一 CSP。仅是本地结果，未判断外部网关是否补头。",
+      "fix_verification": "修复后边界HTTP验证.json；管理端构建结果.txt；本地浏览器三处登录页正常",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A13",
+      "name": "X-Content-Type-Options 缺失",
+      "report": "管理端 p21；用户端 p19",
+      "status": "已修复应用缺头；外部 OSS 仍待核实",
+      "finding": "本地两端/API 均返回 nosniff；Nginx 与 Next 的原始静态文件代理添加 nosniff、下载/沙箱头。没有访问外部 OSS，无法确认对象源站/网关是否补同样的头。",
+      "evidence": "[backend/middleware/http_security.go](/Users/topazzz/code/PandaWiki/backend/middleware/http_security.go)；[web/security.mjs](/Users/topazzz/code/PandaWiki/web/security.mjs)；[web/app/next.config.ts](/Users/topazzz/code/PandaWiki/web/app/next.config.ts)；[web/admin/server.conf](/Users/topazzz/code/PandaWiki/web/admin/server.conf)",
+      "manual_check": "部署相同版本后复测。T13：分别检查页面、下载、预览、OSS 文件响应，不以首页一个响应代替全部。",
+      "initial_status": "已确认（本地响应）",
+      "initial_finding": "本地两端登录页没有 nosniff；下载/OSS 域的头尚未测试。",
+      "fix_verification": "修复后边界HTTP验证.json",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A14",
+      "name": "不必要的 HTTP 响应头",
+      "report": "管理端 p22",
+      "status": "本地已修复",
+      "finding": "管理端增加独立响应过滤代理，Nginx 仅容器内回环监听；真实 Nginx 200/421/502/503 响应无 Server、X-Powered-By，Next 也过滤上游指纹头。",
+      "evidence": "[web/app/next.config.ts](/Users/topazzz/code/PandaWiki/web/app/next.config.ts)；[web/admin/server.conf](/Users/topazzz/code/PandaWiki/web/admin/server.conf)",
+      "manual_check": "无需重复验证本地修复；运维发布管理端后，测试机构对最终入口销项。",
+      "initial_status": "部分成立（本地用户端）",
+      "initial_finding": "本地用户端返回 X-Powered-By: Next.js；本地管理端未见报告中的 Server: nginx。属于信息披露/加固项，不等同于已发现可利用 CVE。",
+      "fix_verification": "安全补充修复-20261026.md",
+      "fix_scope": "本地工作区；未部署或连接生产",
+      "previous_reviews": [
+        {
+          "status": "已加固；本地 Next.js 指纹头已移除",
+          "finding": "关闭 Next.js X-Powered-By，Nginx server_tokens off 隐藏版本。本地临时 Nginx 仍返回通用 Server: nginx，未声称删除了所有 Server 字段或修复任意组件 CVE。",
+          "manual_check": "部署相同版本后复测。T14：检查最终入口 Server、X-Powered-By 等；区分版本披露与实际组件漏洞。"
+        }
+      ]
+    },
+    {
+      "id": "A15",
+      "name": "隐藏目录 images/",
+      "report": "管理端 p23",
+      "status": "不确定",
+      "finding": "本地未运行该 Nginx 目录站点，没有复现目录枚举/列目录/读取非公开文件。知道 images/ 名称本身不证明文件泄露。",
+      "evidence": "[web/admin/server.conf](/Users/topazzz/code/PandaWiki/web/admin/server.conf:7)",
+      "manual_check": "T15：对比 /images/ 与随机不存在路径，检查是否真实目录、是否列文件、是否返回不应公开的文件；SPA 的 200 回退不能算目录存在证据。"
+    },
+    {
+      "id": "A16",
+      "name": "CORS 过宽",
+      "report": "管理端 p24；用户端 p20",
+      "status": "已收紧配置；本地恶意 Origin 被拒绝",
+      "finding": "移除 share 处理器硬编码 *，统一允许同源及明确的 SECURITY_ALLOWED_ORIGINS；预检允许所需认证头，不返回通配凭据策略。恶意 Origin 本地 403；合法开发同源代理正常。公开 widget 通过 iframe 正常使用；独立跨域 API 集成需逐个允许来源。原敏感数据跨源窃取未被确认，不宣称已复现。",
+      "evidence": "[backend/middleware/http_security.go](/Users/topazzz/code/PandaWiki/backend/middleware/http_security.go)；[backend/handler/share/common.go](/Users/topazzz/code/PandaWiki/backend/handler/share/common.go)；[backend/handler/share/comment.go](/Users/topazzz/code/PandaWiki/backend/handler/share/comment.go)",
+      "manual_check": "部署相同版本后复测。T16：逐个接口确认是否返回敏感数据、是否带凭据、预检是否允许 Authorization，区分公开元数据与私有会话；不能仅见 * 就认定盗取登录态成功。",
+      "initial_status": "已确认通配配置；越权读取不确定",
+      "initial_finding": "本地以 Origin: https://audit.invalid 请求 app/web/info 返回 Access-Control-Allow-Origin: *；评论等路由也硬编码通配。没有确认敏感响应可被第三方携带有效身份读取；公开接口允许跨域未必是越权。",
+      "fix_verification": "修复后边界HTTP验证.json；HTTP 中间件测试",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A17",
+      "name": "Referrer-Policy 缺失",
+      "report": "管理端 p25–26；用户端 p21–22",
+      "status": "已修复应用缺头；本地响应验证通过",
+      "finding": "两端/API 增加 strict-origin-when-cross-origin；原始文件代理采用 no-referrer。外部 OSS 响应策略仍未检查。",
+      "evidence": "[web/security.mjs](/Users/topazzz/code/PandaWiki/web/security.mjs)；[backend/middleware/http_security.go](/Users/topazzz/code/PandaWiki/backend/middleware/http_security.go)；[web/admin/server.conf](/Users/topazzz/code/PandaWiki/web/admin/server.conf)；[web/app/next.config.ts](/Users/topazzz/code/PandaWiki/web/app/next.config.ts)",
+      "manual_check": "部署相同版本后复测。T17：检查响应头；用专用无敏感 URL 观察跨源跳转 Referer，再评估签名地址/查询凭据风险。",
+      "initial_status": "已确认（本地响应）",
+      "initial_finding": "本地两端未返回该头。报告中的 Referral/Referer Policy 应规范为 Referrer-Policy。缺头不等于已证明浏览器向第三方泄露完整敏感 URL。",
+      "fix_verification": "修复后边界HTTP验证.json",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A18",
+      "name": "JavaScript 操作 Cookie",
+      "report": "管理端 p27；用户端 p23–24",
+      "status": "身份凭据已本地修复；原报告管理端 Cookie 命中仍待核实",
+      "finding": "两端身份认证均改为服务端 HttpOnly Cookie，登录 JSON 不返回 JWT；前端清理旧可读凭据，Cookie 写请求增加来源和 CSRF 检查；32 项两端本地 HTTP 检查通过。",
+      "evidence": "[web/app/src/views/auth/login.tsx](/Users/topazzz/code/PandaWiki/web/app/src/views/auth/login.tsx:166)；[backend/middleware/jwt.go](/Users/topazzz/code/PandaWiki/backend/middleware/jwt.go:33)",
+      "manual_check": "无需重复验证已确认的本地修复；发布需同步 API 与两端，用户重新登录。",
+      "previous_reviews": [
+        {
+          "status": "实现存在；不能单独判定漏洞",
+          "finding": "用户端用 JS 写入账号 JWT Cookie，因此该 Cookie 不是 HttpOnly；但服务端验证 JWT 签名，修改 Cookie 值不应自动获得权限。是否形成会话窃取还需 XSS 等前提。",
+          "manual_check": "T18：区分身份 Cookie 与匿名统计 Cookie；检查身份 Cookie 属性，并用篡改的测试 Token 确认不被当作有效身份。"
+        }
+      ],
+      "fix_verification": "安全补充修复-20261026.md"
+    },
+    {
+      "id": "A19",
+      "name": "任意未公开文档原文泄露",
+      "report": "用户端 p6",
+      "status": "部分处理",
+      "finding": "匿名文档、搜索、问答、历史等入口已强制登录；本地普通授权账号可读、无权文档拒绝；身份切换清理旧缓存。",
+      "evidence": "[backend/handler/share/node.go](/Users/topazzz/code/PandaWiki/backend/handler/share/node.go:79)；[backend/usecase/node.go](/Users/topazzz/code/PandaWiki/backend/usecase/node.go:275)；本地服务与文档核查证据.json",
+      "manual_check": "不安排重复验证已确认的匿名入口修复；剩余具体异常按其账号、文档及授权配置另行核实。",
+      "previous_reviews": [
+        {
+          "status": "本地受限样本未复现；不能宣告全部修复",
+          "finding": "匿名访问 P2 返回 HTTP 200 但 success:false、code:40003、Permission Denied，没有正文和 file_key；P0 可匿名读取符合公开配置。P7 可匿名读取，但其栏目实际保存为公开，见 N01。代码具备节点、祖先、栏目权限检查。未穷举全部角色/节点。",
+          "manual_check": "T19：用已明确配置受限的文档做未登录、无权、有权三组对照；同时检查发布态、跨栏目 ID、祖先及旧快照。"
+        }
+      ],
+      "fix_verification": "安全补充修复-20261026.md"
+    },
+    {
+      "id": "A20",
+      "name": "任意文件下载/OSS 绕过",
+      "report": "用户端 p7",
+      "status": "部分处理",
+      "finding": "系统签发需登录和节点权限；普通文档、导入、预览、ZIP 统一 private ACL，直传签名与分片初始化覆盖；MinIO 公共桶拒绝私有文档写入；隔离集成通过。",
+      "evidence": "[backend/handler/share/common.go](/Users/topazzz/code/PandaWiki/backend/handler/share/common.go:176)",
+      "manual_check": "上传代码修复无需重复验证；运维提供实际 OSS 桶/对象权限及历史直链结果，不提供密码或 AccessKey。",
+      "previous_reviews": [
+        {
+          "status": "接口检查存在；端到端不确定",
+          "finding": "签发接口要求 node_id、节点可读和 key 属于该发布节点；本地受限 P2 请求被拒绝，公开 P0 的伪造 key 也被拒绝。未请求外部 OSS，无法确认真实桶是否公共读或既有地址能否绕过。",
+          "manual_check": "T20：分别验证“无权取得新签名”“串用其他节点 key”“去签名直链”“有效期内旧签名”；旧签名有效不等于新签发接口未鉴权。"
+        }
+      ],
+      "fix_verification": "安全补充修复-20261026.md"
+    },
+    {
+      "id": "A21",
+      "name": "Gotenberg 未授权访问",
+      "report": "用户端 p8",
+      "status": "本地已修复",
+      "finding": "Gotenberg 转换接口启用原生 Basic Auth，API/Consumer 同步认证；实际私有镜像拒绝匿名/错误密码，合法认证后的 DOCX 转 PDF 成功。",
+      "evidence": "[deploy/server/docker-compose.yml](/Users/topazzz/code/PandaWiki/deploy/server/docker-compose.yml)",
+      "manual_check": "无需重复验证已确认的转换接口认证；发布 preview、API、Consumer，凭据由脚本生成。",
+      "initial_status": "不确定（本地未部署此服务）",
+      "initial_finding": "本地 Docker 没有报告中的 preview/Gotenberg 容器；生产部署模板确有 3000 映射且未配置认证。模板风险不等于当前本地已证实匿名转换，更未证实 SSRF/RCE。",
+      "fix_verification": "安全补充修复-20261026.md",
+      "fix_scope": "本地工作区；未部署或连接生产",
+      "previous_reviews": [
+        {
+          "status": "部署模板已收紧；匿名转换/SSRF/RCE 仍不确定",
+          "finding": "Gotenberg 3000 的宿主端口改为 127.0.0.1，仅 API 经容器内部网络调用。没有在当前本地部署该转换服务，也没有新增其 HTTP 身份认证；不能宣称已验证转换链路或报告利用样本。",
+          "manual_check": "部署相同版本后复测。T21：你自行核实实际实例及网络可达范围。测试转换接口而非只看公开 health；不要直接照抄报告 GOTENBERG_API_KEY，需对照具体版本官方配置。"
+        }
+      ]
+    },
+    {
+      "id": "A22",
+      "name": "任意文件上传/类型校验不足",
+      "report": "用户端 p9–10，5 个入口",
+      "status": "已修复确认的上传校验缺口；未证实 RCE",
+      "finding": "普通文件、附件、图片、URL、AnyDoc 回传和结构化导入共用白名单/真实内容校验；不信任客户端 MIME，策略读取/JSON 异常拒绝上传。图片解码且限制字节与像素；Office 验证容器结构，OOXML 拒绝宏/ActiveX/嵌入程序；PDF 检查主动内容。保留 MP4 等媒体。ZIP 直传签名固定 octet-stream，分片创建时固定下载属性；解压出的文件仍逐个校验。旧版 OLE Office 只验证容器头，非杀毒或完整内容消毒；不能宣称上传 RCE 已经复现。",
+      "evidence": "[backend/usecase/file_validation.go](/Users/topazzz/code/PandaWiki/backend/usecase/file_validation.go)；[backend/usecase/file.go](/Users/topazzz/code/PandaWiki/backend/usecase/file.go)；[backend/store/s3/minio.go](/Users/topazzz/code/PandaWiki/backend/store/s3/minio.go)",
+      "manual_check": "部署相同版本后复测。T22：详见下方 5 个入口拆分。文件类型接受、匿名上传、脚本执行是三件事，分别记录。",
+      "initial_status": "已确认校验缺口（代码）；RCE 不确定",
+      "initial_finding": "附件跳过扩展名检查；普通上传依赖黑名单且读取异常时放行，本地 upload 设置未配置；普通上传信任请求 Content-Type。没有向外部 OSS 上传测试文件，也未证实上传文件会被服务器执行。4 个管理上传入口本地空匿名请求均返回 401。",
+      "fix_verification": "后端测试结果.txt；本地集成测试结果.txt；未向外部 OSS 上传测试文件",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    },
+    {
+      "id": "A23",
+      "name": "匿名评论/冒名/批量评论",
+      "report": "用户端 p11",
+      "status": "已修复确认的评论身份/权限缺口；本地验证通过",
+      "finding": "仅登录账号可写评论，姓名从真实用户资料取值；写入和读取均检查节点查阅权限及知识库归属。每账号每文档每分钟最多 5 次提交，Redis 原子计数，验证码和审核仍保留；无权限先拒绝。匿名写入、伪造姓名和跨知识库行为有本地测试；没有向业务文档写入测试评论。",
+      "evidence": "[backend/handler/share/comment.go](/Users/topazzz/code/PandaWiki/backend/handler/share/comment.go)；[backend/usecase/comment.go](/Users/topazzz/code/PandaWiki/backend/usecase/comment.go)；[backend/usecase/comment_security_test.go](/Users/topazzz/code/PandaWiki/backend/usecase/comment_security_test.go)",
+      "manual_check": "部署相同版本后复测。T23：用测试文档验证未登录能否在通过验证码后评论、显示名是否可冒用；单独核实验证码是否单次和频率限制。",
+      "initial_status": "部分成立（代码）；批量利用不确定",
+      "initial_finding": "分享鉴权允许无登录身份继续处理；评论可在 userID 为空时保存请求里的 UserName。已有评论开关、审核开关和验证码验证，不是完全无校验。未见此链路按 IP/账号限频，但没有提交评论或复现刷屏。",
+      "fix_verification": "修复后会话HTTP验证.json；本地集成测试结果.txt",
+      "fix_scope": "本地工作区；未部署或连接生产"
+    }
+  ],
+  "host": [
+    {
+      "id": "H01",
+      "report_id": "3.2.1.1",
+      "name": "Redis NACK 双重释放 RCE 漏洞(CVE-2026-66373)",
+      "page": 29,
+      "status": "有条件成立，未复现 RCE",
+      "finding": "本地 Redis 7.4.8、默认用户 nopass/+@all，符合旧版本和可 RESTORE 前提。未执行恶意 RESTORE；不能写成已攻陷。",
+      "manual_check": "R1"
+    },
+    {
+      "id": "H02",
+      "report_id": "3.2.1.2",
+      "name": "Redis 资源管理错误漏洞(CVE-2026-23631)",
+      "page": 29,
+      "status": "当前不满足副本场景；仍不确定",
+      "finding": "官方说明需可写副本同步/Lua 场景；本地 role:master。默认 ACL 可执行管理命令的风险另见 Redis 未授权。",
+      "manual_check": "R2"
+    },
+    {
+      "id": "H03",
+      "report_id": "3.2.1.3",
+      "name": "Redis 安全漏洞(CVE-2026-25243)",
+      "page": 29,
+      "status": "有条件成立，未复现 RCE",
+      "finding": "本地版本和 RESTORE 权限符合官方描述；未核实二进制是否另有补丁、未发恶意序列化载荷。",
+      "manual_check": "R1"
+    },
+    {
+      "id": "H04",
+      "report_id": "3.2.1.4",
+      "name": "Redis 资源管理错误漏洞(CVE-2026-23479)",
+      "page": 30,
+      "status": "有条件成立，未复现 RCE",
+      "finding": "本地版本 7.4.8 在官方描述的旧版本范围，仍需阻塞客户端/驱逐等触发条件。",
+      "manual_check": "R1"
+    },
+    {
+      "id": "H05",
+      "report_id": "3.2.1.5",
+      "name": "OpenSSH 安全漏洞(CVE-2023-51767)",
+      "page": 30,
+      "status": "疑似误报（报告定性）",
+      "finding": "CVE-2023-51767 是需攻击者同机权限的 Rowhammer，Ubuntu 明确列 jammy Not affected；本地不是报告 Ubuntu 主机。不能按开放 SSH 端口认定远程高危。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H06",
+      "report_id": "3.2.1.6",
+      "name": "NATS 未授权访问",
+      "page": 30,
+      "status": "已修复本地匿名连接；部署模板已更新",
+      "finding": "NATS 开启认证；本地无凭据 CONNECT 返回 Authorization Violation。API、Consumer、RAGLite、Crawler 统一凭据，容器间正常启动/订阅。4222 仅映射回环地址。未验证生产。",
+      "manual_check": "N1",
+      "initial_status": "已确认（本地）",
+      "initial_finding": "匿名 CONNECT + PING 返回 PONG；本地 4222 对宿主所有网卡映射。未订阅或发布任何业务消息。",
+      "fix_verification": "修复后边界HTTP验证.json；本地 Docker 端口映射；部署模板"
+    },
+    {
+      "id": "H07",
+      "report_id": "3.2.1.7",
+      "name": "OpenSSH 竞争条件问题漏洞(CVE-2024-6387)",
+      "page": 31,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "Ubuntu 22.04 修复于 1:8.9p1-3ubuntu0.10；报告显示 3ubuntu0.17，若为原厂包应含补丁。本地未运行报告实例。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H08",
+      "report_id": "3.2.1.8",
+      "name": "OpenSSH 资源管理错误漏洞(CVE-2026-60002)",
+      "page": 31,
+      "status": "范围不符，真实利用不确定",
+      "finding": "官方 CVE-2026-60002 明确仅发生在 SSH 客户端重协商；扫描 sshd 监听版本不能证明服务端存在同样攻击面。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H09",
+      "report_id": "3.2.1.9",
+      "name": "F5 NGINX Open Source 资源管理错误漏洞(CVE-2026-42530)",
+      "page": 31,
+      "status": "不确定（本地无对应 Nginx）",
+      "finding": "需 HTTP/3 QUIC 模块/会话及受影响版本。仓库管理端模板只监听普通 HTTP；没有检查报告 18081/18082 实例。",
+      "manual_check": "G1"
+    },
+    {
+      "id": "H10",
+      "report_id": "3.2.1.10",
+      "name": "F5 NGINX Open Source 缓冲区错误漏洞(CVE-2026-42055)",
+      "page": 32,
+      "status": "不确定（本地无对应 Nginx）",
+      "finding": "官方条件包括 HTTP/2 上游或 grpc、ignore_invalid_headers off、大于 2MB 的 large_client_header_buffers 等；单看版本不够。",
+      "manual_check": "G1"
+    },
+    {
+      "id": "H11",
+      "report_id": "3.2.1.11",
+      "name": "OpenSSH 资源管理错误漏洞(CVE-2026-60000)",
+      "page": 32,
+      "status": "不确定",
+      "finding": "CVE-2026-60000 需 GSSAPIAuthentication 的认证重试场景；没有本地报告 sshd 配置或复现证据。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H12",
+      "report_id": "3.2.1.12",
+      "name": "Redis handleClientsBlockedOnKey 远程代码执行漏洞",
+      "page": 32,
+      "status": "不确定，可能与已有 Redis 条目重叠",
+      "finding": "报告没有独立 CVE，称为 CVE-2026-23479 未完全修复变种；需测试方给独立公告/修复提交，不能多算一次已确认 RCE。",
+      "manual_check": "R3"
+    },
+    {
+      "id": "H13",
+      "report_id": "3.2.1.13",
+      "name": "OpenSSH 安全漏洞(CVE-2026-35414)",
+      "page": 32,
+      "status": "不确定",
+      "finding": "官方记录为 CA/authorized_keys principals 列表逗号等特殊证书场景；仅版本条件不足，本地无该 sshd 配置证据。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H14",
+      "report_id": "3.2.1.14",
+      "name": "Redis RedisBloom TDigest 堆越界写漏洞",
+      "page": 33,
+      "status": "本地不适用",
+      "finding": "本地 Redis MODULE LIST 为空，没有 RedisBloom，报告要求的 TDigest 模块条件不存在。不能推广为其他环境也安全。",
+      "manual_check": "R4"
+    },
+    {
+      "id": "H15",
+      "report_id": "3.2.1.15",
+      "name": "OpenSSH/Dropbear 安全漏洞(CVE-2026-35385)",
+      "page": 33,
+      "status": "范围不符，真实利用不确定",
+      "finding": "官方条件是 scp 客户端以 root 使用 -O 且不带 -p 下载；不是仅远程 sshd 开放即可触发。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H16",
+      "report_id": "3.2.1.16",
+      "name": "Redis 资源管理错误漏洞(CVE-2026-66373)",
+      "page": 33,
+      "status": "重复项",
+      "finding": "与 3.2.1.1 同为 CVE-2026-66373，合并处置，不重复计数。",
+      "manual_check": "R1"
+    },
+    {
+      "id": "H17",
+      "report_id": "3.2.1.17",
+      "name": "OpenSSH 信任管理问题漏洞(CVE-2026-59999)",
+      "page": 33,
+      "status": "不确定",
+      "finding": "需核实 DisableForwarding=yes 与 PermitTunnel=yes 的实际组合，以及对应系统补丁。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H18",
+      "report_id": "3.2.1.18",
+      "name": "OpenSSH 安全漏洞(CVE-2023-28531)",
+      "page": 34,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "主要涉及 ssh-add/ssh-agent 智能卡目标约束；Ubuntu jammy 修复于 3ubuntu0.5，报告显示 0.17。仅 sshd 指纹不足。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H19",
+      "report_id": "3.2.1.19",
+      "name": "Redis TLS Pending-List UAF 漏洞",
+      "page": 34,
+      "status": "本地当前不适用；版本受影响状态不确定",
+      "finding": "本地 CONFIG GET tls-port 为 0，当前没有 TLS 监听；官方提交证实 TLS pending-list UAF，但不能把崩溃修复直接等同所有配置均能 RCE。",
+      "manual_check": "R5"
+    },
+    {
+      "id": "H20",
+      "report_id": "3.2.1.20",
+      "name": "检测到远端 RPCBIND/PORTMAP 正在运行中(CVE-1999-0632)",
+      "page": 34,
+      "status": "本地未复现；报告环境不确定",
+      "finding": "本地未发现 111/TCP/UDP 监听，不能据此推断报告服务器。此 CVE 记录本身是 RPC portmapper 运行信息。",
+      "manual_check": "P1"
+    },
+    {
+      "id": "H21",
+      "report_id": "3.2.1.21",
+      "name": "OpenSSH 安全漏洞(CVE-2023-38408)",
+      "page": 34,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "主要是 ssh-agent 转发/PKCS11 场景；Ubuntu jammy 修复于 3ubuntu0.3，报告显示 0.17。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H22",
+      "report_id": "3.2.2.1",
+      "name": "OpenSSH 路径遍历漏洞(CVE-2026-59996)",
+      "page": 35,
+      "status": "范围不符，真实利用不确定",
+      "finding": "scp 在两个远程目标间复制的客户端路径处理问题；没有对应使用场景或样本。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H23",
+      "report_id": "3.2.2.2",
+      "name": "OpenSSH 路径遍历漏洞(CVE-2026-59995)",
+      "page": 35,
+      "status": "范围不符，真实利用不确定",
+      "finding": "sftp 客户端连接恶意服务端并下载的路径问题；不能按普通 sshd 端口扫描确认。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H24",
+      "report_id": "3.2.2.3",
+      "name": "OpenSSH 处理逻辑错误漏洞(CVE-2026-59998)",
+      "page": 35,
+      "status": "不确定",
+      "finding": "需核实服务器处于 Windows AD/GSSAPI 场景和实际配置，当前没有证据。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H25",
+      "report_id": "3.2.2.4",
+      "name": "OpenSSH 输入验证错误漏洞(CVE-2026-59997)",
+      "page": 35,
+      "status": "不确定",
+      "finding": "需实际使用 internal-sftp 且安全选项位于第 10 个及以后参数等条件；未取得运行配置。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H26",
+      "report_id": "3.2.2.5",
+      "name": "OpenSSH 安全漏洞(CVE-2023-48795)",
+      "page": 36,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "Ubuntu openssh jammy 对 Terrapin 的修复是 3ubuntu0.5，报告为 0.17；应查包补丁与协商配置，不是统一强升主版本。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H27",
+      "report_id": "3.2.2.6",
+      "name": "OpenSSH 安全漏洞(CVE-2023-51385)",
+      "page": 36,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "SSH 客户端不可信用户名/主机名扩展场景；Ubuntu jammy 修复于 3ubuntu0.6，报告显示 0.17。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H28",
+      "report_id": "3.2.2.7",
+      "name": "F5 Nginx Plus 缓冲区错误漏洞(CVE-2026-48142)",
+      "page": 36,
+      "status": "不确定（本地无对应 Nginx）",
+      "finding": "官方要求 location 中同时配置 source_charset utf-8 和 charset；仅看到版本号不能确认。",
+      "manual_check": "G1"
+    },
+    {
+      "id": "H29",
+      "report_id": "3.2.2.8",
+      "name": "OpenSSH 资源管理错误漏洞(CVE-2026-60001)",
+      "page": 37,
+      "status": "不确定",
+      "finding": "需实际 sshd 最小认证延迟行为和对应修复包，不做爆破或时序压力试验。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H30",
+      "report_id": "3.2.2.9",
+      "name": "OpenSSH 安全漏洞(CVE-2026-35387)",
+      "page": 37,
+      "status": "不确定",
+      "finding": "需检查 PubkeyAcceptedAlgorithms/HostbasedAcceptedAlgorithms 的 ECDSA 配置与实际协商，版本不是完整证据。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H31",
+      "report_id": "3.2.2.10",
+      "name": "NATS 监控端口未授权访问",
+      "page": 37,
+      "status": "本地已修复",
+      "finding": "原始 NATS 监控绑定容器网络命名空间回环；新增共享命名空间认证代理，实际开发环境监控入口拒绝匿名和错误密码，合法认证成功。",
+      "manual_check": "无需重复验证本地监控认证；发布需同步 nats 和新增 nats-monitor，脚本生成独立凭据。",
+      "initial_status": "已确认（本地）",
+      "initial_finding": "无凭据 GET 本地 8222/varz 返回 200 和服务版本；本地端口映射所有网卡。客户端认证不会自动保护监控 HTTP。",
+      "fix_verification": "安全补充修复-20261026.md",
+      "previous_reviews": [
+        {
+          "status": "已收紧监听边界；监控本身仍无认证",
+          "finding": "8222 从所有网卡改为仅映射 127.0.0.1。宿主本机 /varz 仍可匿名 200，这是明确保留的本地管理边界；客户端 NATS 认证不保护监控 HTTP。若要求本机也鉴权，需前置认证代理。",
+          "manual_check": "N2"
+        }
+      ]
+    },
+    {
+      "id": "H32",
+      "report_id": "3.2.2.11",
+      "name": "Redis 未授权访问漏洞(CNNVD-201511-230)【原理扫描】",
+      "page": 38,
+      "status": "已修复本地匿名访问；部署模板已更新",
+      "finding": "Redis 开启 requirepass；无凭据原始 TCP PING 返回 NOAUTH，合法 API/Consumer 使用同一配置运行。16379 仅回环映射。此认证修复不等于修复任意 Redis CVE。",
+      "manual_check": "R6",
+      "initial_status": "已确认（本地）",
+      "initial_finding": "Redis 无凭据 PING 返回 PONG；default flags 含 on/nopass、commands 为 +@all，无密码哈希；未查询任何业务键。",
+      "fix_verification": "修复后边界HTTP验证.json；本地 Docker 端口映射；部署模板"
+    },
+    {
+      "id": "H33",
+      "report_id": "3.2.2.12",
+      "name": "OpenSSH 安全漏洞(CVE-2023-51384)",
+      "page": 38,
+      "status": "不确定；服务端扫描依据不足",
+      "finding": "CVE-2023-51384 涉及 ssh-agent PKCS11 多密钥约束；本轮 Ubuntu 页面未成功读取，不能臆测包补丁结论。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H34",
+      "report_id": "3.2.2.13",
+      "name": "OpenSSH 安全漏洞(CVE-2025-26465 )",
+      "page": 38,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "需 SSH 客户端启用 VerifyHostKeyDNS 等；Ubuntu jammy 修复于 3ubuntu0.11，报告显示 0.17。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H35",
+      "report_id": "3.2.3.1",
+      "name": "PostgreSQL Server 版本获取漏洞",
+      "page": 39,
+      "status": "信息项；未证实匿名越权",
+      "finding": "本地 Docker 镜像是 PostgreSQL 15.17，能用获授权的容器 psql 查询版本不等于外部匿名可读数据。",
+      "manual_check": "P2"
+    },
+    {
+      "id": "H36",
+      "report_id": "3.2.3.2",
+      "name": "OpenSSH 安全漏洞(CVE-2025-61985)",
+      "page": 39,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "SSH 客户端 ProxyCommand 与特制 ssh:// URI 场景；Ubuntu jammy 修复于 3ubuntu0.14，报告显示 0.17。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H37",
+      "report_id": "3.2.3.3",
+      "name": "OpenSSH（OpenBSD Secure Shell） 安全漏洞(CVE-2025-32728)",
+      "page": 39,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "DisableForwarding 约束问题在 Ubuntu jammy 修复于 3ubuntu0.13，报告显示 0.17；仍需确认包来源及实际启用设置。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H38",
+      "report_id": "3.2.3.4",
+      "name": "可通过 HTTP(S)获取远端 WWW 服务信息",
+      "page": 39,
+      "status": "应用指纹已加固；其余服务信息仍按原边界核实",
+      "finding": "本地 Next.js 不再返回 X-Powered-By，临时 Nginx 仅返回 Server: nginx，不带版本。未修改或核查其他报告端口的服务。",
+      "manual_check": "P3",
+      "initial_status": "已确认信息现象；非独立入侵证据",
+      "initial_finding": "本地用户端返回 X-Powered-By: Next.js；其他报告端口不在本轮本地实例中。版本指纹不等于对应 CVE 可利用。",
+      "fix_verification": "修复后边界HTTP验证.json；本地 Docker 端口映射；部署模板"
+    },
+    {
+      "id": "H39",
+      "report_id": "3.2.3.5",
+      "name": "OpenSSH 安全漏洞(CVE-2025-61984)",
+      "page": 40,
+      "status": "疑似误报（按报告包版本）",
+      "finding": "SSH 客户端使用 ProxyCommand 加不可信用户名；Ubuntu jammy 修复于 3ubuntu0.14，报告显示 0.17。",
+      "manual_check": "S1"
+    },
+    {
+      "id": "H40",
+      "report_id": "3.2.3.6",
+      "name": "SMTP 服务器版本信息可被获取",
+      "page": 40,
+      "status": "本地未复现；报告环境不确定",
+      "finding": "本地未发现 25/TCP SMTP 监听，项目没有 SMTP 服务容器；知道服务版本不是弱口令或入侵证据。",
+      "manual_check": "P1"
+    },
+    {
+      "id": "H41",
+      "report_id": "3.2.3.7",
+      "name": "目标主机 rpcinfo -p 信息泄露",
+      "page": 40,
+      "status": "本地未复现；报告环境不确定",
+      "finding": "本地未发现 RPC 111 监听，没有运行 rpcinfo 请求去报告服务器。",
+      "manual_check": "P1"
+    },
+    {
+      "id": "H42",
+      "report_id": "3.2.3.8",
+      "name": "OpenSSH 安全漏洞(CVE-2026-35388)",
+      "page": 40,
+      "status": "范围不符，真实利用不确定",
+      "finding": "SSH 客户端 proxy-mode 复用会话确认，不是仅 sshd 端口开放即可证明。",
+      "manual_check": "S2"
+    },
+    {
+      "id": "H43",
+      "report_id": "3.2.3.9",
+      "name": "SSH 版本信息可被获取",
+      "page": 41,
+      "status": "本地未复现；属信息项",
+      "finding": "本地未发现报告 22022 监听；SSH banner 本身是协议识别信息，不能单独当作认证绕过。",
+      "manual_check": "P1"
+    },
+    {
+      "id": "H44",
+      "report_id": "3.2.3.10",
+      "name": "探测到 SSH 服务器支持的算法【原理扫描】",
+      "page": 41,
+      "status": "信息项；没有弱算法证据",
+      "finding": "报告只说获取算法列表，未列出被实际接受的弱算法及协商证据，因此不能确认独立可利用漏洞。",
+      "manual_check": "S3"
+    }
+  ],
+  "updated_at": "2026-10-26",
+  "scope": "仅本地；本轮修复与验证不连接生产或外部 OSS",
+  "latest_followup": "安全补充修复-20261026.md"
+}

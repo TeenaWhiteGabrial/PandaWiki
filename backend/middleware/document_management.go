@@ -44,7 +44,13 @@ func (m *JWTMiddleware) validateScopedDocumentOperation(c echo.Context, kbID, us
 		if err != nil {
 			return err
 		}
-		if task.KBID != kbID || task.CreatedBy != userID || !access.CanManageSubtree(task.NodeID) {
+		canManage := false
+		if strings.HasPrefix(task.NodeID, "nav:") {
+			canManage = access.CanManageNavSubtree(strings.TrimPrefix(task.NodeID, "nav:"))
+		} else {
+			canManage = access.CanManageSubtree(task.NodeID)
+		}
+		if task.KBID != kbID || task.CreatedBy != userID || !canManage {
 			return denied
 		}
 		return nil
@@ -53,14 +59,15 @@ func (m *JWTMiddleware) validateScopedDocumentOperation(c echo.Context, kbID, us
 		return nil
 	}
 	var request struct {
-		ID        string          `json:"id"`
-		IDs       []string        `json:"ids"`
-		NodeIDs   []string        `json:"node_ids"`
-		NodeID    string          `json:"node_id"`
-		ReleaseID string          `json:"release_id"`
-		ParentID  string          `json:"parent_id"`
-		NavID     string          `json:"nav_id"`
-		Type      domain.NodeType `json:"type"`
+		ID         string          `json:"id"`
+		IDs        []string        `json:"ids"`
+		NodeIDs    []string        `json:"node_ids"`
+		NodeID     string          `json:"node_id"`
+		ReleaseID  string          `json:"release_id"`
+		ParentID   string          `json:"parent_id"`
+		NavID      string          `json:"nav_id"`
+		Type       domain.NodeType `json:"type"`
+		TargetType string          `json:"target_type"`
 	}
 	if strings.HasPrefix(c.Request().Header.Get("Content-Type"), "multipart/form-data") {
 		request.ParentID = c.FormValue("parent_id")
@@ -89,7 +96,36 @@ func (m *JWTMiddleware) validateScopedDocumentOperation(c echo.Context, kbID, us
 		if len(request.NodeIDs) == 0 {
 			return denied
 		}
-	case "/api/v1/node/management", "/api/v1/node/move/nav", "/api/v1/nav/management":
+	case "/api/v1/node/permission/audience":
+		if len(request.IDs) == 0 || (request.TargetType != "node" && request.TargetType != "nav") {
+			return denied
+		}
+		for _, id := range request.IDs {
+			if request.TargetType == "nav" {
+				if !access.CanManageNav(id) {
+					return denied
+				}
+			} else if !access.CanManageNode(id) {
+				return denied
+			}
+		}
+		return nil
+	case "/api/v1/node/management":
+		if len(request.IDs) == 0 {
+			return denied
+		}
+		for _, id := range request.IDs {
+			if !access.CanManageNode(id) {
+				return denied
+			}
+		}
+		return nil
+	case "/api/v1/nav/management":
+		if access.CanManageNav(request.ID) {
+			return nil
+		}
+		return denied
+	case "/api/v1/node/move/nav":
 		return denied
 	case "/api/v1/nav/update", "/api/v1/nav/permission", "/api/v1/nav/move":
 		if access.CanManageNav(request.ID) {
@@ -117,6 +153,12 @@ func (m *JWTMiddleware) validateScopedDocumentOperation(c echo.Context, kbID, us
 		}
 		return nil
 	case "/api/v1/file/folder-download":
+		if request.NavID != "" {
+			if access.CanManageNavSubtree(request.NavID) {
+				return nil
+			}
+			return denied
+		}
 		if access.CanManageSubtree(request.NodeID) {
 			return nil
 		}

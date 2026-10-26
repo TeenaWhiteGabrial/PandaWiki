@@ -49,7 +49,7 @@ func TestAdministratorAccessPostgres(t *testing.T) {
 	m := NewJWTMiddleware(cfg, logger, access, nil)
 	var tokenCache *cache.Cache
 	if addr := os.Getenv("PANDA_WIKI_TEST_REDIS_ADDR"); addr != "" {
-		tokenCache = &cache.Cache{Client: redis.NewClient(&redis.Options{Addr: addr})}
+		tokenCache = &cache.Cache{Client: redis.NewClient(&redis.Options{Addr: addr, Password: os.Getenv("PANDA_WIKI_TEST_REDIS_PASSWORD")})}
 		defer tokenCache.Close()
 		if err := tokenCache.Ping(context.Background()).Err(); err != nil {
 			t.Fatal(err)
@@ -80,7 +80,15 @@ func TestAdministratorAccessPostgres(t *testing.T) {
 		}
 	}
 	sign := func(id string) string {
-		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"id": id, "exp": time.Now().Add(time.Hour).Unix()}).SignedString([]byte(cfg.Auth.JWT.Secret))
+		sessionID := uuid.NewString()
+		var exists int64
+		tx.Model(&domain.User{}).Where("id=?", id).Count(&exists)
+		if exists == 1 {
+			if err := access.AccountSessions().Create(context.Background(), sessionID, id, time.Now().Add(time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"id": id, "jti": sessionID, "exp": time.Now().Add(time.Hour).Unix()}).SignedString([]byte(cfg.Auth.JWT.Secret))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,22 +109,23 @@ func TestAdministratorAccessPostgres(t *testing.T) {
 			check(jwtToken, status)
 			if tokenCache != nil {
 				apiToken := &domain.APIToken{ID: uuid.NewString(), Name: "temporary API test", Token: "test-" + uuid.NewString(), UserID: id, KbId: uuid.NewString(), Permission: consts.UserKBPermissionFullControl}
-				if err := tx.Create(apiToken).Error; err != nil {
+				rawKey := apiToken.Token
+				if err := m.apiTokenRepo.Create(context.Background(), apiToken); err != nil {
 					t.Fatal(err)
 				}
-				defer tokenCache.Del(context.Background(), "api_token:"+apiToken.Token)
-				check(apiToken.Token, status)
+
+				check(rawKey, status)
 				if consts.IsAdministrator(role) {
 					if err := tx.Model(user).Update("role", consts.UserRoleUser).Error; err != nil {
 						t.Fatal(err)
 					}
 					check(jwtToken, http.StatusForbidden)
-					check(apiToken.Token, http.StatusForbidden)
+					check(rawKey, http.StatusForbidden)
 				}
 			}
 		})
 	}
-	check(sign(uuid.NewString()), http.StatusForbidden)
+	check(sign(uuid.NewString()), http.StatusUnauthorized)
 	missingID, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"exp": time.Now().Add(time.Hour).Unix()}).SignedString([]byte(cfg.Auth.JWT.Secret))
 	check(missingID, http.StatusUnauthorized)
 }

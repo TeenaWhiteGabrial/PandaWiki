@@ -49,6 +49,7 @@ func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *l
 	group.POST("/upload", h.Upload, h.auth.Authorize)
 	group.GET("/download", h.Download, h.auth.Authorize)
 	group.GET("/download/url", h.DownloadURL, h.auth.Authorize)
+	group.GET("/storage-info", h.StorageInfo, h.auth.Authorize, h.auth.ValidateKBUserPerm(consts.UserKBPermissionDocManage))
 	group.POST("/upload/attachment", h.UploadAttachment, h.auth.Authorize)
 	group.POST("/upload/image", h.UploadImage, h.auth.Authorize)
 	group.POST("/upload/url", h.UploadByUrl, h.auth.Authorize)
@@ -74,18 +75,17 @@ func NewFileHandler(echo *echo.Echo, baseHandler *handler.BaseHandler, logger *l
 	return h
 }
 
-// Download redirects the browser to a short-lived signed OSS URL. Static
-// files are kept private in OSS; callers must not be forced to make the whole
-// bucket publicly readable just to preview or download one document.
+// Download redirects the browser to a short-lived signed URL for the storage
+// backend that contains this object.
 func (h *FileHandler) Download(c echo.Context) error {
 	key := strings.TrimSpace(c.QueryParam("key"))
 	if key == "" || strings.Contains(key, "..") {
 		return h.NewResponseWithError(c, "file key is invalid", fmt.Errorf("invalid file key"))
 	}
-	if h.minioClient == nil {
+	if h.fileUsecase == nil {
 		return h.NewResponseWithError(c, "object storage is not configured", fmt.Errorf("minio client is nil"))
 	}
-	url, err := h.minioClient.SignURL(c.Request().Context(), h.config.S3.Bucket, key, 30*time.Minute)
+	url, err := h.fileUsecase.SignFileURL(c.Request().Context(), key, 30*time.Minute)
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to create file download url", err)
 	}
@@ -97,14 +97,51 @@ func (h *FileHandler) DownloadURL(c echo.Context) error {
 	if key == "" || strings.Contains(key, "..") {
 		return h.NewResponseWithError(c, "file key is invalid", fmt.Errorf("invalid file key"))
 	}
-	if h.minioClient == nil {
+	if h.fileUsecase == nil {
 		return h.NewResponseWithError(c, "object storage is not configured", fmt.Errorf("minio client is nil"))
 	}
-	url, err := h.minioClient.SignURL(c.Request().Context(), h.config.S3.Bucket, key, 30*time.Minute)
+	var url string
+	var err error
+	if c.QueryParam("attachment") == "true" {
+		filename := strings.TrimSpace(c.QueryParam("filename"))
+		url, err = h.fileUsecase.SignFileDownloadURL(c.Request().Context(), key, filename, 30*time.Minute)
+	} else {
+		url, err = h.fileUsecase.SignFileURL(c.Request().Context(), key, 30*time.Minute)
+	}
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to create file download url", err)
 	}
 	return h.NewResponseWithData(c, map[string]string{"url": url})
+}
+
+func (h *FileHandler) StorageInfo(c echo.Context) error {
+	key := strings.TrimSpace(c.QueryParam("key"))
+	if key == "" || strings.Contains(key, "..") {
+		return h.NewResponseWithError(c, "file key is invalid", fmt.Errorf("invalid file key"))
+	}
+	if h.fileUsecase == nil {
+		return h.NewResponseWithError(c, "object storage is not configured", fmt.Errorf("file usecase is nil"))
+	}
+	url, objectURL, objectLocation, storageType, available, err := h.fileUsecase.GetFileStorageInfo(c.Request().Context(), key, 30*time.Minute)
+	if err != nil {
+		return h.NewResponseWithError(c, "get file storage information failed", err)
+	}
+	data := map[string]any{
+		"storage_type":        storageType,
+		"active_storage_type": storageType,
+		"available":           available,
+		"object_key":          strings.TrimLeft(strings.TrimPrefix(key, "/static-file/"), "/"),
+		"object_url":          objectURL,
+		"object_location":     objectLocation,
+		"url":                 url,
+	}
+	if !available {
+		data["storage_type"] = "unknown"
+	}
+	if available {
+		data["expires_at"] = time.Now().Add(30 * time.Minute)
+	}
+	return h.NewResponseWithData(c, data)
 }
 
 type zipUploadTaskRequest struct {
@@ -302,7 +339,8 @@ func (h *FileHandler) FailZipUpload(c echo.Context) error {
 
 type folderDownloadRequest struct {
 	KBID   string `json:"kb_id" validate:"required"`
-	NodeID string `json:"node_id" validate:"required"`
+	NodeID string `json:"node_id"`
+	NavID  string `json:"nav_id"`
 }
 
 func (h *FileHandler) CreateFolderDownload(c echo.Context) error {
@@ -313,11 +351,18 @@ func (h *FileHandler) CreateFolderDownload(c echo.Context) error {
 	if err := c.Validate(&req); err != nil {
 		return h.NewResponseWithError(c, "request validation failed", err)
 	}
+	if (req.NodeID == "") == (req.NavID == "") {
+		return h.NewResponseWithError(c, "exactly one of node_id or nav_id is required", fmt.Errorf("invalid folder download target"))
+	}
 	authInfo := domain.GetAuthInfoFromCtx(c.Request().Context())
 	if authInfo == nil {
 		return h.NewResponseWithError(c, "authInfo not found in context", nil)
 	}
-	task, err := h.folderDownload.Create(c.Request().Context(), req.KBID, req.NodeID, authInfo.UserId)
+	targetID := req.NodeID
+	if req.NavID != "" {
+		targetID = usecase.VirtualNavRootTarget(req.NavID)
+	}
+	task, err := h.folderDownload.Create(c.Request().Context(), req.KBID, targetID, authInfo.UserId)
 	if err != nil {
 		return h.NewResponseWithError(c, "create folder download task failed", err)
 	}

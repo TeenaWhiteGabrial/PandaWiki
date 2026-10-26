@@ -159,6 +159,7 @@ export interface DomainPWResponse {
   data?: unknown;
   message?: string;
   success?: boolean;
+  trace_id?: string;
 }
 
 export interface DomainPrompt {

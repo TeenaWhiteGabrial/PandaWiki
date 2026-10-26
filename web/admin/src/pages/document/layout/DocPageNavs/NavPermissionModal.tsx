@@ -6,28 +6,35 @@ import {
   patchApiV1NavPermission,
 } from '@/request/NavCompat';
 import { getNodePermissionOptions } from '@/request/NodeManagement';
-import { V1NavListResp } from '@/request/types';
+import {
+  ConstsUserRole,
+  V1NavListResp,
+  DomainNodePermissions,
+} from '@/request/types';
 import { message, Modal } from '@/components/ui';
-import { Alert, Stack, Typography } from '@mui/material';
+import { Alert, Stack } from '@mui/material';
 import { useEffect, useState } from 'react';
 import NodeManagementModal from '@/pages/document/component/NodeManagementModal';
 import ReadingPermissionFields, {
+  normalizeReadingPermissionValue,
   ReadingPermissionValue,
-  ReadingScope,
+  readingPermissionPayload,
 } from '@/pages/document/component/ReadingPermissionFields';
-import ReadingPermissionSummary from '@/pages/document/component/ReadingPermissionSummary';
+import ReadingPermissionPanel from '@/pages/document/component/ReadingPermissionPanel';
 import {
   ManagementPermissionSection,
   PermissionTarget,
-  ReadingPermissionSection,
 } from '@/pages/document/component/PermissionSettingsSections';
 
 const emptyPermissions = (): ReadingPermissionValue => ({
   scope_type: 'public',
+  level_restriction_mode: 'none',
   min_permission_level_id: '',
   allowed_permission_level_ids: [],
   allowed_department_ids: [],
   allowed_user_ids: [],
+  allow_all_users: false,
+  denied_user_ids: [],
 });
 interface NavPermissionModalProps {
   open: boolean;
@@ -47,7 +54,14 @@ export default function NavPermissionModal({
   const levelsDisabled = useAppSelector(
     state => state.config.user?.permission_levels_disabled,
   );
+  const publicAllowed = useAppSelector(
+    state => state.config.user?.role === ConstsUserRole.UserRoleAdmin,
+  );
+  const canManagePermission = nav?.can_configure === true;
   const [loading, setLoading] = useState(false);
+  const [readingDirty, setReadingDirty] = useState(false);
+  const [savedPermissions, setSavedPermissions] =
+    useState<DomainNodePermissions>({});
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [managementOpen, setManagementOpen] = useState(false);
@@ -67,6 +81,8 @@ export default function NavPermissionModal({
     setLoadError(false);
     setLoading(true);
     setValue(emptyPermissions());
+    setReadingDirty(false);
+    setSavedPermissions({});
     Promise.all([
       getNodePermissionOptions(kb_id),
       getApiV1NavPermission({ kb_id, id: nav.id }),
@@ -79,22 +95,8 @@ export default function NavPermissionModal({
         setLevels(options.levels.filter(item => item.status === 'active'));
         setUsers(options.users);
         const permissions = response.permissions || {};
-        const scope = [
-          'custom',
-          'permission_level',
-          'department',
-          'user',
-        ].includes(permissions.scope_type || '')
-          ? (permissions.scope_type as ReadingScope)
-          : 'public';
-        setValue({
-          scope_type: scope,
-          min_permission_level_id: permissions.min_permission_level_id || '',
-          allowed_permission_level_ids:
-            permissions.allowed_permission_level_ids || [],
-          allowed_department_ids: permissions.allowed_department_ids || [],
-          allowed_user_ids: permissions.allowed_user_ids || [],
-        });
+        setSavedPermissions(permissions);
+        setValue(normalizeReadingPermissionValue(permissions, options.levels));
         setReady(true);
       })
       .catch(() => {
@@ -107,16 +109,38 @@ export default function NavPermissionModal({
       active = false;
     };
   }, [open, nav?.id, kb_id]);
+  const hasIncompleteLevelRestriction =
+    (value.level_restriction_mode === 'minimum' &&
+      !value.min_permission_level_id) ||
+    (value.level_restriction_mode === 'selected' &&
+      value.allowed_permission_level_ids.length === 0);
+  const incompleteAudience =
+    value.scope_type === 'custom' &&
+    !value.allow_all_users &&
+    value.level_restriction_mode === 'none' &&
+    !value.allowed_department_ids.length &&
+    !value.allowed_user_ids.length;
   const submit = async () => {
     if (!nav?.id || !ready) return;
+    if (value.level_restriction_needs_review || hasIncompleteLevelRestriction) {
+      message.warning('请完成等级范围选择后再保存');
+      return;
+    }
     const scope = value.scope_type;
+    const hasLevelRestriction =
+      value.level_restriction_mode === 'minimum'
+        ? !!value.min_permission_level_id
+        : value.level_restriction_mode === 'selected'
+          ? value.allowed_permission_level_ids.length > 0
+          : false;
     if (
-      (scope === 'permission_level' &&
-        !value.allowed_permission_level_ids.length) ||
-      (scope === 'department' && !value.allowed_department_ids.length) ||
-      (scope === 'user' && !value.allowed_user_ids.length)
+      scope === 'custom' &&
+      !value.allow_all_users &&
+      !hasLevelRestriction &&
+      !value.allowed_department_ids.length &&
+      !value.allowed_user_ids.length
     ) {
-      message.warning('请选择查阅权限的授权对象');
+      message.warning('请至少设置一个部门、等级限制或指定用户');
       return;
     }
     setLoading(true);
@@ -124,27 +148,10 @@ export default function NavPermissionModal({
       await patchApiV1NavPermission({
         kb_id,
         id: nav.id,
-        permissions: {
-          scope_type: scope,
-          min_permission_level_id:
-            scope === 'public' || scope === 'custom'
-              ? value.min_permission_level_id || undefined
-              : undefined,
-          allowed_permission_level_ids:
-            scope === 'permission_level'
-              ? value.allowed_permission_level_ids
-              : [],
-          allowed_department_ids:
-            scope === 'department' || scope === 'custom'
-              ? value.allowed_department_ids
-              : [],
-          allowed_user_ids:
-            scope === 'user' || scope === 'custom'
-              ? value.allowed_user_ids
-              : [],
-        },
+        permissions: readingPermissionPayload(value),
       });
       message.success('目录查阅权限已更新');
+      setReadingDirty(false);
       onSuccess();
     } catch {
       // 请求层已展示保存失败原因，保留当前设置以便重试。
@@ -160,7 +167,16 @@ export default function NavPermissionModal({
         width={720}
         centered
         okText='保存查阅权限'
-        okButtonProps={{ loading, disabled: !ready }}
+        okButtonProps={{
+          loading,
+          disabled:
+            !ready ||
+            !canManagePermission ||
+            !readingDirty ||
+            incompleteAudience ||
+            !!value.level_restriction_needs_review ||
+            hasIncompleteLevelRestriction,
+        }}
         onCancel={onClose}
         onOk={submit}
       >
@@ -172,42 +188,53 @@ export default function NavPermissionModal({
           {loadError && (
             <Alert severity='error'>权限加载失败，请关闭窗口后重试。</Alert>
           )}
-          <ReadingPermissionSection>
-            <Typography fontSize={13} color='text.secondary'>
-              这是一级栏目，没有上级目录。请选择可以查阅栏目内容的用户。
-            </Typography>
+          {!canManagePermission && (
+            <Alert severity='info'>
+              你可以查阅此栏目，但没有修改栏目权限的管理范围。
+            </Alert>
+          )}
+          <ReadingPermissionPanel
+            open={open}
+            ready={ready}
+            kbID={kb_id}
+            ids={nav?.id ? [nav.id] : []}
+            targetType='nav'
+            canEdit={canManagePermission}
+            dirty={readingDirty}
+            invalid={
+              readingDirty &&
+              (!!value.level_restriction_needs_review ||
+                hasIncompleteLevelRestriction ||
+                incompleteAudience)
+            }
+            draft={readingPermissionPayload(value)}
+            saved={savedPermissions}
+            levels={levels}
+            departments={departments}
+            users={users}
+            levelsDisabled={levelsDisabled}
+            onLocate={onClose}
+          >
             <Form labelWidth={100} gap={2}>
               <ReadingPermissionFields
                 value={value}
-                onChange={patch => setValue(prev => ({ ...prev, ...patch }))}
+                publicAllowed={publicAllowed}
+                allUsersAllowed={publicAllowed}
+                onChange={patch => {
+                  setValue(prev => ({ ...prev, ...patch }));
+                  setReadingDirty(true);
+                }}
                 levelsDisabled={levelsDisabled}
                 levels={levels}
                 departments={departments}
                 users={users}
-                disabled={!ready || loading}
+                disabled={!ready || loading || !canManagePermission}
               />
             </Form>
-            {ready ? (
-              <ReadingPermissionSummary
-                permissions={value}
-                label='当前设置允许查阅的用户'
-                levels={levels}
-                departments={departments}
-                users={users}
-                levelsDisabled={levelsDisabled}
-              />
-            ) : (
-              <Typography fontSize={13} color='text.secondary'>
-                {loadError ? '暂时无法显示查阅规则。' : '正在读取查阅规则…'}
-              </Typography>
-            )}
-            <Typography fontSize={12} color='text.secondary'>
-              栏目内的所有文档都受此规则约束。文档单独设置查阅权限时，用户需要同时满足两处规则。
-            </Typography>
-          </ReadingPermissionSection>
+          </ReadingPermissionPanel>
           <ManagementPermissionSection
             onConfigure={() => setManagementOpen(true)}
-            disabled={!ready || loading}
+            disabled={!ready || loading || !canManagePermission}
           />
         </Stack>
       </Modal>

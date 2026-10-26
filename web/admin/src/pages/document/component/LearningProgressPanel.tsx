@@ -367,7 +367,7 @@ const LearningProgressPanel = ({
     <Modal
       title='索引状态'
       open={open}
-      width={920}
+      width={1440}
       footer={null}
       onCancel={onClose}
     >
@@ -603,11 +603,11 @@ const LearningProgressPanel = ({
                 />
               </Box>
             )}
-            <Box sx={{ flex: 1.2 }}>文档</Box>
-            <Box sx={{ flex: 1 }}>所在目录</Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>文档</Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>所在目录</Box>
             <Box sx={{ width: 96 }}>状态</Box>
             <Box sx={{ width: 132 }}>进度更新时间</Box>
-            <Box sx={{ flex: 1.4 }}>进展 / 失败原因</Box>
+            <Box sx={{ flex: 2, minWidth: 0 }}>进展 / 失败原因</Box>
           </Stack>
           <Divider />
           <Stack sx={{ minHeight: 360, maxHeight: 420, overflowY: 'auto' }}>
@@ -630,7 +630,7 @@ const LearningProgressPanel = ({
                   <Stack
                     key={item.id}
                     direction='row'
-                    alignItems='center'
+                    alignItems='flex-start'
                     gap={1}
                     sx={{
                       px: 1.5,
@@ -657,7 +657,7 @@ const LearningProgressPanel = ({
                     <Tooltip title={item.name || ''}>
                       <Box
                         sx={{
-                          flex: 1.2,
+                          flex: 1,
                           minWidth: 0,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -706,7 +706,7 @@ const LearningProgressPanel = ({
                           ).fromNow()
                         : '-'}
                     </Box>
-                    <Stack sx={{ flex: 1.4, minWidth: 0 }} gap={0.5}>
+                    <Stack sx={{ flex: 2, minWidth: 0 }} gap={0.5}>
                       {item.rag_info?.learning_progress?.extraction && (
                         <Typography
                           fontSize={12}

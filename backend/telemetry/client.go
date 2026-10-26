@@ -384,20 +384,29 @@ func (c *Client) reportData() error {
 // 判断“昨日是否有管理员访问”。
 // 因为数据在每天 0–1 点上报，这里采用昨日 0:00 至今日 0:00 的时间窗口。
 func (c *Client) isAdminLoggedInYesterday() (bool, error) {
-	resp, err := c.userUsecase.ListUsers(context.Background(), "", &userV1.UserListReq{})
-	if err != nil {
-		return false, err
-	}
 	now := time.Now()
 	loc := now.Location()
 	todayMidnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	yesterdayMidnight := todayMidnight.Add(-24 * time.Hour)
-	for _, u := range resp.Users {
-		if u.Role == consts.UserRoleAdmin && u.LastAccess != nil && !u.LastAccess.Before(yesterdayMidnight) && u.LastAccess.Before(todayMidnight) {
-			return true, nil
+	const pageSize = 100
+	for page := 1; ; page++ {
+		resp, err := c.userUsecase.ListUsers(context.Background(), "", &userV1.UserListReq{
+			Role:     consts.UserRoleAdmin,
+			Page:     page,
+			PageSize: pageSize,
+		})
+		if err != nil {
+			return false, err
+		}
+		for _, u := range resp.Users {
+			if u.LastAccess != nil && !u.LastAccess.Before(yesterdayMidnight) && u.LastAccess.Before(todayMidnight) {
+				return true, nil
+			}
+		}
+		if int64(page*pageSize) >= resp.Total || len(resp.Users) == 0 {
+			return false, nil
 		}
 	}
-	return false, nil
 }
 
 // Stop stops periodic report

@@ -29,6 +29,7 @@ const (
 type FolderDownloadUsecase struct {
 	taskRepo *pg.FolderDownloadRepository
 	nodeRepo *pg.NodeRepository
+	navRepo  *pg.NavRepository
 	s3Client *s3.MinioClient
 	logger   *log.Logger
 }
@@ -36,31 +37,30 @@ type FolderDownloadUsecase struct {
 func NewFolderDownloadUsecase(
 	taskRepo *pg.FolderDownloadRepository,
 	nodeRepo *pg.NodeRepository,
+	navRepo *pg.NavRepository,
 	s3Client *s3.MinioClient,
 	logger *log.Logger,
 ) *FolderDownloadUsecase {
 	return &FolderDownloadUsecase{
 		taskRepo: taskRepo,
 		nodeRepo: nodeRepo,
+		navRepo:  navRepo,
 		s3Client: s3Client,
 		logger:   logger.WithModule("usecase.folder_download"),
 	}
 }
 
-func (u *FolderDownloadUsecase) Create(ctx context.Context, kbID, nodeID, userID string) (*domain.FolderDownloadTask, error) {
-	root, err := u.nodeRepo.GetNodeByID(ctx, nodeID)
-	if err != nil {
-		return nil, err
-	}
-	if root.KBID != kbID || root.Type != domain.NodeTypeFolder {
-		return nil, fmt.Errorf("folder not found")
-	}
+const virtualNavRootPrefix = "nav:"
 
-	nodes, err := u.nodeRepo.GetList(ctx, &domain.GetNodeListReq{KBID: kbID, NavId: root.NavId})
+func VirtualNavRootTarget(navID string) string {
+	return virtualNavRootPrefix + navID
+}
+
+func (u *FolderDownloadUsecase) Create(ctx context.Context, kbID, targetID, userID string) (*domain.FolderDownloadTask, error) {
+	root, docs, err := u.resolveTarget(ctx, kbID, targetID)
 	if err != nil {
 		return nil, err
 	}
-	docs := descendants(nodes, nodeID)
 	if len(docs) == 0 {
 		return nil, fmt.Errorf("folder has no downloadable files")
 	}
@@ -76,7 +76,7 @@ func (u *FolderDownloadUsecase) Create(ctx context.Context, kbID, nodeID, userID
 		if node.Meta.FileReadonly && node.Meta.FileKey != "" {
 			info, statErr := u.s3Client.StatObject(ctx, node.Meta.FileKey)
 			if statErr != nil {
-				return nil, statErr
+				return nil, fmt.Errorf("文件 %q 不在当前启用的 %s 存储中，无法加入压缩包: %w", node.Name, strings.ToUpper(u.s3Client.Type()), statErr)
 			}
 			totalBytes += info.Size
 		} else {
@@ -93,12 +93,12 @@ func (u *FolderDownloadUsecase) Create(ctx context.Context, kbID, nodeID, userID
 	task := &domain.FolderDownloadTask{
 		ID:         uuid.NewString(),
 		KBID:       kbID,
-		NodeID:     nodeID,
+		NodeID:     targetID,
 		CreatedBy:  userID,
 		Status:     domain.FolderDownloadWaiting,
 		TotalFiles: len(docs),
 		TotalBytes: totalBytes,
-		ObjectKey:  fmt.Sprintf("_exports/%s/%s/%s.zip", kbID, nodeID, uuid.NewString()),
+		ObjectKey:  fmt.Sprintf("_exports/%s/%s/%s.zip", kbID, targetID, uuid.NewString()),
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
 	}
@@ -141,11 +141,7 @@ func (u *FolderDownloadUsecase) Retry(ctx context.Context, id, userID string) (*
 	if task.Status != domain.FolderDownloadFailed {
 		return task, nil
 	}
-	root, err := u.nodeRepo.GetNodeByID(ctx, task.NodeID)
-	if err != nil {
-		return nil, err
-	}
-	nodes, err := u.nodeRepo.GetList(ctx, &domain.GetNodeListReq{KBID: task.KBID, NavId: root.NavId})
+	root, docs, err := u.resolveTarget(ctx, task.KBID, task.NodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +151,40 @@ func (u *FolderDownloadUsecase) Retry(ctx context.Context, id, userID string) (*
 	if err := u.taskRepo.Update(ctx, task); err != nil {
 		return nil, err
 	}
-	go u.run(task.ID, root, descendants(nodes, task.NodeID))
+	go u.run(task.ID, root, docs)
 	return task, nil
+}
+
+func (u *FolderDownloadUsecase) resolveTarget(ctx context.Context, kbID, targetID string) (*domain.Node, []*domain.NodeListItemResp, error) {
+	if strings.HasPrefix(targetID, virtualNavRootPrefix) {
+		navID := strings.TrimPrefix(targetID, virtualNavRootPrefix)
+		if navID == "" || u.navRepo == nil {
+			return nil, nil, fmt.Errorf("folder not found")
+		}
+		nav, err := u.navRepo.GetByKBID(ctx, kbID, navID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("folder not found")
+		}
+		nodes, err := u.nodeRepo.GetList(ctx, &domain.GetNodeListReq{KBID: kbID, NavId: navID})
+		if err != nil {
+			return nil, nil, err
+		}
+		root := &domain.Node{ID: navID, KBID: kbID, NavId: navID, Name: nav.Name, Type: domain.NodeTypeFolder}
+		return root, descendantsOfNav(nodes, navID), nil
+	}
+
+	root, err := u.nodeRepo.GetNodeByID(ctx, targetID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if root.KBID != kbID || root.Type != domain.NodeTypeFolder {
+		return nil, nil, fmt.Errorf("folder not found")
+	}
+	nodes, err := u.nodeRepo.GetList(ctx, &domain.GetNodeListReq{KBID: kbID, NavId: root.NavId})
+	if err != nil {
+		return nil, nil, err
+	}
+	return root, descendants(nodes, targetID), nil
 }
 
 func descendants(nodes []*domain.NodeListItemResp, rootID string) []*domain.NodeListItemResp {
@@ -177,6 +205,23 @@ func descendants(nodes []*domain.NodeListItemResp, rootID string) []*domain.Node
 	}
 	walk(rootID)
 	return result
+}
+
+func descendantsOfNav(nodes []*domain.NodeListItemResp, navID string) []*domain.NodeListItemResp {
+	normalized := make([]*domain.NodeListItemResp, 0, len(nodes))
+	for _, node := range nodes {
+		if node.NavId != navID {
+			continue
+		}
+		if node.ParentID == "" {
+			copy := *node
+			copy.ParentID = navID
+			normalized = append(normalized, &copy)
+			continue
+		}
+		normalized = append(normalized, node)
+	}
+	return descendants(normalized, navID)
 }
 
 func safeZipName(value string) string {
@@ -236,13 +281,14 @@ func (u *FolderDownloadUsecase) run(id string, root *domain.Node, list []*domain
 		if fileName == "" {
 			fileName = node.ID
 		}
-		entryName := rootName + "/" + nodeRelativePath(node.ID, task.NodeID, nodeMap)
+		var processedBytes int64
+		entryName := rootName + "/" + nodeRelativePath(node.ID, root.ID, nodeMap)
 		if node.Meta.FileReadonly && node.Meta.FileKey != "" {
 			fileName = safeZipName(node.Meta.FileName)
 			if fileName == "" {
 				fileName = safeZipName(node.Name)
 			}
-			entryName = rootName + "/" + nodeRelativePath(node.ID, task.NodeID, nodeMap)
+			entryName = rootName + "/" + nodeRelativePath(node.ID, root.ID, nodeMap)
 			entryName = path.Join(path.Dir(entryName), fileName)
 			object, objectErr := u.s3Client.GetObject(ctx, domain.Bucket, node.Meta.FileKey, minio.GetObjectOptions{})
 			if objectErr != nil {
@@ -251,7 +297,7 @@ func (u *FolderDownloadUsecase) run(id string, root *domain.Node, list []*domain
 			}
 			writer, writerErr := zipWriter.Create(entryName)
 			if writerErr == nil {
-				_, writerErr = io.Copy(writer, object)
+				processedBytes, writerErr = io.Copy(writer, object)
 			}
 			_ = object.Close()
 			if writerErr != nil {
@@ -269,6 +315,7 @@ func (u *FolderDownloadUsecase) run(id string, root *domain.Node, list []*domain
 			writer, writerErr := zipWriter.Create(entryName)
 			if writerErr == nil {
 				_, writerErr = writer.Write(content)
+				processedBytes = int64(len(content))
 			}
 			if writerErr != nil {
 				failed(writerErr)
@@ -287,13 +334,7 @@ func (u *FolderDownloadUsecase) run(id string, root *domain.Node, list []*domain
 			}
 		}
 		task.ProcessedFiles++
-		if node.Meta.FileReadonly && node.Meta.FileKey != "" {
-			if info, statErr := u.s3Client.StatObject(ctx, node.Meta.FileKey); statErr == nil {
-				task.ProcessedBytes += info.Size
-			}
-		} else {
-			task.ProcessedBytes += int64(len(node.Content))
-		}
+		task.ProcessedBytes += processedBytes
 		if err := u.taskRepo.Update(ctx, task); err != nil {
 			failed(err)
 			return

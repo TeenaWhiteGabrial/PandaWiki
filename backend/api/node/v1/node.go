@@ -109,6 +109,7 @@ type NodeListGroupNavResp struct {
 	CanCreateFolder   bool                      `json:"can_create_folder"`
 	CanConfigure      bool                      `json:"can_configure"`
 	CanManage         bool                      `json:"can_manage"`
+	Permissions       domain.NodePermissions    `json:"permissions"`
 	NavName           string                    `json:"nav_name"`
 	NavID             string                    `json:"nav_id"`
 	Position          float64                   `json:"position"`
@@ -174,7 +175,9 @@ type NodeManagementEditReq struct {
 }
 
 type NodeManagementResp struct {
-	ID           string                           `json:"id"`
-	Grants       []domain.DocumentManagementGrant `json:"grants"`
-	CanConfigure bool                             `json:"can_configure"`
+	ID                     string                             `json:"id"`
+	Grants                 []domain.DocumentManagementGrant   `json:"grants"`
+	ParentGrantConstraints [][]domain.DocumentManagementGrant `json:"parent_grant_constraints,omitempty"`
+	HasParentFolder        bool                               `json:"has_parent_folder"`
+	CanConfigure           bool                               `json:"can_configure"`
 }

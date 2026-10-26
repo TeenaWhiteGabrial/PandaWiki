@@ -8,6 +8,8 @@ export interface Department {
   name: string;
   parent_id?: string | null;
   path: string;
+  /** Ancestor IDs used to evaluate inherited audience rules in scoped selectors. */
+  ancestor_ids?: string[];
   sort: number;
   status: DepartmentStatus;
   children?: Department[];

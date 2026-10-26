@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${ROOT_DIR}/scripts/dev-env.sh"
 
 load_external_oss_env
+load_local_security_env
 
 echo "停止 Docker 基础依赖"
 cd "${PANDA_WIKI_ROOT_DIR}"

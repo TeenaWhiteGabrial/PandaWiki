@@ -20,12 +20,38 @@ import {
   PostApiV1FileUploadPayload,
 } from "./types";
 
-export const getApiV1FileDownloadUrl = (query: { key: string }) =>
+export const getApiV1FileDownloadUrl = (query: {
+  key: string;
+  attachment?: boolean;
+  filename?: string;
+}) =>
   httpRequest<{ url: string }>({
-    path: `/api/v1/file/download/url?key=${encodeURIComponent(query.key)}`,
+    path: `/api/v1/file/download/url?key=${encodeURIComponent(query.key)}${query.attachment ? `&attachment=true&filename=${encodeURIComponent(query.filename || '')}` : ''}`,
     method: "GET",
     secure: true,
     format: "json",
+  });
+
+export interface FileStorageInfo {
+  storage_type: 'oss' | 'minio' | 'unknown';
+  active_storage_type: 'oss' | 'minio';
+  available: boolean;
+  object_key: string;
+  object_url?: string;
+  object_location?: string;
+  url: string;
+  expires_at?: string;
+}
+
+export const getApiV1FileStorageInfo = (query: {
+  kb_id: string;
+  key: string;
+}) =>
+  httpRequest<FileStorageInfo>({
+    path: `/api/v1/file/storage-info?kb_id=${encodeURIComponent(query.kb_id)}&key=${encodeURIComponent(query.key)}`,
+    method: 'GET',
+    secure: true,
+    format: 'json',
   });
 
 /**

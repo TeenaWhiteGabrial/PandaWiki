@@ -1,23 +1,18 @@
 import router from '@/router';
 import { theme } from '@/themes';
 import { ThemeProvider } from '@/components/ui';
-import { useLocation, useRoutes } from 'react-router-dom';
+import { useRoutes } from 'react-router-dom';
 
 import '@ctzhian/tiptap/dist/index.css';
 
 function App() {
-  const location = useLocation();
-  const { pathname } = location;
-  const routerView = useRoutes(router);
-  const loginPage = pathname.includes('/login');
-  const onlyAllowShareApi = loginPage;
-
-  const token = localStorage.getItem('panda_wiki_token') || '';
-
-  if (!token && !onlyAllowShareApi) {
-    window.location.href = window.__BASENAME__ + '/login';
-    return null;
+  try {
+    localStorage.removeItem('panda_wiki_token');
+  } catch {}
+  for (const name of ['panda_wiki_token', 'token', '_pw_auth_session']) {
+    document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Strict`;
   }
+  const routerView = useRoutes(router);
 
   return (
     <ThemeProvider theme={theme} defaultMode='light' storageManager={null}>

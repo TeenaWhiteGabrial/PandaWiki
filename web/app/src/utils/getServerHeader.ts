@@ -15,12 +15,8 @@ export async function getServerHeader(): Promise<Record<string, string>> {
 
   const requestHeaders: Record<string, string> = {
     cookie: cookieHeader,
+    'X-PW-CSRF': '1',
   };
-
-  const token = cookieStore.get('panda_wiki_token')?.value;
-  if (token) {
-    requestHeaders.Authorization = `Bearer ${decodeURIComponent(token)}`;
-  }
 
   const kbID = headersList.get('x-kb-id');
   if (kbID) {

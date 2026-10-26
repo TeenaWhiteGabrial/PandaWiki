@@ -61,6 +61,8 @@ func NewEcho(
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
+	e.Use(PWMiddleware.BrowserSessions())
+	e.Use(PWMiddleware.HTTPSecurity())
 
 	e.Binder = &MyBinder{}
 

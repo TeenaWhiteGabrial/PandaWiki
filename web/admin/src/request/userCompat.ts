@@ -1,4 +1,4 @@
-import { getApiV1User, getApiV1UserList } from './User';
+import { getApiV1User, getApiV1UserList, type UserListQuery } from './User';
 import type { ConstsUserRole } from './types';
 
 export type UserInfoCompat = {
@@ -27,38 +27,13 @@ export type UserListItemCompat = {
 
 export const getApiV1UserCompat = () => getApiV1User() as Promise<UserInfoCompat>;
 
-export const getApiV1UserListCompat = async (query?: {
-  keyword?: string;
-  role?: ConstsUserRole | '';
-  department_id?: string;
-}) => {
-  const resp = await getApiV1UserList();
+export const getApiV1UserListCompat = async (query: UserListQuery = {}) => {
+  const resp = await getApiV1UserList(query);
   const users = ((resp.users || []) as UserListItemCompat[]) ?? [];
-
-  const filteredUsers = users.filter(user => {
-    if (query?.keyword) {
-      const keyword = query.keyword.toLowerCase();
-      const matched =
-        user.account?.toLowerCase().includes(keyword) ||
-        user.name?.toLowerCase().includes(keyword);
-      if (!matched) return false;
-    }
-
-    if (query?.role && user.role !== query.role) {
-      return false;
-    }
-
-    if (
-      query?.department_id &&
-      !user.department_ids?.includes(query.department_id)
-    ) {
-      return false;
-    }
-
-    return true;
-  });
-
   return {
-    users: filteredUsers,
+    users,
+    total: resp.total ?? users.length,
+    page: resp.page ?? query.page ?? 1,
+    page_size: resp.page_size ?? query.page_size ?? 20,
   };
 };

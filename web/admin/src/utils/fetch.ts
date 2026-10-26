@@ -53,8 +53,6 @@ class SSEClient<T> {
     this.buffer = '';
     this.completed = false;
 
-    const token = localStorage.getItem('panda_wiki_token') || '';
-
     const timeoutDuration = 300000;
     const timeoutId = setTimeout(() => {
       this.unsubscribe();
@@ -66,7 +64,7 @@ class SSEClient<T> {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
-        Authorization: `Bearer ${token}`,
+        'X-PW-CSRF': '1',
         ...headers,
       },
       body,

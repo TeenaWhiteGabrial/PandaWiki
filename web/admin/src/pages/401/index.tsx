@@ -1,3 +1,4 @@
+import { logoutAccount } from '@/request/User';
 import React from 'react';
 import NoPermissionImg from '@/assets/images/no-permission.png';
 import { styled, Box, Typography, Button } from '@mui/material';
@@ -30,7 +31,8 @@ const StyledActions = styled(Box)(({ theme }) => ({
 
 const Index = () => {
   const navigate = useNavigate();
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logoutAccount();
     localStorage.removeItem('panda_wiki_token');
     navigate('/login');
   };

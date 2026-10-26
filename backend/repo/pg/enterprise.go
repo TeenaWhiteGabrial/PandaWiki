@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/chaitin/panda-wiki/config"
+	"sort"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -207,6 +209,85 @@ func (r *EnterpriseRepository) GetUserDepartments(ctx context.Context, userID st
 		}
 	}
 	return departmentIDs, primaryDepartment, nil
+}
+
+// GetEffectiveDepartmentIDs returns the departments a user actually belongs to.
+// user_departments also stores ancestor rows for inherited permissions, so those
+// rows must not be treated as the user's management scope. Prefer explicit
+// primary rows; for legacy data without a primary marker, use only the deepest
+// assigned departments.
+func (r *EnterpriseRepository) GetEffectiveDepartmentIDs(ctx context.Context, userID string) ([]string, error) {
+	var rows []struct {
+		DepartmentID string `gorm:"column:department_id"`
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT assigned.department_id
+		FROM user_departments assigned
+		INNER JOIN departments department ON department.id = assigned.department_id
+		WHERE assigned.user_id = ?
+		AND (
+			assigned.is_primary = TRUE
+			OR (
+				NOT EXISTS (
+					SELECT 1 FROM user_departments primary_assignment
+					WHERE primary_assignment.user_id = assigned.user_id
+					AND primary_assignment.is_primary = TRUE
+				)
+				AND NOT EXISTS (
+					SELECT 1
+					FROM user_departments descendant_assignment
+					INNER JOIN departments descendant ON descendant.id = descendant_assignment.department_id
+					WHERE descendant_assignment.user_id = assigned.user_id
+					AND descendant.path LIKE department.path || '/%'
+				)
+			)
+		)
+		ORDER BY department.path ASC`, userID).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	departmentIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		departmentIDs = append(departmentIDs, row.DepartmentID)
+	}
+	return departmentIDs, nil
+}
+
+// ResolveEffectiveDepartmentIDs reduces a department assignment list to its
+// deepest departments. It is used for incoming assignments, which carry the
+// selected department and its ancestors but do not yet have is_primary rows.
+func (r *EnterpriseRepository) ResolveEffectiveDepartmentIDs(ctx context.Context, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var departments []domain.Department
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&departments).Error; err != nil {
+		return nil, err
+	}
+	requestedIDs := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if id != "" {
+			requestedIDs[id] = struct{}{}
+		}
+	}
+	if len(departments) != len(requestedIDs) {
+		return nil, fmt.Errorf("one or more departments do not exist")
+	}
+	result := make([]string, 0, len(departments))
+	for _, department := range departments {
+		isAncestor := false
+		for _, other := range departments {
+			if other.ID != department.ID && strings.HasPrefix(other.Path, department.Path+"/") {
+				isAncestor = true
+				break
+			}
+		}
+		if !isAncestor {
+			result = append(result, department.ID)
+		}
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 func (r *EnterpriseRepository) EnsureDefaultPermissionLevel(ctx context.Context) error {

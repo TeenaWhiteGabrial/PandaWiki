@@ -39,8 +39,12 @@ cp .env.example .env
 - `RAGLITE_API_KEY`
 
 对象存储配置统一放在仓库根目录 `.env`，参考根目录 `.env.example`。
+当前生产环境只启用 OSS，MinIO 不会启动或参与读取。
 部署脚本会读取 `OSS_ENDPOINT`、`OSS_ACCESS_KEY`、`OSS_SECRET_KEY`、
-`OSS_BUCKET_NAME`、`OSS_DOWNLOAD_URL` 和 `OSS_REGION`。生产环境不再启动 MinIO。
+`OSS_BUCKET_NAME`、`OSS_DOWNLOAD_URL` 和 `OSS_REGION`。
+
+文件详情会检查对象是否存在于当前启用的 OSS。能找到时显示 OSS 类型和临时链接；找不到时
+标记为“非 OSS”，不会尝试访问历史 MinIO。
 
 PDF 解析基础镜像默认使用
 `registry.cn-hangzhou.aliyuncs.com/misaka-images/python:3.12-slim-bookworm`。
@@ -109,3 +113,20 @@ docker compose --env-file .env -f docker-compose.yml restart api consumer admin 
 ```bash
 docker compose --env-file .env -f docker-compose.yml down
 ```
+
+## 2026-10-22 安全升级
+
+本次涉及会话、密钥不可逆哈希迁移及 Redis/NATS 认证，首次需 `upgrade all`。部署前配置独立的 `REDIS_PASSWORD`、`NATS_PASSWORD` 并备份数据库；不能只回滚旧镜像。[安全问题核实、修复、验证与部署合并说明](../../docs/security-review-20261022/安全问题核实与修复部署合并说明.md)。
+
+
+### 2026-10-26 安全升级：请整套发布
+
+两端登录改为服务端 HttpOnly Cookie，原有 localStorage 登录令牌不再使用；升级后需重新登录。账号登录接口不再在 JSON 返回 JWT，程序化账号接入应使用 Cookie Jar 和 `X-PW-CSRF: 1`。显式 API 密钥接入保留。
+
+本次必须使用 `bash deploy/server/deploy.sh upgrade all`，同步 API、Consumer、两端、NATS/监控代理及 Gotenberg；不要只更新一个前端或后端。脚本自动生成并保存缺失的 `PREVIEW_PASSWORD`、`NATS_MONITOR_PASSWORD`，不需要发送密码。正式 HTTPS 入口需覆盖转发协议头，可设置 `AUTH_COOKIE_SECURE=true` 强制 Secure。
+
+新增 `nats-monitor` 仅代理认证后的监控请求，原始监控只在 NATS 网络命名空间回环监听；预览转换使用原生 Basic Auth。管理端容器内使用 Go 过滤代理和回环 Nginx，宿主访问端口不变。
+
+普通文档上传显式设置 private ACL；外部 OSS 实际 ACL 支持、上传账号权限、桶策略和历史对象需运维核对。设置私有 ACL 失败时不会退回公共上传。MinIO 公共读桶会拒绝普通文档写入，不会由升级脚本自动修改历史桶策略。
+
+完整实现及本地验证见 [安全补充修复说明](../../docs/security-review-20261022/安全补充修复-20261026.md)。

@@ -20,7 +20,7 @@ interface DocStatusProps {
 const textMap = {
   public: {
     title: '确认设置文档为公开状态？',
-    text: '设为公开后，所有用户都可以在前台访问这些文档。',
+    text: '设为公开后，所有已登录用户都可以在前台访问这些文档，未登录游客仍无法访问。',
     btn: '设为公开',
   },
   private: {

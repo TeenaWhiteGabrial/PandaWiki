@@ -87,17 +87,24 @@ func (h *ShareNodeHandler) GetNodeDetail(c echo.Context) error {
 	}
 
 	errCode := h.usecase.ValidateNodePerm(c.Request().Context(), kbID, id, domain.GetShareUserID(c))
+	var node *shareV1.ShareNodeDetailResp
 	if errCode != nil {
-		return h.NewResponseWithErrCode(c, *errCode)
-	}
-
-	node, err := h.usecase.GetNodeReleaseDetailByKBIDAndID(c.Request().Context(), kbID, id, c.QueryParam("format"))
-	if err != nil {
-		return h.NewResponseWithError(c, "failed to get node detail", err)
+		// A denied folder may still be a navigation-only ancestor of a folder
+		// or document the user can read. It never grants access to its content.
+		node, _ = h.usecase.GetSharePathOnlyNodeDetail(c.Request().Context(), kbID, id, domain.GetShareUserID(c))
+		if node == nil {
+			return h.NewResponseWithErrCode(c, *errCode)
+		}
+	} else {
+		var err error
+		node, err = h.usecase.GetNodeReleaseDetailByKBIDAndID(c.Request().Context(), kbID, id, c.QueryParam("format"))
+		if err != nil {
+			return h.NewResponseWithError(c, "failed to get node detail", err)
+		}
 	}
 
 	// If the node is a folder, return the list of child nodes
-	if node.Type == domain.NodeTypeFolder {
+	if node.Type == domain.NodeTypeFolder && !node.PathOnly {
 		childNodes, err := h.usecase.GetNodeReleaseListByParentID(c.Request().Context(), kbID, id, domain.GetShareUserID(c))
 		if err != nil {
 			return h.NewResponseWithError(c, "failed to get child nodes", err)

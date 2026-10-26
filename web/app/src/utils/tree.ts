@@ -120,6 +120,7 @@ export function convertToTree(data: NodeListItem[]) {
       status: item.status,
       order: item.position,
       emoji: item.emoji,
+      pathOnly: item.path_only,
       type: item.type,
       parentId: item.parent_id || null,
       children: [],

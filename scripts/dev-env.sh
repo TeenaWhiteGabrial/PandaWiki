@@ -10,6 +10,8 @@ PANDA_WIKI_DEPENDENCY_SERVICES=(
   postgres
   redis
   nats
+  nats-monitor
+  preview
   qdrant
   crawler
   raglite
@@ -22,6 +24,8 @@ PANDA_WIKI_DEPENDENCY_PORTS=(
   15432
   16379
   4222
+  8222
+  13000
   6333
   8080
   5050
@@ -119,4 +123,28 @@ ensure_command() {
     echo "未找到 ${command_name}。${install_hint}"
     exit 1
   fi
+}
+
+# Persist generated local credentials outside Git; API, Consumer and Compose use
+# the same file. Creating it with a restrictive umask avoids logging secrets.
+load_local_security_env() {
+  local security_file="${PANDA_WIKI_LOCAL_DATA_DIR}/security.env"
+  if [[ ! -f "${security_file}" ]]; then
+    ( umask 077
+      printf 'REDIS_PASSWORD=%s\nNATS_PASSWORD=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "${security_file}"
+    )
+  fi
+  local internal_key
+  for internal_key in NATS_MONITOR_PASSWORD PREVIEW_PASSWORD; do
+    if [[ -z "$(read_env_value "${security_file}" "${internal_key}")" ]]; then
+      ( umask 077; printf '%s=%s\n' "${internal_key}" "$(openssl rand -hex 24)" >> "${security_file}" )
+    fi
+    export "${internal_key}=$(read_env_value "${security_file}" "${internal_key}")"
+  done
+  export PREVIEW_USERNAME=panda-wiki
+  export PREVIEW_BASE_URL=http://127.0.0.1:13000
+  chmod 600 "${security_file}"
+  export REDIS_PASSWORD="$(read_env_value "${security_file}" REDIS_PASSWORD)"
+  export NATS_PASSWORD="$(read_env_value "${security_file}" NATS_PASSWORD)"
+  [[ -n "${REDIS_PASSWORD}" && -n "${NATS_PASSWORD}" ]] || { echo '本地基础设施凭据不完整'; return 1; }
 }

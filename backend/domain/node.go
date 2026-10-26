@@ -119,12 +119,14 @@ func (d RagInfo) HasAvailableIndex() bool {
 
 type NodePermissions struct {
 	Constraints               []NodePermissions         `json:"constraints,omitempty"`
+	ParentPermissionSnapshot  []NodePermissions         `json:"-"` // internal JSONB baseline; omitted from API responses
 	ManagementGrants          []DocumentManagementGrant `json:"management_grants,omitempty"`
 	AllowedPermissionLevelIDs []string                  `json:"allowed_permission_level_ids,omitempty"`
+	AllowAllUsers             bool                      `json:"allow_all_users,omitempty"`
 	Answerable                consts.NodeAccessPerm     `json:"answerable"`           // 兼容旧字段，不再单独作为权限入口
 	Visitable                 consts.NodeAccessPerm     `json:"visitable"`            // 兼容旧字段，不再单独作为权限入口
 	Visible                   consts.NodeAccessPerm     `json:"visible"`              // 兼容旧字段，不再单独作为权限入口
-	ScopeType                 string                    `json:"scope_type,omitempty"` // public / custom / department(legacy)
+	ScopeType                 string                    `json:"scope_type,omitempty"` // public / custom; department, permission_level, user are legacy modes
 	Inherit                   *bool                     `json:"inherit,omitempty"`    // 目录默认继承父级，可显式覆盖
 	MinPermissionLevelID      string                    `json:"min_permission_level_id,omitempty"`
 	MinPermissionLevelRank    int                       `json:"min_permission_level_rank,omitempty"`
@@ -144,6 +146,7 @@ func (s NodePermissions) HasEnterpriseRule() bool {
 	return len(s.Constraints) > 0 || s.ScopeType != "" ||
 		s.Inherit != nil ||
 		len(s.AllowedPermissionLevelIDs) > 0 ||
+		s.AllowAllUsers ||
 		s.MinPermissionLevelID != "" ||
 		s.MinPermissionLevelRank > 0 ||
 		len(s.AllowedDepartmentIDs) > 0 ||
@@ -157,11 +160,27 @@ func (s *NodePermissions) Scan(value any) error {
 	if !ok {
 		return errors.New(fmt.Sprint("invalid permissions type:", value))
 	}
-	return json.Unmarshal(bytes, s)
+	var stored nodePermissionsStorage
+	if err := json.Unmarshal(bytes, &stored); err != nil {
+		return err
+	}
+	*s = NodePermissions(stored.nodePermissionsAlias)
+	s.ParentPermissionSnapshot = stored.ParentPermissionSnapshot
+	return nil
 }
 
 func (s *NodePermissions) Value() (driver.Value, error) {
-	return json.Marshal(s)
+	return json.Marshal(nodePermissionsStorage{
+		nodePermissionsAlias:     nodePermissionsAlias(*s),
+		ParentPermissionSnapshot: s.ParentPermissionSnapshot,
+	})
+}
+
+type nodePermissionsAlias NodePermissions
+
+type nodePermissionsStorage struct {
+	nodePermissionsAlias
+	ParentPermissionSnapshot []NodePermissions `json:"parent_permission_snapshot,omitempty"`
 }
 
 type NodeAuthGroup struct {
@@ -247,28 +266,34 @@ type GetNodeListReq struct {
 }
 
 type NodeListItemResp struct {
-	CanCreateDocument bool            `json:"can_create_document" gorm:"-"`
-	CanCreateFolder   bool            `json:"can_create_folder" gorm:"-"`
-	CanManage         bool            `json:"can_manage" gorm:"-"`
-	ID                string          `json:"id"`
-	NavId             string          `json:"nav_id"`
-	Type              NodeType        `json:"type"`
-	Status            NodeStatus      `json:"status"`
-	RagInfo           RagInfo         `json:"rag_info"`
-	Name              string          `json:"name"`
-	Summary           string          `json:"summary"`
-	Emoji             string          `json:"emoji"`
-	ContentType       string          `json:"content_type"`
-	Position          float64         `json:"position"`
-	ParentID          string          `json:"parent_id"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-	CreatorId         string          `json:"creator_id"`
-	EditorId          string          `json:"editor_id"`
-	Creator           string          `json:"creator"`
-	Editor            string          `json:"editor"`
-	PublisherId       string          `json:"publisher_id" gorm:"-"`
-	Permissions       NodePermissions `json:"permissions" gorm:"type:jsonb"`
+	CanCreateDocument              bool                        `json:"can_create_document" gorm:"-"`
+	CanCreateFolder                bool                        `json:"can_create_folder" gorm:"-"`
+	CanManage                      bool                        `json:"can_manage" gorm:"-"`
+	ID                             string                      `json:"id"`
+	NavId                          string                      `json:"nav_id"`
+	Type                           NodeType                    `json:"type"`
+	Status                         NodeStatus                  `json:"status"`
+	RagInfo                        RagInfo                     `json:"rag_info"`
+	Name                           string                      `json:"name"`
+	Summary                        string                      `json:"summary"`
+	Emoji                          string                      `json:"emoji"`
+	ContentType                    string                      `json:"content_type"`
+	FileKey                        string                      `json:"file_key,omitempty"`
+	FileName                       string                      `json:"file_name,omitempty"`
+	FileReadonly                   bool                        `json:"file_readonly,omitempty"`
+	Position                       float64                     `json:"position"`
+	ParentID                       string                      `json:"parent_id"`
+	CreatedAt                      time.Time                   `json:"created_at"`
+	UpdatedAt                      time.Time                   `json:"updated_at"`
+	CreatorId                      string                      `json:"creator_id"`
+	EditorId                       string                      `json:"editor_id"`
+	Creator                        string                      `json:"creator"`
+	Editor                         string                      `json:"editor"`
+	PublisherId                    string                      `json:"publisher_id" gorm:"-"`
+	Permissions                    NodePermissions             `json:"permissions" gorm:"type:jsonb"`
+	EffectivePermissions           *NodePermissions            `json:"effective_permissions,omitempty" gorm:"-"`
+	EffectiveManagementGrants      []DocumentManagementGrant   `json:"effective_management_grants,omitempty" gorm:"-"`
+	EffectiveManagementConstraints [][]DocumentManagementGrant `json:"effective_management_constraints,omitempty" gorm:"-"`
 }
 
 type NodeContentChunk struct {
@@ -350,6 +375,7 @@ type ShareNodeListItemResp struct {
 	ID          string          `json:"id"`
 	Name        string          `json:"name"`
 	Type        NodeType        `json:"type"`
+	PathOnly    bool            `json:"path_only,omitempty"`
 	ParentID    string          `json:"parent_id"`
 	NavId       string          `json:"nav_id"`
 	Position    float64         `json:"position"`
@@ -363,6 +389,7 @@ type ShareNodeDetailItem struct {
 	ID          string                 `json:"id"`
 	Name        string                 `json:"name"`
 	Type        NodeType               `json:"type"`
+	PathOnly    bool                   `json:"path_only,omitempty"`
 	ParentID    string                 `json:"parent_id"`
 	Position    float64                `json:"position"`
 	Emoji       string                 `json:"emoji"`

@@ -21,3 +21,21 @@ export const postApiV1UserLogin = (
     format: 'json',
     ...params,
   });
+
+export const logoutAccount = () =>
+  httpRequest({
+    path: '/share/v1/auth/logout/account',
+    method: 'POST',
+    format: 'json',
+  });
+export const changeOwnPassword = (
+  currentPassword: string,
+  newPassword: string,
+) =>
+  httpRequest({
+    path: '/share/v1/auth/change_password',
+    method: 'POST',
+    body: { current_password: currentPassword, new_password: newPassword },
+    type: ContentType.Json,
+    format: 'json',
+  });

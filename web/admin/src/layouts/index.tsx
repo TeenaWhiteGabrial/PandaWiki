@@ -89,7 +89,10 @@ const useAuth = (hasAuth: boolean) => {
           }
         });
       })
-      .catch(() => setAuthorized(false));
+      .catch(error => {
+        setAuthorized(false);
+        if (error?.status === 401) navigate('/login', { replace: true });
+      });
   };
 
   useEffect(() => {

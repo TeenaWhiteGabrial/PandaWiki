@@ -10,14 +10,15 @@ const (
 )
 
 type Department struct {
-	ID        string           `json:"id" gorm:"primaryKey"`
-	Name      string           `json:"name"`
-	ParentID  *string          `json:"parent_id"`
-	Path      string           `json:"path"`
-	Sort      int              `json:"sort"`
-	Status    DepartmentStatus `json:"status" gorm:"default:'active'"`
-	CreatedAt time.Time        `json:"created_at"`
-	UpdatedAt time.Time        `json:"updated_at"`
+	ID          string           `json:"id" gorm:"primaryKey"`
+	Name        string           `json:"name"`
+	ParentID    *string          `json:"parent_id"`
+	Path        string           `json:"path"`
+	AncestorIDs []string         `json:"ancestor_ids,omitempty" gorm:"-"`
+	Sort        int              `json:"sort"`
+	Status      DepartmentStatus `json:"status" gorm:"default:'active'"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
 }
 
 func (Department) TableName() string {

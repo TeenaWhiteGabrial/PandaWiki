@@ -12,7 +12,7 @@ import { useStore } from '@/provider';
 import { postShareV1ChatFeedback } from '@/request/ShareChat';
 import { getShareV1ConversationDetail } from '@/request/ShareConversation';
 import { copyText } from '@/utils';
-import SSEClient, { SSEHttpError } from '@/utils/fetch';
+import SSEClient from '@/utils/fetch';
 import { Image as ImagePreview, message } from '@ctzhian/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
@@ -94,18 +94,7 @@ const AnswerStatus = {
   4: '',
 };
 
-const getChatAuthHeaders = (): Record<string, string> => {
-  if (typeof window === 'undefined') {
-    return {};
-  }
-  const token = window.localStorage.getItem('panda_wiki_token');
-  if (!token) {
-    return {};
-  }
-  return {
-    Authorization: `Bearer ${token}`,
-  };
-};
+const getChatAuthHeaders = (): Record<string, string> => ({ 'X-PW-CSRF': '1' });
 
 const LoadingContent = ({
   thinking,
@@ -491,11 +480,6 @@ const AiQaContent: React.FC<{
       onError: error => {
         setLoading(false);
         setThinking(4);
-        if (error instanceof SSEHttpError && error.status === 401) {
-          const current = window.location;
-          window.location.href = `${basePath}/auth/login?redirect=${encodeURIComponent(current.pathname + current.search)}`;
-          return;
-        }
         message.error(error.message || '请求失败');
       },
       onCancel: () => {
@@ -840,7 +824,7 @@ const AiQaContent: React.FC<{
                           color: alpha(theme.palette.text.primary, 0.5),
                         })}
                       >
-                        共找到 {item.chunk_result.length} 个结果
+                        本回答引用了 {item.chunk_result.length} 份文档
                       </Typography>
                     </StyledChunkAccordionSummary>
 

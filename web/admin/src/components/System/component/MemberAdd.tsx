@@ -3,8 +3,12 @@ import Card from '@/components/Card';
 import { message, Modal } from '@/components/ui';
 import DepartmentTreeSelect from '@/components/DepartmentTreeSelect';
 import { FormItem } from '@/components/Form';
-import { getApiV1EnterpriseDepartments } from '@/request/Enterprise';
-import type { Department } from '@/request/Enterprise';
+import {
+  getApiV1EnterpriseDepartments,
+  getApiV1EnterprisePermissionLevels,
+} from '@/request/Enterprise';
+import type { Department, PermissionLevel } from '@/request/Enterprise';
+import { useAppSelector } from '@/store';
 import { generatePassword } from '@/utils';
 import {
   buildDepartmentTree,
@@ -21,6 +25,9 @@ import type { V1CreateUserReq } from '@/request/types';
 type Role = 'manager' | 'user';
 
 const MemberAdd = ({ refresh }: { refresh: () => void }) => {
+  const levelsDisabled = useAppSelector(
+    state => state.config.user?.permission_levels_disabled,
+  );
   const [addMember, setAddMember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [createdUserInfo, setCreatedUserInfo] = useState<{
@@ -29,6 +36,9 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
   } | null>(null);
   const [copying, setCopying] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [levels, setLevels] = useState<PermissionLevel[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [optionsError, setOptionsError] = useState(false);
 
   const {
     control,
@@ -41,6 +51,7 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
       name: '',
       role: 'user' as Role,
       department_ids: [] as string[],
+      permission_level_id: '',
     },
   });
 
@@ -55,10 +66,34 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
 
   useEffect(() => {
     if (!addMember) return;
-    getApiV1EnterpriseDepartments().then(res => {
-      setDepartments(res.departments || []);
-    });
-  }, [addMember]);
+    let active = true;
+    setLoadingOptions(true);
+    setOptionsError(false);
+    Promise.all([
+      getApiV1EnterpriseDepartments(),
+      levelsDisabled
+        ? Promise.resolve({ levels: [] })
+        : getApiV1EnterprisePermissionLevels(),
+    ])
+      .then(([departmentResp, levelResp]) => {
+        if (!active) return;
+        setDepartments(departmentResp.departments || []);
+        setLevels(
+          (levelResp.levels || []).filter(item => item.status === 'active'),
+        );
+      })
+      .catch(() => {
+        if (!active) return;
+        setOptionsError(true);
+        message.error('读取部门或权限等级失败，请重新打开后重试');
+      })
+      .finally(() => {
+        if (active) setLoadingOptions(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [addMember, levelsDisabled]);
 
   const fallbackCopy = (text: string) => {
     const textArea = document.createElement('textarea');
@@ -116,6 +151,9 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
       ],
       password,
       role: data.role,
+      permission_level_id: levelsDisabled
+        ? undefined
+        : data.permission_level_id || undefined,
     };
     const onSuccess = () => {
       setCreatedUserInfo({
@@ -185,6 +223,7 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
         onOk={onSubmit}
         okButtonProps={{
           loading,
+          disabled: loadingOptions || optionsError,
         }}
       >
         <FormItem label='账号' required>
@@ -197,8 +236,8 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
                 message: '账号不能为空',
               },
               pattern: {
-                value: /^[A-Za-z0-9]+$/,
-                message: '账号只允许英文和数字',
+                value: /^[A-Za-z0-9_]+$/,
+                message: '账号仅支持英文字母（大小写）、数字和下划线',
               },
             }}
             render={({ field }) => (
@@ -206,7 +245,7 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
                 {...field}
                 fullWidth
                 autoFocus
-                placeholder='输入账号，仅支持英文和数字'
+                placeholder='英文字母（大小写）、数字、下划线'
                 error={!!errors.account}
                 helperText={errors.account?.message}
               />
@@ -252,6 +291,33 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
             )}
           />
         </FormItem>
+        {!levelsDisabled && (
+          <FormItem label='权限等级' sx={{ mt: 2 }}>
+            <Controller
+              control={control}
+              name='permission_level_id'
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onChange={field.onChange}
+                  style={{ width: '100%' }}
+                  loading={loadingOptions}
+                  disabled={loadingOptions || optionsError}
+                  options={[
+                    {
+                      value: '',
+                      label: `默认${levels.some(item => item.is_default) ? `（${levels.find(item => item.is_default)?.name}）` : ''}`,
+                    },
+                    ...levels.map(item => ({
+                      value: item.id,
+                      label: item.name,
+                    })),
+                  ]}
+                />
+              )}
+            />
+          </FormItem>
+        )}
         <FormItem label='所属部门' required sx={{ mt: 2 }}>
           <Controller
             control={control}

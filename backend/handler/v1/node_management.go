@@ -35,7 +35,7 @@ func (h *NodeHandler) EditNodeManagement(c echo.Context) error {
 }
 
 func (h *NodeHandler) NodePermissionOptions(c echo.Context) error {
-	result, err := h.usecase.NodePermissionOptions(c.Request().Context())
+	result, err := h.usecase.NodePermissionOptions(c.Request().Context(), c.QueryParam("kb_id"))
 	if err != nil {
 		return h.NewResponseWithError(c, "获取授权对象失败", err)
 	}

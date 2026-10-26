@@ -1,3 +1,6 @@
+import { PasswordChangeDialog } from '@panda-wiki/ui/security';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import { changeOwnPassword, logoutAccount } from '@/request/User';
 import { getApiV1KnowledgeBaseDetail } from '@/request/KnowledgeBase';
 import { useAppSelector, useAppDispatch } from '@/store';
 import { setKbDetail } from '@/store/slices/config';
@@ -14,6 +17,7 @@ const Header = () => {
   const { kb_id } = useAppSelector(state => state.config);
   const { user, appBrand } = useAppSelector(state => state.config);
   const dispatch = useAppDispatch();
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   useEffect(() => {
@@ -58,21 +62,35 @@ const Header = () => {
         >
           {user?.account || '当前用户'}
         </Box>
+        <Tooltip arrow title='修改密码'>
+          <IconButton size='small' onClick={() => setPasswordOpen(true)}>
+            <LockOutlinedIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
         <Tooltip arrow title='退出登录'>
           <IconButton size='small' onClick={() => setLogoutConfirmOpen(true)}>
             <IconDengchu sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
       </Stack>
+      <PasswordChangeDialog
+        open={passwordOpen}
+        required={false}
+        account={user?.account || ''}
+        onSubmit={changeOwnPassword}
+        onCancel={async () => setPasswordOpen(false)}
+        onComplete={() => {
+          localStorage.removeItem('panda_wiki_token');
+          window.location.href = `${window.__BASENAME__ || ''}/login`;
+        }}
+      />
       <Modal
         open={logoutConfirmOpen}
         onCancel={() => setLogoutConfirmOpen(false)}
-        onOk={() => {
-          message.success('退出登录成功，请重新登录');
-          setTimeout(() => {
-            localStorage.removeItem('panda_wiki_token');
-            window.location.href = '/login';
-          }, 1500);
+        onOk={async () => {
+          await logoutAccount();
+          localStorage.removeItem('panda_wiki_token');
+          window.location.href = '/login';
         }}
         title={
           <Stack direction='row' alignItems='center' gap={1}>

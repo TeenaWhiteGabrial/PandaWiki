@@ -94,8 +94,8 @@ func TestNavigationManagementPostgresRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	access, err = documentManagementAccess(ctx, storeDB, kbID, userID)
-	if err != nil || !access.Global || !access.CanManageNode(nested.ID) {
-		t.Fatalf("administrator lost existing document management: %v", err)
+	if err != nil || access.Global || !access.CanManageNode(direct.ID) || access.CanManageNode(nested.ID) {
+		t.Fatalf("manager did not retain only the explicitly granted scope: %v", err)
 	}
 	if err := repo.UpdateManagementGrants(ctx, uuid.NewString(), navID, grants); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("cross-knowledge-base update accepted: %v", err)

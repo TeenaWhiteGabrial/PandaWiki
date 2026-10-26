@@ -15,7 +15,8 @@ type APITokenListReq struct {
 type APITokenListItem struct {
 	ID         string                  `json:"id"`
 	Name       string                  `json:"name"`
-	Token      string                  `json:"token"`
+	Token      string                  `json:"token,omitempty"`
+	TokenHint  string                  `json:"token_hint"`
 	Permission consts.UserKBPermission `json:"permission"`
 	CreatedAt  string                  `json:"created_at"`
 	UpdatedAt  string                  `json:"updated_at"`

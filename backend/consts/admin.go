@@ -21,3 +21,9 @@ const (
 func IsAdministrator(role UserRole) bool {
 	return role == UserRoleAdmin || role == UserRoleManager
 }
+
+// IsSuperAdmin identifies the global administrator. Managers receive only the
+// document and organization scopes explicitly assigned to them.
+func IsSuperAdmin(role UserRole) bool {
+	return role == UserRoleAdmin
+}

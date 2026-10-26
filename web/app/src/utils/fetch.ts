@@ -1,3 +1,4 @@
+import { clearAuthStorage } from './auth';
 type SSECallback<T> = (data: T) => void;
 type SSEErrorCallback = (error: Error) => void;
 type SSECompleteCallback = () => void;
@@ -71,6 +72,7 @@ class SSEClient<T> {
       method,
       headers: {
         Accept: 'text/event-stream',
+        'X-PW-CSRF': '1',
         ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
       },
@@ -83,6 +85,10 @@ class SSEClient<T> {
           let errorMessage = `HTTP error! status: ${response.status}`;
           try {
             const body = await response.json();
+            if (body?.code === 40101) clearAuthStorage();
+            if (body?.code === 40302 && typeof window !== 'undefined') {
+              window.location.assign('/auth/login?change_password=1');
+            }
             if (body?.message) errorMessage = body.message;
             else if (body?.error) errorMessage = body.error;
           } catch {}

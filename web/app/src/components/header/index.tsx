@@ -1,8 +1,12 @@
 'use client';
 
+import { PasswordChangeDialog } from '@panda-wiki/ui/security';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import { changeOwnPassword, logoutAccount } from '@/request/User';
+
 import { useBasePath } from '@/hooks';
 import { useStore } from '@/provider';
-import { clearCookie } from '@/utils/cookie';
+import { clearAuthStorage } from '@/utils/auth';
 import { getImagePath } from '@/utils/getImagePath';
 import { Modal } from '@ctzhian/ui';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -22,49 +26,42 @@ interface HeaderProps {
   isWelcomePage?: boolean;
 }
 
-const getHeaderButtons = (
-  btns: any[] = [],
-  basePath: string,
-  redirectPath: string,
-  isAuthenticated: boolean,
-) => {
+const getHeaderButtons = (btns: any[] = [], basePath: string) => {
   return btns
     .filter(item => {
       const text = String(item?.text || '').toLowerCase();
       const url = String(item?.url || '').toLowerCase();
       const isLoginPlaceholder =
         text.includes('pandawiki') || url.includes('pandawiki');
+      const isLoginLink =
+        url.split(/[?#]/)[0].replace(/\/$/, '') ===
+          `${basePath || ''}/auth/login` ||
+        (typeof window !== 'undefined' &&
+          url.split(/[?#]/)[0].replace(/\/$/, '') ===
+            `${window.location.origin}${basePath || ''}/auth/login`);
 
       return (
         !text.includes('github') &&
         !url.includes('github.com') &&
-        !(isAuthenticated && isLoginPlaceholder)
+        !isLoginPlaceholder &&
+        !isLoginLink
       );
     })
-    .map((item: any) => {
-      const text = String(item?.text || '').toLowerCase();
-      const url = String(item?.url || '').toLowerCase();
-      const isLoginPlaceholder =
-        text.includes('pandawiki') || url.includes('pandawiki');
-      const redirect = encodeURIComponent(redirectPath);
-
-      return {
-        ...item,
-        text: isLoginPlaceholder ? '登录' : item.text,
-        url: isLoginPlaceholder
-          ? `${basePath || ''}/auth/login${redirect ? `?redirect=${redirect}` : ''}`
-          : getImagePath(item.url, basePath),
-        target: isLoginPlaceholder ? '_self' : item.target,
-        icon: getImagePath(item.icon, basePath),
-      };
-    });
+    .map((item: any) => ({
+      ...item,
+      url: getImagePath(item.url, basePath),
+      icon: getImagePath(item.icon, basePath),
+    }));
 };
 
 const LogoutButton = () => {
+  const { authInfo } = useStore();
+  const basePath = useBasePath();
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [open, setOpen] = useState(false);
-  const handleLogout = () => {
-    clearCookie();
-    window.localStorage.removeItem('panda_wiki_token');
+  const handleLogout = async () => {
+    await logoutAccount();
+    clearAuthStorage();
     window.localStorage.removeItem('panda_wiki_remember_login');
     const protocol = window.location.protocol;
     const host = window.location.host;
@@ -88,6 +85,22 @@ const LogoutButton = () => {
       >
         <Box sx={{ pl: 4 }}>确定要退出登录吗？</Box>
       </Modal>
+      <PasswordChangeDialog
+        open={passwordOpen}
+        required={false}
+        account={authInfo?.account || ''}
+        onSubmit={changeOwnPassword}
+        onCancel={async () => setPasswordOpen(false)}
+        onComplete={() => {
+          clearAuthStorage();
+          window.location.href = `${basePath}/auth/login`;
+        }}
+      />
+      <Tooltip title='修改密码' arrow>
+        <IconButton size='small' onClick={() => setPasswordOpen(true)}>
+          <LockOutlinedIcon sx={{ fontSize: 22 }} />
+        </IconButton>
+      </Tooltip>
       <Tooltip title='退出登录' arrow>
         <IconButton size='small' onClick={() => setOpen(true)}>
           <IconDengchu
@@ -170,8 +183,6 @@ const Header = ({ isDocPage = false, isWelcomePage = false }: HeaderProps) => {
   const headerButtons = getHeaderButtons(
     kbDetail?.settings?.btns || [],
     basePath,
-    currentRedirectPath,
-    !!authInfo,
   );
 
   const handleSearch = (value?: string, type: 'chat' | 'search' = 'chat') => {
@@ -283,8 +294,6 @@ export const WelcomeHeader = ({
   const headerButtons = getHeaderButtons(
     kbDetail?.settings?.btns || [],
     basePath,
-    currentRedirectPath,
-    !!authInfo,
   );
   const handleSearch = (value?: string, type: 'chat' | 'search' = 'chat') => {
     if (value?.trim()) {

@@ -2,11 +2,13 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	enterpriseV1 "github.com/chaitin/panda-wiki/api/enterprise/v1"
 	"github.com/chaitin/panda-wiki/config"
@@ -166,40 +168,17 @@ func (u *EnterpriseUsecase) ResolveNodePermissions(ctx context.Context, node *do
 	if node == nil {
 		return domain.NodePermissions{}, nil
 	}
-
-	perm := node.Permissions
-	if !shouldInheritNodePermissions(perm, node.ParentID) {
-		return u.normalizeResolvedNodePermissions(ctx, perm)
-	}
-
-	visited := map[string]struct{}{node.ID: {}}
-	parentID := node.ParentID
-	for depth := 0; depth < 20 && parentID != ""; depth++ {
-		if _, ok := visited[parentID]; ok {
-			break
-		}
-		visited[parentID] = struct{}{}
-
-		parentNode, err := u.nodeRepo.GetNodeByID(ctx, parentID)
-		if err != nil {
-			return u.normalizeResolvedNodePermissions(ctx, perm)
-		}
-		perm = parentNode.Permissions
-		if !shouldInheritNodePermissions(perm, parentNode.ParentID) {
-			return u.normalizeResolvedNodePermissions(ctx, perm)
-		}
-		parentID = parentNode.ParentID
-	}
-
-	return u.normalizeResolvedNodePermissions(ctx, perm)
+	return u.resolvePermissionHierarchy(ctx, node.ID, node.ParentID, node.Permissions)
 }
 
 func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nodeID, parentID string, current domain.NodePermissions) (domain.NodePermissions, error) {
-	perm := current
-	if !shouldInheritNodePermissions(perm, parentID) {
-		return u.normalizeResolvedNodePermissions(ctx, perm)
-	}
+	return u.resolvePermissionHierarchy(ctx, nodeID, parentID, current)
+}
 
+// resolvePermissionHierarchy keeps the closest explicit rule as the primary
+// rule and adds every applicable ancestor rule as an AND constraint.
+func (u *EnterpriseUsecase) resolvePermissionHierarchy(ctx context.Context, nodeID, parentID string, current domain.NodePermissions) (domain.NodePermissions, error) {
+	entries := []nodePermissionHierarchyEntry{{permissions: current, parentID: parentID}}
 	visited := map[string]struct{}{nodeID: {}}
 	nextParentID := parentID
 	for depth := 0; depth < 20 && nextParentID != ""; depth++ {
@@ -209,17 +188,100 @@ func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nod
 		visited[nextParentID] = struct{}{}
 
 		parentNode, err := u.nodeRepo.GetNodeByID(ctx, nextParentID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Navigation roots are stored separately from nodes.
+			break
+		}
 		if err != nil {
-			return u.normalizeResolvedNodePermissions(ctx, perm)
+			return domain.NodePermissions{}, err
 		}
-		perm = parentNode.Permissions
-		if !shouldInheritNodePermissions(perm, parentNode.ParentID) {
-			return u.normalizeResolvedNodePermissions(ctx, perm)
-		}
+		entries = append(entries, nodePermissionHierarchyEntry{permissions: parentNode.Permissions, parentID: parentNode.ParentID})
 		nextParentID = parentNode.ParentID
 	}
+	resolved := composeNodePermissionHierarchy(entries)
+	return u.normalizeResolvedNodePermissions(ctx, resolved)
+}
 
-	return u.normalizeResolvedNodePermissions(ctx, perm)
+type nodePermissionHierarchyEntry struct {
+	permissions domain.NodePermissions
+	parentID    string
+}
+
+func composeNodePermissionHierarchy(entries []nodePermissionHierarchyEntry) domain.NodePermissions {
+	if len(entries) == 0 {
+		return domain.NodePermissions{}
+	}
+	rules := make([]domain.NodePermissions, 0, len(entries))
+	seen := make(map[string]struct{}, len(entries))
+	appendRule := func(rule domain.NodePermissions) {
+		rule = readPermissionRule(rule)
+		encoded, _ := json.Marshal(rule)
+		key := string(encoded)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		rules = append(rules, rule)
+	}
+	for _, entry := range entries {
+		applies := !shouldInheritNodePermissions(entry.permissions, entry.parentID)
+		if entry.parentID == "" && !hasExplicitNodePermissionRule(entry.permissions) {
+			applies = false
+		}
+		if !applies {
+			continue
+		}
+		appendRule(entry.permissions)
+		// A local rule captures the parent audience as it existed when saved.
+		// Current ancestor rules are still appended below, so later tightening
+		// applies while later widening cannot expand this saved child.
+		for _, snapshotRule := range entry.permissions.ParentPermissionSnapshot {
+			appendRule(snapshotRule)
+		}
+	}
+	if len(rules) == 0 {
+		return domain.NodePermissions{}
+	}
+	resolved := rules[0]
+	if len(rules) > 1 {
+		resolved.Constraints = append([]domain.NodePermissions(nil), rules[1:]...)
+	}
+	return resolved
+}
+
+func readPermissionRule(rule domain.NodePermissions) domain.NodePermissions {
+	rule.Constraints = nil
+	rule.ParentPermissionSnapshot = nil
+	rule.ManagementGrants = nil
+	rule.Inherit = nil
+	return rule
+}
+
+func snapshotReadPermissionRules(permissions domain.NodePermissions) []domain.NodePermissions {
+	if !hasExplicitNodePermissionRule(permissions) && len(permissions.Constraints) == 0 {
+		return []domain.NodePermissions{{
+			ScopeType:     domain.NodePermissionScopeCustom,
+			AllowAllUsers: true,
+		}}
+	}
+	rules := make([]domain.NodePermissions, 0, 1+len(permissions.Constraints))
+	seen := make(map[string]struct{}, 1+len(permissions.Constraints))
+	var add func(domain.NodePermissions)
+	add = func(rule domain.NodePermissions) {
+		for _, constraint := range rule.Constraints {
+			add(constraint)
+		}
+		rule = readPermissionRule(rule)
+		encoded, _ := json.Marshal(rule)
+		key := string(encoded)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		rules = append(rules, rule)
+	}
+	add(permissions)
+	return rules
 }
 
 func shouldInheritNodePermissions(perm domain.NodePermissions, parentID string) bool {
@@ -234,6 +296,7 @@ func shouldInheritNodePermissions(perm domain.NodePermissions, parentID string) 
 
 func hasExplicitNodePermissionRule(perm domain.NodePermissions) bool {
 	return perm.ScopeType != "" ||
+		perm.AllowAllUsers ||
 		len(perm.AllowedPermissionLevelIDs) > 0 ||
 		perm.MinPermissionLevelID != "" ||
 		perm.MinPermissionLevelRank > 0 ||
@@ -306,10 +369,6 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 		access = &domain.EnterpriseAccessContext{}
 	}
 
-	if !config.PermissionLevelsDisabled() && perm.MinPermissionLevelRank > 0 && access.PermissionLevelRank < perm.MinPermissionLevelRank {
-		return false
-	}
-
 	if access.PrincipalID != "" && slices.Contains(perm.DeniedUserIDs, access.PrincipalID) {
 		return false
 	}
@@ -318,18 +377,33 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 			return false
 		}
 	}
+	// The user whitelist is an independent local grant across every mode.
+	// Parent/nav constraints were checked above, and explicit local deny rules
+	// still take precedence.
+	if access.PrincipalID != "" && access.PrincipalID != "visitor" && slices.Contains(perm.AllowedUserIDs, access.PrincipalID) {
+		return true
+	}
+	if perm.AllowAllUsers {
+		return true
+	}
 
-	// Explicit modes grant to the selected audience; legacy custom mode retains
-	// its minimum-rank requirement and department/user audience semantics.
+	// Keep the three legacy single-dimension modes readable. New custom rules
+	// combine department and level restrictions.
 	switch perm.ScopeType {
 	case "permission_level":
 		if config.PermissionLevelsDisabled() {
 			return true
 		}
+		if perm.MinPermissionLevelRank > 0 && access.PermissionLevelRank < perm.MinPermissionLevelRank {
+			return false
+		}
 		return access.PrincipalID != "" && access.PrincipalID != "visitor" && slices.Contains(perm.AllowedPermissionLevelIDs, access.PermissionLevelID)
 	case "user":
 		return slices.Contains(perm.AllowedUserIDs, access.PrincipalID) && access.PrincipalID != ""
 	case "department":
+		if !config.PermissionLevelsDisabled() && perm.MinPermissionLevelRank > 0 && access.PermissionLevelRank < perm.MinPermissionLevelRank {
+			return false
+		}
 		for _, id := range access.DepartmentIDs {
 			if slices.Contains(perm.AllowedDepartmentIDs, id) {
 				return true
@@ -337,25 +411,59 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 		}
 		return false
 	}
-	if len(perm.AllowedUserIDs) == 0 && len(perm.AllowedDepartmentIDs) == 0 {
+
+	departmentRestricted := len(perm.AllowedDepartmentIDs) > 0
+	levelRestricted := !config.PermissionLevelsDisabled() && len(perm.AllowedPermissionLevelIDs) > 0
+	minimumRestricted := !config.PermissionLevelsDisabled() && perm.MinPermissionLevelRank > 0
+	if !departmentRestricted && !levelRestricted && !minimumRestricted {
+		// A custom user whitelist is an independent grant branch. It must not
+		// turn into an implicit all-users grant for everyone outside the list.
+		if len(perm.AllowedUserIDs) > 0 {
+			return false
+		}
 		return true
 	}
-	if access.PrincipalID != "" && slices.Contains(perm.AllowedUserIDs, access.PrincipalID) {
-		return true
-	}
-	for _, departmentID := range access.DepartmentIDs {
-		if slices.Contains(perm.AllowedDepartmentIDs, departmentID) {
-			return true
+	if departmentRestricted {
+		departmentMatches := false
+		for _, departmentID := range access.DepartmentIDs {
+			if slices.Contains(perm.AllowedDepartmentIDs, departmentID) {
+				departmentMatches = true
+				break
+			}
+		}
+		if !departmentMatches {
+			return false
 		}
 	}
-	return false
+	if levelRestricted && (access.PermissionLevelID == "" || !slices.Contains(perm.AllowedPermissionLevelIDs, access.PermissionLevelID)) {
+		return false
+	}
+	if minimumRestricted && access.PermissionLevelRank < perm.MinPermissionLevelRank {
+		return false
+	}
+	return true
 }
 
 func (u *EnterpriseUsecase) NormalizeNodePermissions(ctx context.Context, perm domain.NodePermissions) (domain.NodePermissions, error) {
-	if (perm.ScopeType == "permission_level" && len(perm.AllowedPermissionLevelIDs) == 0) || (perm.ScopeType == "department" && len(perm.AllowedDepartmentIDs) == 0) || (perm.ScopeType == "user" && len(perm.AllowedUserIDs) == 0) {
-		return perm, fmt.Errorf("请选择查阅权限的授权对象")
+	if err := validateNodePermissionScope(perm); err != nil {
+		return perm, err
 	}
+	return u.normalizePermissionLevelReferences(ctx, perm)
+}
 
+func validateNodePermissionScope(perm domain.NodePermissions) error {
+	if (perm.ScopeType == "permission_level" && len(perm.AllowedPermissionLevelIDs) == 0) || (perm.ScopeType == "department" && len(perm.AllowedDepartmentIDs) == 0) || (perm.ScopeType == "user" && len(perm.AllowedUserIDs) == 0) {
+		return fmt.Errorf("请选择查阅权限的授权对象")
+	}
+	if perm.ScopeType == domain.NodePermissionScopeCustom && !perm.AllowAllUsers &&
+		len(perm.AllowedPermissionLevelIDs) == 0 && perm.MinPermissionLevelID == "" && perm.MinPermissionLevelRank == 0 &&
+		len(perm.AllowedDepartmentIDs) == 0 && len(perm.AllowedUserIDs) == 0 {
+		return fmt.Errorf("请至少设置一个部门、等级、指定用户或全员授权")
+	}
+	return nil
+}
+
+func (u *EnterpriseUsecase) normalizePermissionLevelReferences(ctx context.Context, perm domain.NodePermissions) (domain.NodePermissions, error) {
 	if perm.MinPermissionLevelID != "" {
 		level, err := u.repo.GetPermissionLevelByID(ctx, perm.MinPermissionLevelID)
 		if err != nil {
@@ -381,8 +489,23 @@ func (u *EnterpriseUsecase) NormalizeNodePermissions(ctx context.Context, perm d
 }
 
 func (u *EnterpriseUsecase) normalizeResolvedNodePermissions(ctx context.Context, perm domain.NodePermissions) (domain.NodePermissions, error) {
-	if !config.PermissionLevelsDisabled() && perm.MinPermissionLevelID != "" {
-		return u.NormalizeNodePermissions(ctx, perm)
+	if !config.PermissionLevelsDisabled() && (perm.MinPermissionLevelID != "" || len(perm.AllowedPermissionLevelIDs) > 0) {
+		// Existing permission data may predate current validation rules. Reading
+		// effective permissions must still resolve level references, but must not
+		// apply the write-form validation that requires a selected audience. A
+		// malformed department/user audience remains fail-closed in canAccess.
+		normalized, err := u.normalizePermissionLevelReferences(ctx, perm)
+		if err != nil {
+			return domain.NodePermissions{}, err
+		}
+		perm = normalized
+	}
+	for index := range perm.Constraints {
+		normalized, err := u.normalizeResolvedNodePermissions(ctx, perm.Constraints[index])
+		if err != nil {
+			return domain.NodePermissions{}, err
+		}
+		perm.Constraints[index] = normalized
 	}
 	return perm, nil
 }

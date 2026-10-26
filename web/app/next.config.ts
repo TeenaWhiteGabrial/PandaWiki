@@ -3,6 +3,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   distDir: 'dist',
+  poweredByHeader: false,
   reactStrictMode: false,
   allowedDevOrigins: ['10.10.18.71'],
   output: 'standalone',
@@ -17,7 +18,15 @@ const nextConfig: NextConfig = {
   },
   transpilePackages: ['mermaid'],
   async headers() {
+    const fileHeaders = [
+      { key: 'Content-Disposition', value: 'attachment' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Content-Security-Policy', value: "sandbox; default-src 'none'" },
+      { key: 'Referrer-Policy', value: 'no-referrer' },
+    ];
     return [
+      { source: '/static-file/:path*', headers: fileHeaders },
+      { source: '/:basePath/static-file/:path*', headers: fileHeaders },
       {
         source: '/cap@0.0.6/:path*',
         headers: [

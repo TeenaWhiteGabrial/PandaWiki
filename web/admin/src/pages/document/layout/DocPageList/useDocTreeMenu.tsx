@@ -15,6 +15,8 @@ export function useDocTreeMenu(
     handleUrl,
     handleBatchImport,
     handleFolderDownload,
+    handleDownloadFile,
+    handleFileStorageInfo,
     handleMove,
     handleDelete,
     handlePublish,
@@ -65,7 +67,7 @@ export function useDocTreeMenu(
           ...(handleFolderDownload
             ? [
                 {
-                  label: '下载文件夹',
+                  label: '下载整个文件夹（ZIP）',
                   key: 'download-folder',
                   onClick: () => handleFolderDownload(item),
                 },
@@ -89,6 +91,22 @@ export function useDocTreeMenu(
       }
 
       if (item.type === 2) {
+        if (!readOnly && item.file_readonly && item.file_key) {
+          if (handleDownloadFile) {
+            menuItems.push({
+              label: '下载原文件',
+              key: 'download-original',
+              onClick: () => handleDownloadFile(item),
+            });
+          }
+          if (handleFileStorageInfo) {
+            menuItems.push({
+              label: '查看存储地址',
+              key: 'storage-info',
+              onClick: () => handleFileStorageInfo(item),
+            });
+          }
+        }
         if (!readOnly) {
           if (item.status === 1 || item.status === 0) {
             menuItems.push({
@@ -142,6 +160,8 @@ export function useDocTreeMenu(
       handleUrl,
       handleBatchImport,
       handleFolderDownload,
+      handleDownloadFile,
+      handleFileStorageInfo,
       handleMove,
       handleDelete,
       handlePublish,

@@ -191,6 +191,15 @@ func (u *LLMUsecase) BuildConversationMessageWithRAGTraced(
 				u.logger.Error("filter rank nodes by enterprise access failed", log.Error(err))
 				return nil, nil, errors.New("filter rank nodes failed")
 			}
+			var removedNodes []map[string]any
+			rankedNodes, removedNodes = filterRankedNodesWithUsableContent(rankedNodes)
+			if trace != nil {
+				trace.add("filter_unusable_documents", "completed", nil, map[string]any{
+					"usable_document_count":   len(rankedNodes),
+					"excluded_document_count": len(removedNodes),
+					"excluded_documents":      removedNodes,
+				}, nil)
+			}
 			documents := domain.FormatNodeChunks(rankedNodes, kb.AccessSettings.BaseURL)
 			if strings.TrimSpace(rewrittenQuery) == "" {
 				rewrittenQuery = question
@@ -263,19 +272,29 @@ func (u *LLMUsecase) filterRankedNodesByEnterpriseAccessTraced(ctx context.Conte
 			if trace != nil {
 				permissionErrors = append(permissionErrors, map[string]any{"node_id": nodeInfo.ID, "stage": "resolve_node_permissions", "error": resolveErr.Error()})
 			}
+			delete(nodesMap, nodeInfo.ID)
 			continue
 		}
-		nodeInfo.Permissions = resolvedPermissions
-		if nodeInfo.NavId != "" && u.enterprise != nil && u.enterprise.navRepo != nil {
-			nav, navErr := u.enterprise.navRepo.GetById(ctx, nodeInfo.NavId)
-			if navErr != nil {
-				if trace != nil {
-					permissionErrors = append(permissionErrors, map[string]any{"node_id": nodeInfo.ID, "stage": "resolve_parent_permissions", "error": navErr.Error()})
-				}
+		if nodeInfo.NavId != "" {
+			if u.enterprise == nil || u.enterprise.navRepo == nil {
+				delete(nodesMap, nodeInfo.ID)
 				continue
 			}
-			nodeInfo.Permissions = u.enterprise.MergeNodeAndNavPermissions(nodeInfo.Permissions, nav.Permissions)
+			nav, navErr := u.enterprise.navRepo.GetById(ctx, nodeInfo.NavId)
+			if navErr != nil || nav.KbID != nodeInfo.KBID {
+				if trace != nil {
+					permissionError := "navigation does not belong to current knowledge base"
+					if navErr != nil {
+						permissionError = navErr.Error()
+					}
+					permissionErrors = append(permissionErrors, map[string]any{"node_id": nodeInfo.ID, "stage": "resolve_parent_permissions", "error": permissionError})
+				}
+				delete(nodesMap, nodeInfo.ID)
+				continue
+			}
+			resolvedPermissions = u.enterprise.MergeNodeAndNavPermissions(resolvedPermissions, nav.Permissions)
 		}
+		nodeInfo.Permissions = resolvedPermissions
 	}
 
 	filtered := make([]*domain.RankedNodeChunks, 0, len(rankedNodes))
@@ -303,6 +322,66 @@ func (u *LLMUsecase) filterRankedNodesByEnterpriseAccessTraced(ctx context.Conte
 		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(permissionStarted).Milliseconds()
 	}
 	return filtered, nil
+}
+
+func filterRankedNodesWithUsableContent(nodes []*domain.RankedNodeChunks) ([]*domain.RankedNodeChunks, []map[string]any) {
+	filtered := make([]*domain.RankedNodeChunks, 0, len(nodes))
+	excluded := make([]map[string]any, 0)
+	for _, node := range nodes {
+		if node == nil {
+			continue
+		}
+
+		usableChunks := make([]*domain.NodeContentChunk, 0, len(node.Chunks))
+		for _, chunk := range node.Chunks {
+			if chunk != nil && hasUsableChunkContent(chunk.Content, node.NodeName) {
+				usableChunks = append(usableChunks, chunk)
+			}
+		}
+		if len(usableChunks) == 0 {
+			excluded = append(excluded, map[string]any{
+				"node_id": node.NodeID,
+				"name":    node.NodeName,
+				"reason":  "仅包含文档标题或空内容",
+			})
+			continue
+		}
+
+		if len(usableChunks) == len(node.Chunks) {
+			filtered = append(filtered, node)
+			continue
+		}
+		nodeCopy := *node
+		nodeCopy.Chunks = usableChunks
+		filtered = append(filtered, &nodeCopy)
+	}
+	return filtered, excluded
+}
+
+func hasUsableChunkContent(content, nodeName string) bool {
+	name := normalizeEvidenceText(nodeName)
+	nameWithoutExtension := normalizeEvidenceText(strings.TrimSuffix(nodeName, filepath.Ext(nodeName)))
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimLeft(strings.TrimSpace(line), "#> \t\r")
+		normalizedLine := normalizeEvidenceText(line)
+		if normalizedLine == "" {
+			continue
+		}
+		if (name != "" && normalizedLine == name) || (nameWithoutExtension != "" && normalizedLine == nameWithoutExtension) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func normalizeEvidenceText(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) || r == '#' {
+			return -1
+		}
+		return unicode.ToLower(r)
+	}, value)
 }
 
 func (u *LLMUsecase) ChatWithAgent(

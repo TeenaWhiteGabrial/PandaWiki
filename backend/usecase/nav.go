@@ -3,7 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
-	"github.com/chaitin/panda-wiki/config"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -45,14 +45,8 @@ func (u *NavUsecase) GetList(ctx context.Context, kbID string) ([]v1.NavListResp
 		return nil, err
 	}
 	authInfo := domain.GetAuthInfoFromCtx(ctx)
-	if authInfo == nil || authInfo.IsToken {
-		for i := range navs {
-			navs[i].CanManage = authInfo != nil && (authInfo.Permission == consts.UserKBPermissionDocManage || authInfo.Permission == consts.UserKBPermissionFullControl)
-			navs[i].CanCreateDocument = navs[i].CanManage
-			navs[i].CanCreateFolder = navs[i].CanManage
-			navs[i].CanConfigure = navs[i].CanManage
-		}
-		return navs, nil
+	if authInfo == nil {
+		return nil, fmt.Errorf("未登录")
 	}
 	management, err := u.enterprise.ManagementAccess(ctx, kbID)
 	if err != nil {
@@ -67,15 +61,12 @@ func (u *NavUsecase) GetList(ctx context.Context, kbID string) ([]v1.NavListResp
 		}
 		return navs, nil
 	}
-	access, err := u.enterprise.GetUserAccessContext(ctx, authInfo.UserId)
-	if err != nil {
-		return nil, err
-	}
 	filtered := make([]v1.NavListResp, 0, len(navs))
 	for _, nav := range navs {
 		nav.CanManage = management.CanManageNav(nav.ID)
 		nav.CanCreateDocument = management.CanCreateInNav("", nav.ID, domain.NodeTypeDocument)
 		nav.CanCreateFolder = management.CanCreateInNav("", nav.ID, domain.NodeTypeFolder)
+		nav.CanConfigure = nav.CanManage
 		manageable := nav.CanManage
 		for id, node := range management.Nodes {
 			if node.NavId == nav.ID && management.CanManageNode(id) {
@@ -83,7 +74,10 @@ func (u *NavUsecase) GetList(ctx context.Context, kbID string) ([]v1.NavListResp
 				break
 			}
 		}
-		if manageable || u.enterprise.CanVisible(nav.Permissions, access) {
+		if manageable {
+			if !nav.CanManage {
+				nav.Permissions.ManagementGrants = nil
+			}
 			filtered = append(filtered, nav)
 		}
 	}
@@ -102,6 +96,25 @@ func (u *NavUsecase) GetPermission(ctx context.Context, kbID, id string) (*v1.Na
 	nav, err := u.navRepo.GetByKBID(ctx, kbID, id)
 	if err != nil {
 		return nil, err
+	}
+	management, err := u.enterprise.ManagementAccess(ctx, kbID)
+	if err != nil {
+		return nil, err
+	}
+	visible := management.Global || management.CanManageNav(id)
+	if !visible {
+		for nodeID, node := range management.Nodes {
+			if node.NavId == id && management.CanManageNode(nodeID) {
+				visible = true
+				break
+			}
+		}
+	}
+	if !visible {
+		return nil, fmt.Errorf("没有此栏目的管理范围")
+	}
+	if !management.CanManageNav(id) {
+		nav.Permissions.ManagementGrants = nil
 	}
 	return &v1.NavPermissionResp{
 		ID:          nav.ID,
@@ -171,18 +184,20 @@ func (u *NavUsecase) UpdatePermission(ctx context.Context, req *v1.NavPermission
 	if err != nil {
 		return err
 	}
-	req.Permissions.ManagementGrants = nav.Permissions.ManagementGrants
-	if config.PermissionLevelsDisabled() {
-		req.Permissions.AllowedPermissionLevelIDs = nav.Permissions.AllowedPermissionLevelIDs
-		req.Permissions.MinPermissionLevelID = nav.Permissions.MinPermissionLevelID
-		req.Permissions.MinPermissionLevelRank = nav.Permissions.MinPermissionLevelRank
+	management, err := u.enterprise.ManagementAccess(ctx, req.KbId)
+	if err != nil {
+		return err
 	}
-	if !config.PermissionLevelsDisabled() {
-		permissions, err := u.enterprise.NormalizeNodePermissions(ctx, *req.Permissions)
-		if err != nil {
-			return err
-		}
-		req.Permissions = &permissions
+	if !management.CanManageNav(req.ID) {
+		return fmt.Errorf("没有此目录的管理权限")
+	}
+	permissions, err := u.enterprise.prepareReadingPermissions(ctx, nav.Permissions, *req.Permissions, false)
+	if err != nil {
+		return err
+	}
+	req.Permissions = &permissions
+	if err := u.enterprise.ValidateNodePermissionAudience(ctx, req.KbId, *req.Permissions, nav.Permissions, "", ""); err != nil {
+		return err
 	}
 	if err := u.navRepo.UpdatePermissions(ctx, req.KbId, req.ID, *req.Permissions); err != nil {
 		return err

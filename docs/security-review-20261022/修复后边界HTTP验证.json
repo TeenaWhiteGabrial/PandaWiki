@@ -1,0 +1,84 @@
+[
+  {
+    "label": "redis_anonymous_ping",
+    "result": "-NOAUTH Authentication required.",
+    "passed": true
+  },
+  {
+    "label": "nats_anonymous_connect",
+    "auth_required": true,
+    "result": "-ERR 'Authorization Violation'",
+    "passed": true
+  },
+  {
+    "label": "8000_headers",
+    "status": 200,
+    "headers": {
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-powered-by": null
+    },
+    "passed": true
+  },
+  {
+    "label": "8000_invalid_host",
+    "status": 421,
+    "passed": true
+  },
+  {
+    "label": "5173_headers",
+    "status": 200,
+    "headers": {
+      "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; media-src 'self' blob: http: https:; frame-src 'self' blob: http: https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-powered-by": null
+    },
+    "passed": true
+  },
+  {
+    "label": "5173_invalid_host",
+    "status": 421,
+    "passed": true
+  },
+  {
+    "label": "3010_headers",
+    "status": 200,
+    "headers": {
+      "content-security-policy": "default-src 'self'; script-src 'nonce-NjNiMjNiMjQtMGMxZi00ZjI2LTg1MTUtZmZiMzBkYjI3YmFj' 'strict-dynamic' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; media-src 'self' blob: http: https:; frame-src 'self' blob: http: https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-powered-by": null
+    },
+    "passed": true
+  },
+  {
+    "label": "3010_invalid_host",
+    "status": 421,
+    "passed": true
+  },
+  {
+    "label": "api_origin",
+    "origin": "https://audit.invalid",
+    "status": 403,
+    "allow_origin": null,
+    "passed": true
+  },
+  {
+    "label": "api_origin",
+    "origin": "http://localhost:5173",
+    "status": 200,
+    "allow_origin": "http://localhost:5173",
+    "passed": true
+  },
+  {
+    "label": "nats_monitor_local_boundary",
+    "status": 200,
+    "passed": true,
+    "note": "监控仍无 HTTP 认证；仅绑定回环地址，不声称端点已增加认证。"
+  }
+]

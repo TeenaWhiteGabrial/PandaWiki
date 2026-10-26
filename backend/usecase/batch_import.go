@@ -48,9 +48,10 @@ type BatchImportResult struct {
 }
 
 type ZipUploadTicket struct {
-	UploadURL string `json:"upload_url"`
-	FileKey   string `json:"file_key"`
-	ExpiresIn int64  `json:"expires_in"`
+	Headers   map[string]string `json:"headers"`
+	UploadURL string            `json:"upload_url"`
+	FileKey   string            `json:"file_key"`
+	ExpiresIn int64             `json:"expires_in"`
 }
 
 type ZipUploadCommit struct {
@@ -176,7 +177,7 @@ func (u *BatchImportUsecase) PresignUpload(ctx context.Context, kbID, filename s
 	if err != nil {
 		return nil, fmt.Errorf("create upload ticket failed: %w", err)
 	}
-	return &ZipUploadTicket{UploadURL: url, FileKey: key, ExpiresIn: 1800}, nil
+	return &ZipUploadTicket{UploadURL: url, FileKey: key, ExpiresIn: 1800, Headers: map[string]string{"Content-Type": "application/octet-stream", "X-Amz-Acl": "private"}}, nil
 }
 
 // CommitUpload only creates a pending archive node. Parsing is deliberately

@@ -8,6 +8,7 @@ import Loading from '@/components/Loading';
 import { useURLSearchParams } from '@/hooks';
 import { deleteApiV1NavDelete } from '@/request/Nav';
 import { postApiV1NodeRestudy } from '@/request/Node';
+import { getNodePermissionOptions } from '@/request/NodeManagement';
 import { ConstsCrawlerSource } from '@/request/types';
 import type { DomainNodeListItemResp, V1NavListResp } from '@/request/types';
 import type { GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp } from '@/request/types';
@@ -51,7 +52,13 @@ import {
   getApiV1FileFolderDownload,
   postApiV1FileFolderDownload,
 } from '@/request/BatchImport';
+import { getApiV1FileDownloadUrl } from '@/request/File';
 import type { FolderDownloadTask } from '@/request/BatchImport';
+import FileStorageInfo from '@/pages/document/editor/edit/FileStorageInfo';
+import {
+  addDocumentPermissionTags,
+  type PermissionAudienceCatalog,
+} from '@/pages/document/utils/permissionTags';
 
 const SortableNavItem = ({
   nav,
@@ -307,6 +314,12 @@ const DocPageNavs = ({
 }: DocPageNavsProps) => {
   const dispatch = useAppDispatch();
   const { kb_id } = useAppSelector(state => state.config);
+  const [permissionCatalog, setPermissionCatalog] =
+    useState<PermissionAudienceCatalog>({
+      departments: {},
+      levels: {},
+      users: {},
+    });
   const [searchParams, setSearchParams] = useURLSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -334,6 +347,9 @@ const DocPageNavs = ({
   const [folderDownloadTask, setFolderDownloadTask] =
     useState<FolderDownloadTask | null>(null);
   const [folderDownloadOpen, setFolderDownloadOpen] = useState(false);
+  const [folderDownloadURL, setFolderDownloadURL] = useState('');
+  const [storageInfoOpen, setStorageInfoOpen] = useState(false);
+  const [storageInfoFileKey, setStorageInfoFileKey] = useState('');
   const [moveOpen, setMoveOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [importKey, setImportKey] = useState<ConstsCrawlerSource | null>(null);
@@ -343,6 +359,38 @@ const DocPageNavs = ({
   const hasScrolledToSelectedRef = useRef(false);
   const expend = true;
   const navs = navListProp || [];
+
+  useEffect(() => {
+    if (!kb_id) return;
+    let active = true;
+    getNodePermissionOptions(kb_id)
+      .then(options => {
+        if (!active) return;
+        setPermissionCatalog({
+          departments: Object.fromEntries(
+            [
+              ...(options.departments || []),
+              ...(options.management_departments || []),
+            ].map(item => [item.id, item.name] as const),
+          ),
+          levels: Object.fromEntries(
+            (options.levels || []).map(item => [item.id, item.name] as const),
+          ),
+          users: Object.fromEntries(
+            [...(options.users || []), ...(options.management_users || [])].map(
+              item => [item.id, item.name || item.account] as const,
+            ),
+          ),
+        });
+      })
+      .catch(() => {
+        // Generic permission tags remain useful if the audience catalog is unavailable.
+      });
+    return () => {
+      active = false;
+    };
+  }, [kb_id]);
+
   const sortedNavs = useMemo(
     () => [...navs].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
     [navs],
@@ -362,15 +410,21 @@ const DocPageNavs = ({
           : item.children,
       }));
 
-    return sortedNavs.map(nav => {
+    const tree: ITreeItem[] = sortedNavs.map(nav => {
       const group = groups.find(item => item.nav_id === nav.id);
       const children = attachNav(convertToTree(group?.list || []), nav.id!);
+      // The grouped node-list response is also the authoritative source for
+      // visible columns. Keep its permissions as a fallback so column tags do
+      // not disappear when the separate nav-list state has not been populated.
+      const permissions = nav.permissions ?? group?.permissions;
       return {
         id: nav.id!,
         name: nav.name || '未命名目录',
         level: 0,
         type: 1,
         kind: 'nav',
+        permissions,
+        effective_management_grants: permissions?.management_grants,
         can_manage: nav.can_manage ?? group?.can_manage,
         can_create_document:
           nav.can_create_document ?? group?.can_create_document,
@@ -383,7 +437,8 @@ const DocPageNavs = ({
         collapsed: true,
       };
     });
-  }, [groups, sortedNavs]);
+    return addDocumentPermissionTags(tree, permissionCatalog);
+  }, [groups, sortedNavs, permissionCatalog]);
   const [treeData, setTreeData] = useState<ITreeItem[]>(unifiedTree);
 
   useEffect(() => {
@@ -495,6 +550,54 @@ const DocPageNavs = ({
     setDeleteConfirmOpen(true);
   }, []);
 
+  const handleFolderDownload = useCallback(
+    async (item: ITreeItem) => {
+      if (!kb_id || !item.id) return;
+      const popup = window.open('about:blank', '_blank');
+      try {
+        setFolderDownloadURL('');
+        const task = await postApiV1FileFolderDownload({
+          kb_id,
+          ...(item.kind === 'nav'
+            ? { nav_id: item.nav_id || item.id }
+            : { node_id: item.id }),
+        });
+        setFolderDownloadTask(task);
+        setFolderDownloadOpen(true);
+        message.info('文件夹压缩任务已创建，可继续进行其他操作');
+        let attempts = 0;
+        const poll = async () => {
+          attempts += 1;
+          const result = await getApiV1FileFolderDownload(task.id);
+          setFolderDownloadTask(result.task);
+          if (result.task.status === 'completed' && result.download_url) {
+            setFolderDownloadURL(result.download_url);
+            if (popup) popup.location.href = result.download_url;
+            message.success('文件夹压缩包已生成');
+            return;
+          }
+          if (
+            result.task.status === 'failed' ||
+            result.task.status === 'expired'
+          ) {
+            popup?.close();
+            message.error(result.task.error_message || '文件夹下载任务失败');
+            return;
+          }
+          if (attempts < 720) window.setTimeout(poll, 5000);
+          else popup?.close();
+        };
+        window.setTimeout(poll, 1000);
+      } catch (error) {
+        popup?.close();
+        message.error(
+          error instanceof Error ? error.message : '创建下载任务失败',
+        );
+      }
+    },
+    [kb_id],
+  );
+
   const navMenu = useCallback(
     ({
       item,
@@ -549,6 +652,11 @@ const DocPageNavs = ({
                   setBatchImportOpen(true);
                 },
               },
+              {
+                key: 'download-folder',
+                label: '下载整个目录（ZIP）',
+                onClick: () => handleFolderDownload(item),
+              },
             ]
           : []),
       ];
@@ -573,7 +681,14 @@ const DocPageNavs = ({
           : []),
       ];
     },
-    [handleDeleteClick, handleEdit, handlePermission, readOnlyUser, sortedNavs],
+    [
+      handleDeleteClick,
+      handleEdit,
+      handleFolderDownload,
+      handlePermission,
+      readOnlyUser,
+      sortedNavs,
+    ],
   );
 
   const getNodeData = useCallback(
@@ -630,45 +745,24 @@ const DocPageNavs = ({
     },
     [groups, wikiUrl],
   );
-  const handleFolderDownload = useCallback(
-    async (item: ITreeItem) => {
-      if (!kb_id || !item.id) return;
-      try {
-        const task = await postApiV1FileFolderDownload({
-          kb_id,
-          node_id: item.id,
-        });
-        setFolderDownloadTask(task);
-        setFolderDownloadOpen(true);
-        message.info('文件夹压缩任务已创建，可继续进行其他操作');
-        let attempts = 0;
-        const poll = async () => {
-          attempts += 1;
-          const result = await getApiV1FileFolderDownload(task.id);
-          setFolderDownloadTask(result.task);
-          if (result.task.status === 'completed' && result.download_url) {
-            window.open(result.download_url, '_blank');
-            message.success('文件夹压缩包已生成');
-            return;
-          }
-          if (
-            result.task.status === 'failed' ||
-            result.task.status === 'expired'
-          ) {
-            message.error(result.task.error_message || '文件夹下载任务失败');
-            return;
-          }
-          if (attempts < 720) window.setTimeout(poll, 5000);
-        };
-        window.setTimeout(poll, 1000);
-      } catch (error) {
-        message.error(
-          error instanceof Error ? error.message : '创建下载任务失败',
-        );
-      }
-    },
-    [kb_id],
-  );
+  const handleDownloadFile = useCallback(async (item: ITreeItem) => {
+    if (!item.file_key) return;
+    try {
+      const { url } = await getApiV1FileDownloadUrl({
+        key: item.file_key,
+        attachment: true,
+        filename: item.file_name || item.name,
+      });
+      window.location.assign(url);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '原文件下载失败');
+    }
+  }, []);
+  const handleFileStorageInfo = useCallback((item: ITreeItem) => {
+    if (!item.file_key) return;
+    setStorageInfoFileKey(item.file_key);
+    setStorageInfoOpen(true);
+  }, []);
   const handleBatchImport = useCallback((item: ITreeItem) => {
     setBatchImportParentId(item.kind === 'nav' ? null : item.id);
     setBatchImportParentName(item.name || '根目录');
@@ -698,6 +792,8 @@ const DocPageNavs = ({
       handleUrl,
       handleBatchImport,
       handleFolderDownload,
+      handleDownloadFile,
+      handleFileStorageInfo,
       handleMove,
       handleDelete,
       handlePublish,
@@ -979,13 +1075,16 @@ const DocPageNavs = ({
         open={folderDownloadOpen && !!folderDownloadTask}
         width={460}
         footer={null}
-        onCancel={() => setFolderDownloadOpen(false)}
+        onCancel={() => {
+          setFolderDownloadOpen(false);
+          setFolderDownloadURL('');
+        }}
       >
         {folderDownloadTask && (
           <Stack gap={1.5}>
             <Box sx={{ color: 'text.secondary', fontSize: 14 }}>
               {folderDownloadTask.status === 'completed'
-                ? '压缩包已生成，下载链接已在新窗口打开。'
+                ? '压缩包已生成，可点击下方按钮下载。'
                 : folderDownloadTask.status === 'failed'
                   ? folderDownloadTask.error_message || '压缩任务失败'
                   : '正在后台生成压缩包，可以关闭此窗口继续操作。'}
@@ -1009,8 +1108,31 @@ const DocPageNavs = ({
                 </Typography>
               </>
             ) : null}
+            {folderDownloadTask.status === 'completed' && folderDownloadURL ? (
+              <Button
+                component='a'
+                href={folderDownloadURL}
+                target='_blank'
+                rel='noreferrer'
+                variant='contained'
+              >
+                下载 ZIP
+              </Button>
+            ) : null}
           </Stack>
         )}
+      </Modal>
+      <Modal
+        title='文件存储地址'
+        open={storageInfoOpen}
+        width={720}
+        footer={null}
+        onCancel={() => {
+          setStorageInfoOpen(false);
+          setStorageInfoFileKey('');
+        }}
+      >
+        <FileStorageInfo fileKey={storageInfoFileKey} />
       </Modal>
       <Modal
         title={

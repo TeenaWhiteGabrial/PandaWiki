@@ -18,40 +18,6 @@ import { useEffect, useMemo, useState } from 'react';
 import DocAnchor from './DocAnchor';
 import DocContent from './DocContent';
 
-const nodeDetailCache = new Map<string, V1ShareNodeDetailResp>();
-const nodeDetailPromiseCache = new Map<
-  string,
-  Promise<V1ShareNodeDetailResp>
->();
-
-const loadNodeDetail = async (nodeId: string) => {
-  const cached = nodeDetailCache.get(nodeId);
-  if (cached) {
-    return cached;
-  }
-
-  const pending = nodeDetailPromiseCache.get(nodeId);
-  if (pending) {
-    return pending;
-  }
-
-  const promise = getShareV1NodeDetail({ id: nodeId, format: 'json' })
-    .then(res => {
-      const detail = (res as V1ShareNodeDetailResp) ?? undefined;
-      if (!detail) {
-        throw new Error(`node detail is empty: ${nodeId}`);
-      }
-      nodeDetailCache.set(nodeId, detail);
-      return detail;
-    })
-    .finally(() => {
-      nodeDetailPromiseCache.delete(nodeId);
-    });
-
-  nodeDetailPromiseCache.set(nodeId, promise);
-  return promise;
-};
-
 const Doc = ({
   nodeId,
   node,
@@ -61,7 +27,15 @@ const Doc = ({
   node?: V1ShareNodeDetailResp;
   error?: Partial<Error> & { digest?: string } & { code?: number | string };
 }) => {
-  const { kbDetail, mobile, catalogWidth } = useStore();
+  const {
+    kbDetail,
+    mobile,
+    catalogWidth,
+    authInfo,
+    authRevision = 0,
+  } = useStore();
+  const requestedNodeId = nodeId || node?.id;
+  const requestScope = `${authInfo?.id || 'anonymous'}:${authRevision}:${requestedNodeId || ''}`;
   const [loading, setLoading] = useState(true);
   const [editorReady, setEditorReady] = useState(false);
   const [headings, setHeadings] = useState<TocList>([]);
@@ -69,9 +43,12 @@ const Doc = ({
   const [nodeState, setNodeState] = useState<V1ShareNodeDetailResp | undefined>(
     node,
   );
+  const [loadedScope, setLoadedScope] = useState(requestScope);
   const [pageError, setPageError] = useState<typeof error>(error);
   const pathname = usePathname();
-  const currentNode = nodeState;
+  const isCurrentScope = loadedScope === requestScope;
+  const currentNode = isCurrentScope ? nodeState : undefined;
+  const currentError = isCurrentScope ? pageError : undefined;
   const isMarkdown = useMemo(() => {
     return currentNode?.meta?.content_type === 'md';
   }, [currentNode?.meta?.content_type]);
@@ -84,41 +61,31 @@ const Doc = ({
   }, [isMarkdown, isReadonlyFilePreview]);
 
   useEffect(() => {
-    setNodeState(node);
-    if (node?.id) {
-      nodeDetailCache.set(node.id, node);
-    }
-  }, [node]);
-
-  useEffect(() => {
-    if (!nodeId) return;
-    if (node?.id === nodeId) return;
-
-    const cached = nodeDetailCache.get(nodeId);
-    setNodeState(cached);
-    setLoading(true);
-    setEditorReady(false);
-    setHeadings([]);
-    setCharacterCount(0);
-  }, [node?.id, nodeId]);
-
-  useEffect(() => {
-    setPageError(error);
-  }, [error]);
-
-  useEffect(() => {
-    if (node || !nodeId) {
+    if (!requestedNodeId) {
       return;
     }
 
     let disposed = false;
+    // Always reauthorize the document on navigation or identity changes.
+    // A process-wide cache keyed only by document ID can replay content
+    // obtained by a previous login without consulting the permission API.
+    setLoadedScope(requestScope);
+    setNodeState(undefined);
     setLoading(true);
     setPageError(undefined);
+    setEditorReady(false);
+    setHeadings([]);
+    setCharacterCount(0);
 
-    loadNodeDetail(nodeId)
+    getShareV1NodeDetail(
+      { id: requestedNodeId, format: 'json' },
+      { cache: 'no-store' },
+    )
       .then(res => {
         if (!disposed) {
-          setNodeState(res);
+          const detail = res as V1ShareNodeDetailResp | undefined;
+          if (!detail) throw new Error('文档内容为空');
+          setNodeState(detail);
           setLoading(false);
         }
       })
@@ -132,7 +99,7 @@ const Doc = ({
     return () => {
       disposed = true;
     };
-  }, [node, nodeId]);
+  }, [requestedNodeId, requestScope]);
 
   useEffect(() => {
     if (isReadonlyFilePreview || isMarkdown) {
@@ -202,7 +169,7 @@ const Doc = ({
 
   return (
     <>
-      {pageError ? (
+      {currentError ? (
         <Box
           sx={{
             height: '100%',
@@ -214,7 +181,7 @@ const Doc = ({
             }),
           }}
         >
-          <ErrorComponent error={pageError} />
+          <ErrorComponent error={currentError} />
         </Box>
       ) : (
         <>
@@ -224,7 +191,7 @@ const Doc = ({
             editorRef={editorRef}
             editorReady={editorReady}
             characterCount={characterCount}
-            loading={loading && !isReadonlyFilePreview}
+            loading={!isCurrentScope || (loading && !isReadonlyFilePreview)}
             headings={headings}
           />
           {!mobile && !isReadonlyFilePreview && headings.length > 0 && (

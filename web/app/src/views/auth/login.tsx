@@ -1,6 +1,13 @@
 'use client';
 
-import { getApiV1User, postApiV1UserLogin } from '@/request/User';
+import {
+  getApiV1User,
+  postApiV1UserLogin,
+  logoutAccount,
+  changeOwnPassword,
+} from '@/request/User';
+import { clearAuthStorage } from '@/utils/auth';
+import { PasswordChangeDialog } from '@panda-wiki/ui/security';
 import { clearCookie } from '@/utils/cookie';
 import {
   alpha,
@@ -31,30 +38,37 @@ import { useBasePath } from '@/hooks';
 import { useStore } from '@/provider';
 import { getImagePath } from '@/utils/getImagePath';
 
-const REMEMBER_KEY = 'panda_wiki_remember_login';
+const LEGACY_REMEMBER_KEY = 'panda_wiki_remember_login';
+const REMEMBER_KEY = 'panda_wiki_remember_accounts';
 const MAX_REMEMBERED_LOGINS = 8;
 
 type RememberedLogin = {
   account: string;
-  password: string;
   updatedAt: number;
 };
 
 const loadRememberedLogins = (): RememberedLogin[] => {
   try {
-    const raw = localStorage.getItem(REMEMBER_KEY);
+    const raw =
+      localStorage.getItem(REMEMBER_KEY) ||
+      localStorage.getItem(LEGACY_REMEMBER_KEY);
+    // Remove legacy credentials even when the stored value cannot be parsed.
+    localStorage.removeItem(LEGACY_REMEMBER_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as RememberedLogin[];
+    const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        item =>
-          item &&
-          typeof item.account === 'string' &&
-          typeof item.password === 'string',
-      )
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const accounts = parsed
+      .filter(item => item && typeof item.account === 'string')
+      .map(item => ({
+        account: item.account as string,
+        updatedAt: Number(item.updatedAt) || 0,
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, MAX_REMEMBERED_LOGINS);
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify(accounts));
+    return accounts;
   } catch {
+    localStorage.removeItem(LEGACY_REMEMBER_KEY);
     localStorage.removeItem(REMEMBER_KEY);
     return [];
   }
@@ -97,6 +111,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [changeRequired, setChangeRequired] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberedLogins, setRememberedLogins] = useState<RememberedLogin[]>(
     [],
@@ -118,7 +133,6 @@ export default function Login() {
     setRememberedLogins(parsed);
     if (parsed.length > 0) {
       setAccount(parsed[0].account || '');
-      setPassword(parsed[0].password || '');
       setRemember(true);
     }
   }, []);
@@ -127,14 +141,19 @@ export default function Login() {
     if (!authInfo?.id) {
       return;
     }
+    if (authInfo.password_change_required) {
+      setAccount(authInfo.account || '');
+      setChangeRequired(true);
+      return;
+    }
     window.location.href = redirectUrl;
-  }, [authInfo?.id, redirectUrl]);
+  }, [authInfo?.id, authInfo?.password_change_required, redirectUrl]);
 
   const handleAccountChange = (value: string) => {
     setAccount(value);
     const matched = rememberedLogins.find(item => item.account === value);
     if (matched) {
-      setPassword(matched.password);
+      setPassword('');
       setRemember(true);
     }
   };
@@ -156,14 +175,9 @@ export default function Login() {
         account: account.trim(),
         password,
       });
-      const token = res?.token;
-      if (!token) {
-        message.error('登录失败，请重试');
-        return;
-      }
-
-      localStorage.setItem('panda_wiki_token', token);
-      document.cookie = `panda_wiki_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+      try {
+        localStorage.setItem('pw-reader-auth-change', String(Date.now()));
+      } catch {}
       const userInfo = await getApiV1User({ isAlert: false }).catch(
         () => undefined,
       );
@@ -174,7 +188,6 @@ export default function Login() {
         const nextLogins = [
           {
             account: trimmedAccount,
-            password,
             updatedAt: Date.now(),
           },
           ...rememberedLogins.filter(item => item.account !== trimmedAccount),
@@ -189,6 +202,10 @@ export default function Login() {
         saveRememberedLogins(nextLogins);
       }
 
+      if (res.password_change_required) {
+        setChangeRequired(true);
+        return;
+      }
       message.success('登录成功');
       window.location.href = redirectUrl;
     } finally {
@@ -304,6 +321,7 @@ export default function Login() {
                 fullWidth
                 autoFocus
                 placeholder='账号'
+                autoComplete='username'
                 disabled={loading}
                 helperText={
                   rememberedLogins.length
@@ -430,7 +448,7 @@ export default function Login() {
                   onChange={event => setRemember(event.target.checked)}
                 />
               }
-              label='记住密码并加入账号列表'
+              label='记住账号'
             />
           </Box>
 
@@ -450,6 +468,26 @@ export default function Login() {
           </Button>
         </Stack>
       </Box>
+      <PasswordChangeDialog
+        open={changeRequired}
+        account={account}
+        initialPassword={password}
+        onSubmit={changeOwnPassword}
+        onCancel={async () => {
+          await logoutAccount();
+          clearAuthStorage();
+          setAuthInfo?.(undefined);
+          setChangeRequired(false);
+          setPassword('');
+        }}
+        onComplete={() => {
+          clearAuthStorage();
+          setAuthInfo?.(undefined);
+          setChangeRequired(false);
+          setPassword('');
+          message.success('密码已更新，请重新登录');
+        }}
+      />
     </Box>
   );
 }

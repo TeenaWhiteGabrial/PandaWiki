@@ -1,3 +1,4 @@
+import { passwordError, PASSWORD_POLICY } from '@panda-wiki/ui/security';
 import Card from '@/components/Card';
 import { Modal } from '@/components/ui';
 import { putApiV1UserResetPassword } from '@/request/User';
@@ -149,10 +150,7 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
                 value: true,
                 message: '密码不能为空',
               },
-              minLength: {
-                value: 8,
-                message: '密码长度至少 8 位',
-              },
+              validate: value => passwordError(value, user.account) || true,
             }}
             render={({ field }) => (
               <TextField
@@ -160,10 +158,11 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
                 fullWidth
                 autoFocus
                 size='small'
-                placeholder='输入密码'
+                placeholder='输入新密码'
+                autoComplete='new-password'
                 type={showPassword ? 'text' : 'password'}
                 error={!!errors.password}
-                helperText={errors.password?.message}
+                helperText={errors.password?.message || PASSWORD_POLICY}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position='end'>

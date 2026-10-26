@@ -60,6 +60,7 @@ func (h *BaseHandler) NewResponseWithError(c echo.Context, msg string, err error
 	h.baseLogger.LogAttrs(c.Request().Context(), slog.LevelError, msg, slog.String("trace_id", traceID), slog.Any("error", err))
 	return c.JSON(http.StatusOK, domain.PWResponse{
 		Success: false,
-		Message: fmt.Sprintf("%s [trace_id: %s]", msg, traceID),
+		Message: msg,
+		TraceID: traceID,
 	})
 }

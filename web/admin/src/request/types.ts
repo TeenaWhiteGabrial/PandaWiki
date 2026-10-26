@@ -1115,12 +1115,19 @@ export interface DomainNodeListItemResp {
   creator_id?: string;
   editor?: string;
   editor_id?: string;
+  effective_management_grants?: DomainDocumentManagementGrant[];
+  effective_management_constraints?: DomainDocumentManagementGrant[][];
+  effective_permissions?: DomainNodePermissions;
   emoji?: string;
+  file_key?: string;
+  file_name?: string;
+  file_readonly?: boolean;
   id?: string;
   name?: string;
   nav_id?: string;
   parent_id?: string;
   permissions?: DomainNodePermissions;
+  path_only?: boolean;
   position?: number;
   publisher_id?: string;
   rag_info?: DomainRagInfo;
@@ -1156,7 +1163,9 @@ export interface DomainDocumentManagementGrant {
 }
 
 export interface DomainNodePermissions {
+	constraints?: DomainNodePermissions[];
   allowed_permission_level_ids?: string[];
+	allow_all_users?: boolean;
   management_grants?: DomainDocumentManagementGrant[];
   allowed_department_ids?: string[];
   allowed_user_ids?: string[];
@@ -1293,6 +1302,7 @@ export interface DomainPWResponse {
   data?: unknown;
   message?: string;
   success?: boolean;
+  trace_id?: string;
 }
 
 export interface DomainPaginatedResultArrayDomainConversationMessageListItem {
@@ -1415,6 +1425,7 @@ export interface DomainShareNodeDetailItem {
   name?: string;
   parent_id?: string;
   permissions?: DomainNodePermissions;
+  path_only?: boolean;
   position?: number;
   type?: DomainNodeType;
   updated_at?: string;
@@ -1653,6 +1664,7 @@ export interface GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp {
   count?: number;
   is_released?: boolean;
   list?: DomainNodeListItemResp[];
+  permissions?: DomainNodePermissions;
   nav_id?: string;
   nav_name?: string;
   position?: number;
@@ -1839,6 +1851,7 @@ export interface V1CreateUserReq {
   account: string;
   name: string;
   department_ids: string[];
+  permission_level_id?: string;
   /** @minLength 8 */
   password: string;
   role: "manager" | "user";
@@ -1878,6 +1891,7 @@ export interface V1LoginReq {
 }
 
 export interface V1LoginResp {
+ password_change_required?: boolean;
   token?: string;
 }
 
@@ -1895,6 +1909,7 @@ export interface V1NavListResp {
   created_at?: string;
   id?: string;
   name?: string;
+  permissions?: DomainNodePermissions;
   position?: number;
   updated_at?: string;
 }
@@ -2029,6 +2044,7 @@ export interface V1ShareNodeDetailResp {
   name?: string;
   parent_id?: string;
   permissions?: DomainNodePermissions;
+  path_only?: boolean;
   publisher_account?: string;
   publisher_id?: string;
   pv?: number;
@@ -2050,6 +2066,8 @@ export interface V1StatCountResp {
 }
 
 export interface V1UserInfoResp {
+  session_expires_at?: number;
+ password_change_required?: boolean;
   permission_levels_disabled?: boolean;
   account?: string;
   created_at?: string;
@@ -2069,6 +2087,9 @@ export interface V1UserListItemResp {
 
 export interface V1UserListResp {
   users?: V1UserListItemResp[];
+  total?: number;
+  page?: number;
+  page_size?: number;
 }
 
 export interface V1WechatAppInfoResp {

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -80,7 +79,7 @@ func NewFileUsecase(logger *log.Logger, s3Client *s3.MinioClient, imageOSSClient
 }
 
 func (u *FileUsecase) UploadImage(ctx context.Context, kbID string, file *multipart.FileHeader) (string, string, error) {
-	key, err := u.UploadFile(ctx, kbID, file)
+	key, err := u.uploadValidatedFile(ctx, kbID, file, true)
 	if err != nil {
 		return "", "", err
 	}
@@ -109,10 +108,9 @@ func (u *FileUsecase) UploadFileGetUrl(ctx context.Context, kbID string, file *m
 }
 
 func (u *FileUsecase) SignFileURL(ctx context.Context, key string, expires time.Duration) (string, error) {
-	key = strings.TrimSpace(strings.TrimPrefix(key, "/static-file/"))
-	key = strings.TrimLeft(key, "/")
-	if key == "" || strings.Contains(key, "..") {
-		return "", fmt.Errorf("file key is invalid")
+	key, err := normalizeObjectKey(key)
+	if err != nil {
+		return "", err
 	}
 	if u.s3Client == nil {
 		return "", fmt.Errorf("object storage is not configured")
@@ -120,15 +118,57 @@ func (u *FileUsecase) SignFileURL(ctx context.Context, key string, expires time.
 	return u.s3Client.SignURL(ctx, domain.Bucket, key, expires)
 }
 
+func (u *FileUsecase) SignFileDownloadURL(ctx context.Context, key, filename string, expires time.Duration) (string, error) {
+	key, err := normalizeObjectKey(key)
+	if err != nil {
+		return "", err
+	}
+	if u.s3Client == nil {
+		return "", fmt.Errorf("object storage is not configured")
+	}
+	return u.s3Client.SignDownloadURL(ctx, key, filename, expires)
+}
+
+func (u *FileUsecase) GetFileStorageInfo(ctx context.Context, key string, expires time.Duration) (string, string, string, string, bool, error) {
+	key, err := normalizeObjectKey(key)
+	if err != nil {
+		return "", "", "", "", false, err
+	}
+	if u.s3Client == nil {
+		return "", "", "", "", false, fmt.Errorf("object storage is not configured")
+	}
+	exists, err := u.s3Client.ObjectExists(ctx, key)
+	if err != nil {
+		return "", "", "", "", false, err
+	}
+	if !exists {
+		return "", "", "", u.s3Client.Type(), false, nil
+	}
+	url, err := u.s3Client.SignURL(ctx, domain.Bucket, key, expires)
+	if err != nil {
+		return "", "", "", "", false, err
+	}
+	return url, u.s3Client.PublicURL(key), u.s3Client.ObjectLocation(key), u.s3Client.Type(), true, nil
+}
+
+func normalizeObjectKey(key string) (string, error) {
+	key = strings.TrimSpace(strings.TrimPrefix(key, "/static-file/"))
+	key = strings.TrimLeft(key, "/")
+	if key == "" || strings.Contains(key, "..") {
+		return "", fmt.Errorf("file key is invalid")
+	}
+	return key, nil
+}
+
 func (u *FileUsecase) UploadFile(ctx context.Context, kbID string, file *multipart.FileHeader) (string, error) {
-	return u.uploadFile(ctx, kbID, file, true)
+	return u.uploadValidatedFile(ctx, kbID, file, false)
 }
 
 func (u *FileUsecase) UploadAttachment(ctx context.Context, kbID string, file *multipart.FileHeader) (string, error) {
-	return u.uploadFile(ctx, kbID, file, false)
+	return u.uploadValidatedFile(ctx, kbID, file, false)
 }
 
-func (u *FileUsecase) uploadFile(ctx context.Context, kbID string, file *multipart.FileHeader, checkExtension bool) (string, error) {
+func (u *FileUsecase) uploadValidatedFile(ctx context.Context, kbID string, file *multipart.FileHeader, imageOnly bool) (string, error) {
 	src, err := file.Open()
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %w", err)
@@ -137,34 +177,29 @@ func (u *FileUsecase) uploadFile(ctx context.Context, kbID string, file *multipa
 
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 
-	if checkExtension {
-		if err := u.checkDeniedExtension(ctx, ext); err != nil {
-			return "", err
-		}
+	if err := u.checkDeniedExtension(ctx, ext); err != nil {
+		return "", err
+	}
+	contentType, err := validateUpload(file.Filename, src, file.Size, imageOnly)
+	if err != nil {
+		return "", err
 	}
 
 	filename := fmt.Sprintf("%s/%s%s", kbID, uuid.New().String(), ext)
 
 	size := file.Size
 
-	contentType := file.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = mime.TypeByExtension(ext)
+	opts := minio.PutObjectOptions{ContentType: contentType, UserMetadata: map[string]string{"originalname": file.Filename}}
+	var resp minio.UploadInfo
+	if imageOnly {
+		// Display assets have a dedicated upload path and actual image decoding.
+		// Do not expose normal document uploads through that path.
+		filename = fmt.Sprintf("%s/assets/%s%s", kbID, uuid.New().String(), ext)
+		resp, err = u.s3Client.PutDisplayImage(ctx, filename, src, size, opts)
+	} else {
+		resp, err = u.s3Client.PutObject(ctx, domain.Bucket, filename, src, size, opts)
 	}
 
-	resp, err := u.s3Client.PutObject(
-		ctx,
-		domain.Bucket,
-		filename,
-		src,
-		size,
-		minio.PutObjectOptions{
-			ContentType: contentType,
-			UserMetadata: map[string]string{
-				"originalname": file.Filename,
-			},
-		},
-	)
 	if err != nil {
 		return "", fmt.Errorf("upload failed: %w", err)
 	}
@@ -187,10 +222,9 @@ func (u *FileUsecase) UploadFileFromBytes(ctx context.Context, kbID string, file
 
 	size := int64(len(fileBytes))
 
-	contentType := mime.TypeByExtension(ext)
-	if contentType == "" {
-		// Fallback content type if extension not recognized
-		contentType = "application/octet-stream"
+	contentType, err := validateUpload(filename, reader, size, false)
+	if err != nil {
+		return "", err
 	}
 
 	resp, err := u.s3Client.PutObject(
@@ -221,9 +255,9 @@ func (u *FileUsecase) UploadBytesAtKey(ctx context.Context, key, filename string
 	if err := u.checkDeniedExtension(ctx, ext); err != nil {
 		return "", err
 	}
-	contentType := mime.TypeByExtension(ext)
-	if contentType == "" {
-		contentType = "application/octet-stream"
+	contentType, err := validateUpload(filename, bytes.NewReader(fileBytes), int64(len(fileBytes)), false)
+	if err != nil {
+		return "", err
 	}
 	if _, err := u.s3Client.PutObject(
 		ctx,
@@ -292,6 +326,10 @@ func (u *FileUsecase) ConvertOfficeToPDF(ctx context.Context, kbID string, filen
 		return "", fmt.Errorf("create preview request failed: %w", err)
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if u.config.Preview.Username == "" || u.config.Preview.Password == "" {
+		return "", fmt.Errorf("preview service credentials are not configured")
+	}
+	req.SetBasicAuth(u.config.Preview.Username, u.config.Preview.Password)
 
 	resp, err := u.httpClient.Do(req)
 	if err != nil {
@@ -345,18 +383,22 @@ func (u *FileUsecase) UploadFileFromReader(
 
 	s3Filename := fmt.Sprintf("%s/%s%s", kbID, uuid.New().String(), ext)
 
-	// 获取内容类型
-	contentType := mime.TypeByExtension(ext)
-	if contentType == "" {
-		contentType = "application/octet-stream" // 默认类型
+	staged, err := stageUpload(reader, size)
+	if err != nil {
+		return "", err
+	}
+	defer func() { staged.Close(); os.Remove(staged.Name()) }()
+	contentType, err := validateUpload(filename, staged, size, false)
+	if err != nil {
+		return "", err
 	}
 
 	// 上传到 S3
-	_, err := u.s3Client.PutObject(
+	_, err = u.s3Client.PutObject(
 		ctx,
 		domain.Bucket,
 		s3Filename,
-		reader,
+		staged,
 		size, // 必须提供对象大小
 		minio.PutObjectOptions{
 			ContentType: contentType,
@@ -426,9 +468,9 @@ func (u *FileUsecase) AnyDocUploadFile(ctx context.Context, file *multipart.File
 
 	size := file.Size
 
-	contentType := file.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = mime.TypeByExtension(ext)
+	contentType, err := validateUpload(file.Filename, src, size, false)
+	if err != nil {
+		return "", err
 	}
 
 	resp, err := u.s3Client.PutObject(
@@ -499,14 +541,9 @@ func (u *FileUsecase) UploadFileByUrl(ctx context.Context, kbID string, fileURL 
 
 	s3Filename := fmt.Sprintf("%s/%s%s", kbID, uuid.New().String(), ext)
 
-	// Derive content type from the actual data instead of trusting the remote header
-	contentType := http.DetectContentType(data)
-	if contentType == "" || contentType == "application/octet-stream" {
-		if extType := mime.TypeByExtension(ext); extType != "" {
-			contentType = extType
-		} else {
-			contentType = "application/octet-stream"
-		}
+	contentType, err := validateUpload("download"+ext, bytes.NewReader(data), int64(len(data)), false)
+	if err != nil {
+		return "", err
 	}
 
 	putResp, err := u.s3Client.PutObject(
@@ -530,7 +567,10 @@ func (u *FileUsecase) UploadFileByUrl(ctx context.Context, kbID string, fileURL 
 func (u *FileUsecase) checkDeniedExtension(ctx context.Context, ext string) error {
 	// Remove leading dot from extension
 	ext = strings.TrimPrefix(ext, ".")
-	if ext == "" {
+	if _, ok := uploadTypes["."+ext]; !ok {
+		return fmt.Errorf("不支持上传此文件类型：%s", ext)
+	}
+	if u.systemSettingRepo == nil {
 		return nil
 	}
 
@@ -541,13 +581,13 @@ func (u *FileUsecase) checkDeniedExtension(ctx context.Context, ext string) erro
 			return nil
 		}
 		u.logger.Error("failed to get upload denied extensions setting", "error", err)
-		return nil // Don't block upload if we can't read settings
+		return fmt.Errorf("无法读取上传策略，已拒绝上传")
 	}
 
 	var deniedSetting domain.UploadDeniedExtensionsSetting
 	if err := json.Unmarshal(setting.Value, &deniedSetting); err != nil {
 		u.logger.Error("failed to unmarshal denied extensions setting", "error", err)
-		return nil // Don't block upload if settings are malformed
+		return fmt.Errorf("上传策略无效，已拒绝上传")
 	}
 
 	// Check if extension is denied

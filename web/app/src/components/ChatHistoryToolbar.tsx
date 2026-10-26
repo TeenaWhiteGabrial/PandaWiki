@@ -156,7 +156,7 @@ export default function ChatHistoryToolbar({
           <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
             {authInfo?.id
               ? '点击记录可查看历史问答，并在原会话中继续提问。'
-              : '保留当前浏览器最近 100 个匿名会话，点击即可继续提问。清除浏览器数据后无法找回。'}
+              : '请先登录后查看历史记录并继续提问。'}
           </Typography>
           <TextField
             autoFocus

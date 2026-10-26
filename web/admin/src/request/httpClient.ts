@@ -67,6 +67,10 @@ const redirectToLogin = () => {
   window.location.href = `${pathname}?${search}`;
 };
 
+const logTraceID = (traceID?: string) => {
+  if (traceID) console.error("API error trace_id:", traceID);
+};
+
 type ExtractDataProp<T> = T extends { data?: infer U } ? U : T;
 
 export class HttpClient<SecurityDataType = unknown> {
@@ -97,6 +101,7 @@ export class HttpClient<SecurityDataType = unknown> {
           if (res.success) {
             return res.data;
           }
+          logTraceID(res.trace_id);
           message.error(res.message || "网络异常");
           return Promise.reject(res);
         }
@@ -104,6 +109,10 @@ export class HttpClient<SecurityDataType = unknown> {
         return Promise.reject(response);
       },
       (error) => {
+        logTraceID(error.response?.data?.trace_id);
+        if (error.response?.status === 403 && error.response?.data?.code === 40302) {
+          if (location.pathname !== '/login') window.location.href = '/login?change_password=1';
+        }
         if (error.response?.status === 401) {
           window.location.href = window.__BASENAME__ + "/login";
           localStorage.removeItem("panda_wiki_token");
@@ -213,12 +222,12 @@ export class HttpClient<SecurityDataType = unknown> {
     ) {
       body = JSON.stringify(body);
     }
-    const token = localStorage.getItem("panda_wiki_token") || "";
+
 
     return this.instance.request({
       ...requestParams,
       headers: {
-        Authorization: `Bearer ${token}`,
+        "X-PW-CSRF": "1",
         ...(requestParams.headers || {}),
         ...(type && type !== ContentType.FormData
           ? { "Content-Type": type }

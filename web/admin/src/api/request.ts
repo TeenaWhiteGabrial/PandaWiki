@@ -21,13 +21,12 @@ type ErrorResponse = {
 type Response<T> = BasicResponse<T> | ErrorResponse;
 
 const request = <T>(options: AxiosRequestConfig): Promise<T> => {
-  const token = localStorage.getItem('panda_wiki_token') || '';
   const config = {
     baseURL: window.__BASENAME__ || '/',
     timeout: 0,
     withCredentials: true,
     headers: {
-      Authorization: `Bearer ${token}`,
+      'X-PW-CSRF': '1',
     },
   };
   const service: AxiosInstance = axios.create(config);
