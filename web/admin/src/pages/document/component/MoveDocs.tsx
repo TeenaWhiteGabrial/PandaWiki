@@ -115,6 +115,7 @@ const MoveDocs = ({
             type: 1 as const,
             kind: 'nav' as const,
             nav_id: groupNavID,
+            can_manage: group.can_manage,
             children,
             canHaveChildren: true,
             collapsed: true,
@@ -227,6 +228,7 @@ const MoveDocs = ({
                 selected={target ? [target.id] : []}
                 data={tree}
                 readOnly={true}
+                disabled={item => item.can_manage === false}
                 relativeSelect={false}
                 onSelectChange={(_, id = '') => {
                   if (!id) return;

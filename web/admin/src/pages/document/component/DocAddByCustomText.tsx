@@ -30,6 +30,7 @@ interface DocAddByCustomTextProps {
   setDetail?: (data: V1NodeDetailResp) => void;
   refresh?: () => void;
   type?: 1 | 2;
+  contentType?: string;
   onCreated?: (node: {
     id: string;
     name: string;
@@ -49,6 +50,7 @@ const DocAddByCustomText = ({
   refresh,
   setDetail,
   type = 2,
+  contentType = 'html',
   onCreated,
 }: DocAddByCustomTextProps) => {
   const { kb_id: id, nav_id: selectedNavId } = useAppSelector(
@@ -65,7 +67,6 @@ const DocAddByCustomText = ({
     control,
     handleSubmit,
     reset,
-    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
@@ -116,6 +117,8 @@ const DocAddByCustomText = ({
   }, [attachments, getFileExt, id]);
 
   const submit = async (value: FormValues) => {
+    value = { ...value, name: value.name.trim() };
+    if (!value.name) return;
     setSubmitting(true);
     if (data) {
       putApiV1NodeDetail({
@@ -192,10 +195,14 @@ const DocAddByCustomText = ({
         content_type: type === 1 ? '' : data.meta?.content_type || 'html',
       });
     } else {
-      setValue('content_type', type === 1 ? '' : 'html');
+      reset({
+        name: '',
+        emoji: '',
+        content_type: type === 1 ? '' : contentType,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, type, open]);
+  }, [data, type, open, contentType]);
 
   return (
     <Modal
@@ -211,7 +218,10 @@ const DocAddByCustomText = ({
       <Controller
         control={control}
         name='name'
-        rules={{ required: `请输入${text}名称` }}
+        rules={{
+          required: `请输入${text}名称`,
+          validate: value => !!value.trim() || `请输入${text}名称`,
+        }}
         render={({ field }) => (
           <TextField
             {...field}

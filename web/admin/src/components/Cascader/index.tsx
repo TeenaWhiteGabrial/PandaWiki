@@ -127,7 +127,11 @@ const Cascader: React.FC<CascaderProps> = ({
                 key={item.key}
                 onMouseEnter={e => handleItemHover(e, item)}
                 onMouseLeave={handleItemLeave}
-                onClick={() => handleItemClick(item)}
+                onClick={event => {
+                  event.stopPropagation();
+                  if (item.children?.length) handleItemHover(event, item);
+                  else handleItemClick(item);
+                }}
                 sx={{
                   position: 'relative',
                   cursor: 'pointer',
@@ -159,7 +163,10 @@ const Cascader: React.FC<CascaderProps> = ({
                           <Box
                             key={child.key}
                             className='cascader-sub-item'
-                            onClick={() => handleItemClick(child)}
+                            onClick={event => {
+                              event.stopPropagation();
+                              handleItemClick(child);
+                            }}
                             sx={{
                               cursor: 'pointer',
                             }}

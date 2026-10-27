@@ -235,7 +235,7 @@ const TreeItem = React.forwardRef<
       );
     }
     return [];
-  }, [item, isEditting, createItem, renameItem, removeItem, readOnly]);
+  }, [item, isEditting, createItem, renameItem, removeItem, readOnly, menu]);
   const ragStatusMeta = useMemo(() => getRagStatusMeta(item), [item]);
   const enterprisePermissionTags = item.permission_tags || [];
 
@@ -334,12 +334,16 @@ const TreeItem = React.forwardRef<
               flex={1}
               sx={{ pr: 2 }}
               onClick={() => {
-                onItemClick?.(item);
-                if (readOnly) return;
                 if (ui === 'select') {
+                  if (disabled?.(item)) return;
                   handleSelectChange(item.id);
                   return;
                 }
+                if (onItemClick) {
+                  onItemClick(item);
+                  return;
+                }
+                if (readOnly) return;
                 if (item.type === 2)
                   window.open(`/doc/editor/${item.id}`, '_blank');
               }}

@@ -118,7 +118,6 @@ const DocListModals = ({
           const { remaining, picked } = pickNodesFromTree(prev, idSet);
           return applyMoveToTree(remaining, picked, parentId);
         });
-        refresh();
         setTimeout(() => {
           if (ids[0]) dragTreeRef.current?.scrollToItem(ids[0]);
         }, 120);

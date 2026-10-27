@@ -23,11 +23,13 @@ export function useDocTreeMenu(
     handleRestudy,
     handleProperties,
     handleFrontDoc,
+    handleEdit,
   } = handlers;
 
   return useCallback(
     (opra: TreeMenuOptions): TreeMenuItem[] => {
       const { item, createItem, renameItem, isEditing } = opra;
+      if (readOnly || item.can_manage === false || item.placeholder) return [];
       const menuItems: TreeMenuItem[] = [];
 
       if (!readOnly && item.type === 1) {
@@ -91,6 +93,13 @@ export function useDocTreeMenu(
       }
 
       if (item.type === 2) {
+        if (handleEdit && !item.file_readonly) {
+          menuItems.push({
+            key: 'edit-document',
+            label: '编辑文档',
+            onClick: () => handleEdit(item),
+          });
+        }
         if (!readOnly && item.file_readonly && item.file_key) {
           if (handleDownloadFile) {
             menuItems.push({
@@ -154,7 +163,18 @@ export function useDocTreeMenu(
         });
       }
 
-      return menuItems;
+      return menuItems.filter(
+        action =>
+          !(
+            ['folder', 'batch-import-zip'].includes(action.key) &&
+            item.can_create_folder === false
+          ) &&
+          !(
+            ['doc', ConstsCrawlerSource.CrawlerSourceFile].includes(
+              action.key,
+            ) && item.can_create_document === false
+          ),
+      );
     },
     [
       handleUrl,
@@ -168,6 +188,7 @@ export function useDocTreeMenu(
       handleRestudy,
       handleProperties,
       handleFrontDoc,
+      handleEdit,
       readOnly,
     ],
   );

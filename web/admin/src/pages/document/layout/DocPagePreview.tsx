@@ -18,6 +18,7 @@ interface DocPagePreviewProps {
   onToggle: () => void;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
+  refreshTrigger?: number;
 }
 
 const DocPagePreview = ({
@@ -26,6 +27,7 @@ const DocPagePreview = ({
   onToggle,
   fullscreen,
   onToggleFullscreen,
+  refreshTrigger,
 }: DocPagePreviewProps) => {
   const { kb_id } = useAppSelector(state => state.config);
   const [detail, setDetail] = useState<V1NodeDetailResp | null>(null);
@@ -37,10 +39,14 @@ const DocPagePreview = ({
       return;
     }
     let active = true;
+    setDetail(null);
     setLoading(true);
     getApiV1NodeDetail({ id: documentId, kb_id })
       .then(value => {
         if (active) setDetail(value);
+      })
+      .catch(() => {
+        // The shared request interceptor reports failed detail requests.
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -48,7 +54,7 @@ const DocPagePreview = ({
     return () => {
       active = false;
     };
-  }, [documentId, kb_id]);
+  }, [documentId, kb_id, refreshTrigger]);
 
   const previewActions = (
     <Stack
@@ -69,7 +75,7 @@ const DocPagePreview = ({
           <IconMuluzhankai />
         </IconButton>
       </Tooltip>
-      {detail && !detail.meta?.file_readonly ? (
+      {detail && detail.can_manage !== false && !detail.meta?.file_readonly ? (
         <Tooltip title='全屏编辑'>
           <IconButton
             size='small'

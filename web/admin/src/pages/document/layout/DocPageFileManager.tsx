@@ -1,31 +1,11 @@
-import AddDocBtn from '@/pages/document/component/AddDocBtn';
-import AddDocByType from '@/pages/document/component/AddDocByType';
-import BatchZipImport from '@/pages/document/component/BatchZipImport';
-import DocAddByCustomText from '@/pages/document/component/DocAddByCustomText';
-import DocDelete from '@/pages/document/component/DocDelete';
-import MoveDocs from '@/pages/document/component/MoveDocs';
-import NavEditModal from '@/pages/document/layout/DocPageNavs/NavEditModal';
-import NavPermissionModal from '@/pages/document/layout/DocPageNavs/NavPermissionModal';
-import { message, Modal } from '@/components/ui';
-import { ConstsCrawlerSource } from '@/request';
-import { deleteApiV1NavDelete } from '@/request/Nav';
-import { getNodePermissionOptions } from '@/request/NodeManagement';
+import { useDocumentActions } from './DocumentActionsProvider';
 import type { ITreeItem } from '@/api';
-import TreeMenu, {
-  type TreeMenuItem,
-} from '@/components/Drag/DragTree/TreeMenu';
-import type { DocTreeMenuFn } from './DocPageList/types';
-import { putApiV1NodeDetail } from '@/request/Node';
-import { useAppSelector } from '@/store';
+import TreeMenu from '@/components/Drag/DragTree/TreeMenu';
 import type {
   DomainNodeListItemResp,
   GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
-  V1NavListResp,
 } from '@/request/types';
-import {
-  getDocumentPermissionTags,
-  type PermissionAudienceCatalog,
-} from '@/pages/document/utils/permissionTags';
+import { getDocumentPermissionTags } from '@/pages/document/utils/permissionTags';
 import {
   Box,
   Breadcrumbs,
@@ -37,7 +17,6 @@ import {
   Divider,
   IconButton,
   Stack,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -48,7 +27,6 @@ import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { IconGengduo, IconJiahao } from '@panda-wiki/icons';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -61,11 +39,8 @@ interface DocPageFileManagerProps {
   folderId: string;
   onFolderChange: (id: string) => void;
   onDocumentSelect: (item: DomainNodeListItemResp) => void;
-  refresh: () => void;
   readOnlyUser?: boolean;
   fill?: boolean;
-  menu?: DocTreeMenuFn;
-  onNavDeleted?: (navId: string) => void;
 }
 
 type ExplorerItem = DomainNodeListItemResp & {
@@ -85,86 +60,26 @@ const DocPageFileManager = ({
   folderId,
   onFolderChange,
   onDocumentSelect,
-  refresh,
   readOnlyUser = false,
   fill = false,
-  menu,
-  onNavDeleted,
 }: DocPageFileManagerProps) => {
-  const { kb_id } = useAppSelector(state => state.config);
-  const [permissionCatalog, setPermissionCatalog] =
-    useState<PermissionAudienceCatalog>({
-      departments: {},
-      levels: {},
-      users: {},
-    });
+  const {
+    menu,
+    mutationVersion,
+    permissionCatalog,
+    openCreate,
+    openImport,
+    openZipImport,
+    openMove,
+    openDelete,
+    openAddNav,
+  } = useDocumentActions();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [deleteSelectedDocsOpen, setDeleteSelectedDocsOpen] = useState(false);
-  const [moveOpen, setMoveOpen] = useState(false);
-  const [moveSelectedItems, setMoveSelectedItems] = useState<
-    DomainNodeListItemResp[]
-  >([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
-  const [batchImportParentId, setBatchImportParentId] = useState<string | null>(
-    null,
-  );
-  const [batchImportParentName, setBatchImportParentName] = useState('根目录');
-  const [batchImportNavId, setBatchImportNavId] = useState<string | null>(null);
-  const [batchImportOpen, setBatchImportOpen] = useState(false);
-  const [docImportOpen, setDocImportOpen] = useState(false);
-  const [docImportTarget, setDocImportTarget] = useState<{
-    parentId: string | null;
-    navId: string | null;
-  } | null>(null);
-  const [createType, setCreateType] = useState<1 | 2 | null>(null);
-  const [createParentId, setCreateParentId] = useState<string | null>(null);
-  const [createNavId, setCreateNavId] = useState<string | null>(null);
-  const [addNavOpen, setAddNavOpen] = useState(false);
-  const [editingNav, setEditingNav] = useState<V1NavListResp | null>(null);
-  const [permissionNav, setPermissionNav] = useState<V1NavListResp | null>(
-    null,
-  );
-  const [permissionOpen, setPermissionOpen] = useState(false);
-  const [deletingNav, setDeletingNav] = useState<V1NavListResp | null>(null);
-  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
-
-  useEffect(() => {
-    if (!kb_id) return;
-    let active = true;
-    getNodePermissionOptions(kb_id)
-      .then(options => {
-        if (!active) return;
-        setPermissionCatalog({
-          departments: Object.fromEntries(
-            [
-              ...(options.departments || []),
-              ...(options.management_departments || []),
-            ].map(item => [item.id, item.name] as const),
-          ),
-          levels: Object.fromEntries(
-            (options.levels || []).map(item => [item.id, item.name] as const),
-          ),
-          users: Object.fromEntries(
-            [...(options.users || []), ...(options.management_users || [])].map(
-              item => [item.id, item.name || item.account] as const,
-            ),
-          ),
-        });
-      })
-      .catch(() => {
-        // Generic permission labels remain useful when the audience catalog is unavailable.
-      });
-    return () => {
-      active = false;
-    };
-  }, [kb_id]);
-
   useEffect(() => {
     setSelectedId(null);
     setSelectedItemIds([]);
-  }, [folderId, navId]);
+  }, [folderId, navId, mutationVersion]);
 
   const nodes = useMemo(
     () =>
@@ -194,6 +109,8 @@ const DocPageFileManager = ({
   const currentItems = useMemo((): ExplorerItem[] => {
     const items: ExplorerItem[] = !folderId
       ? groups
+          .slice()
+          .sort((a, b) => (a.position || 0) - (b.position || 0))
           .map(group => ({
             id: `${NAV_PATH_PREFIX}${group.nav_id || ''}`,
             name: group.nav_name || '未命名目录',
@@ -216,8 +133,7 @@ const DocPageFileManager = ({
               : (item.parent_id || '') === folderId,
           )
           .sort((a, b) => {
-            if (a.type !== b.type) return a.type === 1 ? -1 : 1;
-            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+            return (a.position || 0) - (b.position || 0);
           });
     return items.map(item => {
       const permissions = item.effective_permissions || item.permissions;
@@ -248,9 +164,12 @@ const DocPageFileManager = ({
     () =>
       currentItems.filter(
         (item): item is ExplorerItem & { id: string } =>
-          !item.explorerKind && !!item.id,
+          !readOnlyUser &&
+          item.can_manage !== false &&
+          !item.explorerKind &&
+          !!item.id,
       ),
-    [currentItems],
+    [currentItems, readOnlyUser],
   );
   const selectedItems = useMemo(
     () => selectableItems.filter(item => selectedItemIds.includes(item.id)),
@@ -314,64 +233,37 @@ const DocPageFileManager = ({
   const canManageRoots =
     groups.length === 0 || groups.some(group => group.can_configure !== false);
   const activeGroup = groups.find(group => group.nav_id === activeNavId);
-  const currentFolderCanCreate = isNavPath
-    ? activeGroup?.can_create_document !== false
-    : nodeMap.get(folderId)?.can_create_document !== false;
-  const currentFolderCanCreateFolder = isNavPath
-    ? activeGroup?.can_create_folder !== false
-    : nodeMap.get(folderId)?.can_create_folder !== false;
-  const currentFolderParentId = isNavPath ? null : folderId || null;
-  const currentFolderName =
-    breadcrumbs
-      .map(item => item.name)
-      .filter(Boolean)
-      .join(' > ') || rootName;
-
-  const toNavResp = (item: ExplorerItem): V1NavListResp => ({
-    id: item.nav_id || (item.id || '').slice(NAV_PATH_PREFIX.length),
-    name: item.name || '未命名目录',
-  });
-
-  const closeDeleteNavConfirm = () => {
-    setDeletingNav(null);
-    setDeleteConfirmInput('');
-  };
-
-  const handleDeleteNavConfirm = () => {
-    if (!deletingNav?.id || !kb_id) return;
-    const navId = deletingNav.id;
-    deleteApiV1NavDelete({ id: navId, kb_id }).then(() => {
-      message.success('删除成功');
-      closeDeleteNavConfirm();
-      if (folderId === `${NAV_PATH_PREFIX}${navId}`) {
-        onFolderChange('');
-      }
-      onNavDeleted?.(navId);
-      refresh();
-    });
-  };
-
-  const openMove = (items: DomainNodeListItemResp[]) => {
-    setMoveSelectedItems(items);
-    setMoveOpen(true);
-  };
-
-  const withMoveAction = (
-    actions: TreeMenuItem[],
-    item: DomainNodeListItemResp,
-  ): TreeMenuItem[] => {
-    const moveAction: TreeMenuItem = {
-      key: 'move',
-      label: '移动',
-      onClick: () => openMove([item]),
-    };
-    const deleteIndex = actions.findIndex(action => action.key === 'delete');
-    if (deleteIndex < 0) return [...actions, moveAction];
-    return [
-      ...actions.slice(0, deleteIndex),
-      moveAction,
-      ...actions.slice(deleteIndex),
-    ];
+  const currentFolder = isNavPath ? undefined : nodeMap.get(folderId);
+  const currentFolderManageable =
+    !readOnlyUser &&
+    (isNavPath
+      ? !!activeGroup && activeGroup.can_manage !== false
+      : !!currentFolder && currentFolder.can_manage !== false);
+  const currentFolderCanCreate =
+    currentFolderManageable &&
+    (isNavPath
+      ? activeGroup?.can_create_document !== false
+      : currentFolder?.can_create_document !== false);
+  const currentFolderCanCreateFolder =
+    currentFolderManageable &&
+    (isNavPath
+      ? activeGroup?.can_create_folder !== false
+      : currentFolder?.can_create_folder !== false);
+  const currentFolderTarget: ITreeItem = {
+    ...(currentFolder as ITreeItem | undefined),
+    id: isNavPath ? activeNavId || '' : folderId,
+    type: 1,
+    level: 0,
+    name:
+      breadcrumbs
+        .map(item => item.name)
+        .filter(Boolean)
+        .join(' > ') || rootName,
+    nav_id: activeNavId,
+    kind: isNavPath ? 'nav' : undefined,
+    can_manage: currentFolderManageable,
+    can_create_document: currentFolderCanCreate,
+    can_create_folder: currentFolderCanCreateFolder,
   };
 
   return (
@@ -439,7 +331,9 @@ const DocPageFileManager = ({
             )}
           </Stack>
           {!readOnlyUser &&
-            (folderId ? currentFolderCanCreate : canManageRoots) && (
+            (folderId
+              ? currentFolderCanCreate || currentFolderCanCreateFolder
+              : canManageRoots) && (
               <Stack direction='row' alignItems='center' gap={1} flexShrink={0}>
                 {!folderId ? (
                   <Button
@@ -448,7 +342,7 @@ const DocPageFileManager = ({
                     startIcon={
                       <IconJiahao sx={{ fontSize: '10px !important' }} />
                     }
-                    onClick={() => setAddNavOpen(true)}
+                    onClick={openAddNav}
                   >
                     新建目录
                   </Button>
@@ -458,35 +352,23 @@ const DocPageFileManager = ({
                       size='small'
                       disabled={!currentFolderCanCreateFolder}
                       variant='outlined'
-                      onClick={() => {
-                        setCreateParentId(currentFolderParentId);
-                        setCreateNavId(activeNavId || null);
-                        setCreateType(1);
-                      }}
+                      onClick={() => openCreate(currentFolderTarget, 1)}
                     >
                       新建文件夹
                     </Button>
                     <Button
                       size='small'
                       variant='outlined'
-                      onClick={() => {
-                        setCreateParentId(currentFolderParentId);
-                        setCreateNavId(activeNavId || null);
-                        setCreateType(2);
-                      }}
+                      disabled={!currentFolderCanCreate}
+                      onClick={() => openCreate(currentFolderTarget, 2)}
                     >
                       新建文档
                     </Button>
                     <Button
                       size='small'
                       variant='outlined'
-                      onClick={() => {
-                        setDocImportTarget({
-                          parentId: currentFolderParentId,
-                          navId: activeNavId || null,
-                        });
-                        setDocImportOpen(true);
-                      }}
+                      disabled={!currentFolderCanCreate}
+                      onClick={() => openImport(currentFolderTarget)}
                     >
                       导入文档
                     </Button>
@@ -494,12 +376,7 @@ const DocPageFileManager = ({
                       size='small'
                       variant='contained'
                       disabled={!currentFolderCanCreateFolder}
-                      onClick={() => {
-                        setBatchImportParentId(currentFolderParentId);
-                        setBatchImportParentName(currentFolderName);
-                        setBatchImportNavId(activeNavId || null);
-                        setBatchImportOpen(true);
-                      }}
+                      onClick={() => openZipImport(currentFolderTarget)}
                     >
                       批量导入 ZIP
                     </Button>
@@ -558,7 +435,7 @@ const DocPageFileManager = ({
                   size='small'
                   color='error'
                   startIcon={<DeleteOutlineIcon fontSize='small' />}
-                  onClick={() => setDeleteSelectedDocsOpen(true)}
+                  onClick={() => openDelete(selectedItems)}
                   sx={{ minWidth: 0, py: 0.25 }}
                 >
                   批量删除
@@ -610,7 +487,8 @@ const DocPageFileManager = ({
                 const itemReadOnly = readOnlyUser || item.can_manage === false;
                 const treeItem: ITreeItem = {
                   ...(item as unknown as ITreeItem),
-                  id: item.id || '',
+                  id: item.explorerKind ? item.nav_id || '' : item.id || '',
+                  level: 0,
                   name: item.name || '',
                   type: isFolder ? 1 : 2,
                   parentId: item.parent_id,
@@ -618,220 +496,13 @@ const DocPageFileManager = ({
                   rag_message: item.rag_info?.message,
                   kind: item.explorerKind ? 'nav' : undefined,
                 };
-                const navDownloadAction =
-                  item.explorerKind && !itemReadOnly && menu
-                    ? menu({
-                        item: {
-                          ...treeItem,
-                          id: item.nav_id || treeItem.id,
-                          kind: 'nav',
-                        },
-                        createItem: () => undefined,
-                        renameItem: () => undefined,
-                        isEditing: false,
-                        removeItem: () => undefined,
-                      }).find(action => action.key === 'download-folder')
-                    : undefined;
-                const actionMenu: TreeMenuItem[] = item.explorerKind
-                  ? !itemReadOnly
-                    ? [
-                        {
-                          key: 'folder',
-                          label: '创建文件夹',
-                          onClick: () => {
-                            setCreateParentId(null);
-                            setCreateNavId(item.nav_id || null);
-                            setCreateType(1);
-                          },
-                        },
-                        {
-                          key: 'doc',
-                          label: '创建文档',
-                          children: [
-                            {
-                              key: 'rich_text',
-                              label: '创建富文本',
-                              onClick: () => {
-                                setCreateParentId(null);
-                                setCreateNavId(item.nav_id || null);
-                                setCreateType(2);
-                              },
-                            },
-                            {
-                              key: 'md',
-                              label: '创建 Markdown',
-                              onClick: () => {
-                                setCreateParentId(null);
-                                setCreateNavId(item.nav_id || null);
-                                setCreateType(2);
-                              },
-                            },
-                          ],
-                        },
-                        {
-                          key: ConstsCrawlerSource.CrawlerSourceFile,
-                          label: '导入文档',
-                          onClick: () => {
-                            setDocImportTarget({
-                              parentId: null,
-                              navId: item.nav_id || null,
-                            });
-                            setDocImportOpen(true);
-                          },
-                        },
-                        {
-                          key: 'batch-import-zip',
-                          label: '批量导入 ZIP',
-                          onClick: () => {
-                            setBatchImportParentId(null);
-                            setBatchImportParentName(item.name || '根目录');
-                            setBatchImportNavId(item.nav_id || null);
-                            setBatchImportOpen(true);
-                          },
-                        },
-                        ...(navDownloadAction ? [navDownloadAction] : []),
-                        {
-                          key: 'edit-nav',
-                          label: '修改目录',
-                          onClick: () => {
-                            setEditingNav(toNavResp(item));
-                            setAddNavOpen(true);
-                          },
-                        },
-                        {
-                          key: 'permission',
-                          label: '目录权限',
-                          onClick: () => {
-                            setPermissionNav(toNavResp(item));
-                            setPermissionOpen(true);
-                          },
-                        },
-                        ...(groups.length > 1
-                          ? [
-                              {
-                                key: 'delete-nav',
-                                label: '删除目录',
-                                color: 'error' as const,
-                                onClick: () => setDeletingNav(toNavResp(item)),
-                              },
-                            ]
-                          : []),
-                      ]
-                    : []
-                  : menu
-                    ? menu({
-                        item: treeItem,
-                        createItem: type => {
-                          setCreateParentId(
-                            item.explorerKind ? null : item.id || null,
-                          );
-                          setCreateType(type);
-                        },
-                        renameItem: () => {
-                          setEditingId(item.id || null);
-                          setEditingName(item.name || '');
-                        },
-                        isEditing: editingId === item.id,
-                        removeItem: () => undefined,
-                      })
-                        .filter(
-                          action =>
-                            !(
-                              ['folder', 'batch-import-zip'].includes(
-                                action.key,
-                              ) && item.can_create_folder === false
-                            ) &&
-                            !(
-                              action.key === 'doc' &&
-                              item.can_create_document === false
-                            ),
-                        )
-                        .map(action => {
-                          if (
-                            action.key === ConstsCrawlerSource.CrawlerSourceFile
-                          ) {
-                            return {
-                              ...action,
-                              onClick: () => {
-                                setDocImportTarget({
-                                  parentId: item.id || null,
-                                  navId: item.nav_id || activeNavId || null,
-                                });
-                                setDocImportOpen(true);
-                              },
-                            };
-                          }
-                          if (action.key === 'batch-import-zip') {
-                            return {
-                              ...action,
-                              onClick: () => {
-                                setBatchImportParentId(
-                                  item.explorerKind ? null : item.id || null,
-                                );
-                                setBatchImportParentName(
-                                  [
-                                    ...breadcrumbs.map(crumb => crumb.name),
-                                    item.name,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' > ') || '根目录',
-                                );
-                                setBatchImportNavId(
-                                  item.nav_id || activeNavId || null,
-                                );
-                                setBatchImportOpen(true);
-                              },
-                            };
-                          }
-                          if (action.key === 'folder') {
-                            return {
-                              ...action,
-                              onClick: () => {
-                                setCreateParentId(
-                                  item.explorerKind ? null : item.id || null,
-                                );
-                                setCreateNavId(
-                                  item.nav_id || activeNavId || null,
-                                );
-                                setCreateType(1);
-                              },
-                            };
-                          }
-                          if (action.key === 'doc') {
-                            return {
-                              ...action,
-                              children: action.children?.map(child => ({
-                                ...child,
-                                onClick: () => {
-                                  setCreateParentId(
-                                    item.explorerKind ? null : item.id || null,
-                                  );
-                                  setCreateNavId(
-                                    item.nav_id || activeNavId || null,
-                                  );
-                                  setCreateType(2);
-                                },
-                              })),
-                            };
-                          }
-                          return action;
-                        })
-                    : [];
-                const resolvedActionMenu =
-                  !item.explorerKind && !itemReadOnly
-                    ? withMoveAction(actionMenu, item)
-                    : actionMenu.filter(
-                        action =>
-                          !(
-                            ['folder', 'batch-import-zip'].includes(
-                              action.key,
-                            ) && item.can_create_folder === false
-                          ) &&
-                          !(
-                            action.key === 'doc' &&
-                            item.can_create_document === false
-                          ),
-                      );
+                const resolvedActionMenu = menu({
+                  item: treeItem,
+                  createItem: () => undefined,
+                  renameItem: () => undefined,
+                  isEditing: false,
+                  removeItem: () => undefined,
+                });
                 const ragStatusMeta = getRagStatusMeta(item);
                 const publishStatusMeta =
                   item.status === 2
@@ -865,11 +536,13 @@ const DocPageFileManager = ({
                       cursor: 'pointer',
                       '&:hover': { bgcolor: 'action.hover' },
                     }}
-                    onClick={() => setSelectedId(item.id || null)}
+                    onClick={() => {
+                      setSelectedId(item.id || null);
+                      if (!isFolder) onDocumentSelect(item);
+                    }}
                     onDoubleClick={() => {
                       setSelectedId(item.id || null);
                       if (isFolder) onFolderChange(item.id || '');
-                      else onDocumentSelect(item);
                     }}
                   >
                     <Box
@@ -881,7 +554,7 @@ const DocPageFileManager = ({
                       }}
                       onClick={event => event.stopPropagation()}
                     >
-                      {!item.explorerKind && item.id && (
+                      {!itemReadOnly && !item.explorerKind && item.id && (
                         <Checkbox
                           size='small'
                           checked={selectedItemIds.includes(item.id)}
@@ -910,60 +583,9 @@ const DocPageFileManager = ({
                       />
                     )}
                     <Box sx={{ minWidth: 0, flex: 1 }}>
-                      {editingId === item.id ? (
-                        <Stack direction='row' alignItems='center' gap={1}>
-                          <TextField
-                            size='small'
-                            value={editingName}
-                            autoFocus
-                            onChange={event =>
-                              setEditingName(event.target.value)
-                            }
-                            onClick={event => event.stopPropagation()}
-                            onKeyDown={event => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                if (!editingName.trim() || !kb_id || !item.id)
-                                  return;
-                                putApiV1NodeDetail({
-                                  id: item.id,
-                                  kb_id,
-                                  nav_id: item.nav_id || navId || '',
-                                  name: editingName.trim(),
-                                }).then(() => {
-                                  setEditingId(null);
-                                  refresh();
-                                });
-                              }
-                              if (event.key === 'Escape') setEditingId(null);
-                            }}
-                            sx={{ flex: 1 }}
-                          />
-                          <Button
-                            size='small'
-                            onClick={event => {
-                              event.stopPropagation();
-                              if (!editingName.trim() || !kb_id || !item.id)
-                                return;
-                              putApiV1NodeDetail({
-                                id: item.id,
-                                kb_id,
-                                nav_id: item.nav_id || navId || '',
-                                name: editingName.trim(),
-                              }).then(() => {
-                                setEditingId(null);
-                                refresh();
-                              });
-                            }}
-                          >
-                            保存
-                          </Button>
-                        </Stack>
-                      ) : (
-                        <Typography variant='body2' noWrap title={item.name}>
-                          {item.name || '未命名'}
-                        </Typography>
-                      )}
+                      <Typography variant='body2' noWrap title={item.name}>
+                        {item.name || '未命名'}
+                      </Typography>
                     </Box>
                     {item.permission_tags &&
                       item.permission_tags.length > 0 && (
@@ -993,26 +615,24 @@ const DocPageFileManager = ({
                           ))}
                         </Stack>
                       )}
-                    {isFolder && !item.explorerKind && !itemReadOnly && (
-                      <Stack direction='row' alignItems='center' gap={0.25}>
-                        <AddDocBtn
-                          parentId={item.id}
-                          navId={item.nav_id}
-                          refresh={refresh}
-                          exportFile={false}
-                          batchImport={false}
-                          context={
-                            <IconButton
-                              size='small'
-                              onClick={event => event.stopPropagation()}
-                              title='新建'
-                            >
-                              <IconJiahao sx={{ fontSize: 18 }} />
-                            </IconButton>
-                          }
-                        />
-                      </Stack>
-                    )}
+                    {isFolder &&
+                      !itemReadOnly &&
+                      resolvedActionMenu.some(action =>
+                        ['folder', 'doc'].includes(action.key),
+                      ) && (
+                        <Box onClick={event => event.stopPropagation()}>
+                          <TreeMenu
+                            menu={resolvedActionMenu.filter(action =>
+                              ['folder', 'doc'].includes(action.key),
+                            )}
+                            context={
+                              <IconButton size='small' title='新建'>
+                                <IconJiahao sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            }
+                          />
+                        </Box>
+                      )}
                     {resolvedActionMenu.length > 0 && (
                       <Box onClick={event => event.stopPropagation()}>
                         <TreeMenu
@@ -1060,154 +680,6 @@ const DocPageFileManager = ({
           )}
         </Box>
       </Stack>
-      <BatchZipImport
-        open={batchImportOpen}
-        parentId={batchImportParentId}
-        refresh={refresh}
-        onClose={() => {
-          setBatchImportOpen(false);
-          setBatchImportParentId(null);
-          setBatchImportParentName('根目录');
-          setBatchImportNavId(null);
-        }}
-        parentName={batchImportParentName}
-        navId={batchImportNavId || activeNavId}
-      />
-      <DocDelete
-        open={deleteSelectedDocsOpen}
-        onClose={() => setDeleteSelectedDocsOpen(false)}
-        data={selectedItems}
-        onDeleted={() => {
-          setDeleteSelectedDocsOpen(false);
-          setSelectedItemIds([]);
-          setSelectedId(null);
-          refresh();
-        }}
-      />
-      <MoveDocs
-        open={moveOpen}
-        data={activeNodes}
-        selected={moveSelectedItems}
-        currentNavId={activeNavId}
-        refresh={refresh}
-        onMoved={() => {
-          setSelectedItemIds([]);
-          setSelectedId(null);
-          refresh();
-        }}
-        onClose={() => {
-          setMoveOpen(false);
-          setMoveSelectedItems([]);
-        }}
-      />
-      <DocAddByCustomText
-        type={createType || 2}
-        open={createType !== null}
-        parentId={createParentId || undefined}
-        navId={createNavId || activeNavId}
-        refresh={refresh}
-        onClose={() => {
-          setCreateType(null);
-          setCreateParentId(null);
-          setCreateNavId(null);
-        }}
-      />
-      <AddDocByType
-        type={ConstsCrawlerSource.CrawlerSourceFile}
-        open={docImportOpen}
-        refresh={refresh}
-        onCancel={() => {
-          setDocImportOpen(false);
-          setDocImportTarget(null);
-        }}
-        parentId={
-          docImportTarget ? docImportTarget.parentId : currentFolderParentId
-        }
-        navId={docImportTarget ? docImportTarget.navId : activeNavId}
-      />
-      <NavEditModal
-        open={addNavOpen}
-        onClose={() => {
-          setAddNavOpen(false);
-          setEditingNav(null);
-        }}
-        onSuccess={() => {
-          setAddNavOpen(false);
-          setEditingNav(null);
-          refresh();
-        }}
-        nav={editingNav}
-        kb_id={kb_id}
-      />
-      <NavPermissionModal
-        open={permissionOpen}
-        nav={permissionNav}
-        kb_id={kb_id}
-        onClose={() => {
-          setPermissionOpen(false);
-          setPermissionNav(null);
-        }}
-        onSuccess={() => {
-          setPermissionOpen(false);
-          setPermissionNav(null);
-          refresh();
-        }}
-      />
-      <Modal
-        title={
-          <Stack direction='row' alignItems='center' gap={1}>
-            <ErrorOutlineIcon sx={{ color: 'warning.main' }} />
-            确认删除目录？
-          </Stack>
-        }
-        open={!!deletingNav}
-        width={480}
-        okText='确认删除'
-        okButtonProps={{
-          sx: { bgcolor: 'error.main' },
-          disabled: deleteConfirmInput !== (deletingNav?.name || '未命名'),
-        }}
-        onCancel={closeDeleteNavConfirm}
-        onOk={handleDeleteNavConfirm}
-      >
-        <Box sx={{ fontSize: 14, lineHeight: 1.6, color: 'text.secondary' }}>
-          <Box component='p' sx={{ m: 0, mb: 1 }}>
-            删除目录「
-            <Box component='span' sx={{ fontWeight: 600 }}>
-              {deletingNav?.name || '未命名'}
-            </Box>
-            」后，将
-            <Box component='span' sx={{ color: 'error.main', fontWeight: 600 }}>
-              同步删除该目录下所有文档
-            </Box>
-            ，且
-            <Box component='span' sx={{ color: 'error.main', fontWeight: 600 }}>
-              不可恢复
-            </Box>
-            ，请谨慎操作。
-          </Box>
-          <Box sx={{ mt: 2 }}>
-            <TextField
-              fullWidth
-              size='small'
-              placeholder='请输入当前目录名称，并确认删除'
-              value={deleteConfirmInput}
-              onChange={event => setDeleteConfirmInput(event.target.value)}
-              error={
-                deleteConfirmInput.length > 0 &&
-                deleteConfirmInput !== (deletingNav?.name || '未命名')
-              }
-              helperText={
-                deleteConfirmInput.length > 0 &&
-                deleteConfirmInput !== (deletingNav?.name || '未命名')
-                  ? '名称不正确，请输入正确的目录名称'
-                  : ''
-              }
-              sx={{ '& .MuiFormHelperText-root': { m: 0, mt: 0.5 } }}
-            />
-          </Box>
-        </Box>
-      </Modal>
     </Card>
   );
 };

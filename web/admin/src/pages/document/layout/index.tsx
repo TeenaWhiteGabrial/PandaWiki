@@ -34,7 +34,7 @@ import DocPageHeader from './DocPageHeader';
 import DocPageNavs from './DocPageNavs';
 import DocPagePreview from './DocPagePreview';
 import DocPageFileManager from './DocPageFileManager';
-import type { DocTreeMenuFn } from './DocPageList/types';
+import DocumentActionsProvider from './DocumentActionsProvider';
 import ZipUploadTaskPanel from '../component/ZipUploadTaskPanel';
 import LearningProgressPanel from '../component/LearningProgressPanel';
 
@@ -65,8 +65,10 @@ const Content = () => {
     refresh: reloadTree,
   } = useLazyDocumentTree(kb_id || '', user?.id || '', search);
   const [navList, setNavList] = useState<V1NavListResp[]>([]);
+  // Start with the list at its resize limit so the preview opens at its
+  // smallest supported width. Subsequent manual resizing stays in effect.
   const [navWidth, setNavWidth] = useState(() =>
-    Math.max(300, Math.round(window.innerWidth * 0.3)),
+    Math.round(window.innerWidth * 0.65),
   );
   const [previewCollapsed, setPreviewCollapsed] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
@@ -74,6 +76,7 @@ const Content = () => {
     null,
   );
   const [currentFolderId, setCurrentFolderId] = useState('');
+  const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(new Set());
   const [leftViewMode, setLeftViewMode] = useState<'tree' | 'explorer'>(() => {
     if (typeof window === 'undefined') return 'tree';
     const saved = localStorage.getItem('panda-wiki-document-view-mode');
@@ -83,11 +86,6 @@ const Content = () => {
     setLeftViewMode(mode);
     localStorage.setItem('panda-wiki-document-view-mode', mode);
   }, []);
-  const [explorerMenu, setExplorerMenu] = useState<DocTreeMenuFn | null>(null);
-  const handleDocumentMenuReady = useCallback(
-    (menu: DocTreeMenuFn) => setExplorerMenu(() => menu),
-    [],
-  );
   const minLeftWidth = Math.round(window.innerWidth * 0.3);
   const leftWidth = Math.max(navWidth, minLeftWidth);
 
@@ -304,16 +302,6 @@ const Content = () => {
   }, [currentFolderId, leftViewMode, loadChildren, groups]);
 
   useEffect(() => {
-    setCurrentFolderId('');
-  }, [nav_id]);
-
-  useEffect(() => {
-    if (leftViewMode === 'tree') {
-      setPreviewCollapsed(true);
-    }
-  }, [leftViewMode]);
-
-  useEffect(() => {
     if (isRefreshDocList) {
       refresh();
       dispatch(setIsRefreshDocList(false));
@@ -380,8 +368,83 @@ const Content = () => {
     };
   }, [fullscreen]);
 
+  const handleDocumentSelect = (item: {
+    id?: string;
+    parent_id?: string;
+    parentId?: string;
+    nav_id?: string;
+  }) => {
+    const parentId = item.parent_id || item.parentId;
+    setSelectedDocumentId(item.id || null);
+    setCurrentFolderId(
+      parentId && parentId !== item.nav_id
+        ? parentId
+        : item.nav_id
+          ? `nav:${item.nav_id}`
+          : '',
+    );
+    setPreviewCollapsed(false);
+  };
+  const handleNavDeleted = (id: string) => {
+    const deleted = groups.find(group => group.nav_id === id);
+    setGroups(prev => prev.filter(group => group.nav_id !== id));
+    setNavList(prev => prev.filter(nav => nav.id !== id));
+    if (
+      currentFolderId === `nav:${id}` ||
+      deleted?.list?.some(item => item.id === currentFolderId)
+    )
+      setCurrentFolderId('');
+    if (deleted?.list?.some(item => item.id === selectedDocumentId)) {
+      setSelectedDocumentId(null);
+      setPreviewCollapsed(true);
+      setFullscreen(false);
+    }
+  };
+  const handleNodesDeleted = (ids: string[]) => {
+    const removed = new Set(ids);
+    const nodes = groups.flatMap(group => group.list || []);
+    // Deleting a folder also removes its loaded descendants and their preview.
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const node of nodes)
+        if (
+          node.id &&
+          node.parent_id &&
+          removed.has(node.parent_id) &&
+          !removed.has(node.id)
+        ) {
+          removed.add(node.id);
+          changed = true;
+        }
+    }
+    setGroups(prev =>
+      prev.map(group => ({
+        ...group,
+        list: group.list?.filter(node => !removed.has(node.id!)),
+      })),
+    );
+    if (removed.has(currentFolderId)) setCurrentFolderId('');
+    if (selectedDocumentId && removed.has(selectedDocumentId)) {
+      setSelectedDocumentId(null);
+      setPreviewCollapsed(true);
+      setFullscreen(false);
+    }
+  };
+
   return (
-    <>
+    <DocumentActionsProvider
+      key={`${kb_id}:${user?.id || ''}`}
+      kbId={kb_id || ''}
+      viewerId={user?.id || ''}
+      groups={groups}
+      readOnly={readOnlyUser}
+      wikiUrl={wikiUrl}
+      refresh={refresh}
+      onPublish={handlePublishOpen}
+      onNodesDeleted={handleNodesDeleted}
+      onNavDeleted={handleNavDeleted}
+    >
       {treeError && (
         <Button color='error' onClick={refresh}>
           目录加载失败，点击重试
@@ -424,31 +487,11 @@ const Content = () => {
         onDragCancel={handleLayoutDragCancel}
       >
         <Stack direction={'row'} sx={{ mt: fullscreen ? 0 : 2, width: '100%' }}>
-          {!fullscreen && (
-            <Box
-              aria-hidden={leftViewMode !== 'tree'}
-              sx={
-                leftViewMode === 'tree'
-                  ? leftPaneSx
-                  : {
-                      position: 'absolute',
-                      left: -10000,
-                      top: -10000,
-                      width: 1,
-                      height: 1,
-                      overflow: 'hidden',
-                      pointerEvents: 'none',
-                      opacity: 0,
-                    }
-              }
-            >
+          {!fullscreen && leftViewMode === 'tree' && (
+            <Box sx={leftPaneSx}>
               <DocPageNavs
                 navList={navList}
                 groups={groups}
-                onNavListChange={setNavList}
-                onNavDeleted={navId => {
-                  setGroups(prev => prev.filter(g => g.nav_id !== navId));
-                }}
                 refresh={refresh}
                 isSearching={!!search}
                 loading={loading && groups.length === 0}
@@ -456,23 +499,22 @@ const Content = () => {
                 onLoadChildren={loadChildren}
                 width={leftWidth}
                 onWidthChange={setNavWidth}
-                onDocumentSelect={item => {
-                  setSelectedDocumentId(item.id);
-                  setPreviewCollapsed(false);
-                }}
+                openFolderIds={openFolderIds}
+                onOpenFolderIdsChange={setOpenFolderIds}
+                onDocumentSelect={handleDocumentSelect}
                 onFolderSelect={item => {
-                  setCurrentFolderId(item.id || '');
+                  setCurrentFolderId(
+                    item.kind === 'nav'
+                      ? `nav:${item.nav_id || item.id}`
+                      : item.id || '',
+                  );
                   setPreviewCollapsed(true);
                 }}
                 fill={previewCollapsed}
-                wikiUrl={wikiUrl}
-                onPublishOpen={handlePublishOpen}
                 readOnlyUser={readOnlyUser}
                 registerTreeDragHandlers={handlers => {
                   treeDragHandlersRef.current = handlers;
                 }}
-                // 菜单本身是函数，必须包装一层，避免被 React 当作 state updater 执行。
-                onDocumentMenuReady={handleDocumentMenuReady}
               />
             </Box>
           )}
@@ -497,33 +539,8 @@ const Content = () => {
                   setCurrentFolderId(folderId);
                   setPreviewCollapsed(true);
                 }}
-                onDocumentSelect={item => {
-                  setSelectedDocumentId(item.id || null);
-                  setPreviewCollapsed(false);
-                }}
-                refresh={refresh}
-                onNavDeleted={navId => {
-                  const deletedGroup = groups.find(g => g.nav_id === navId);
-                  setGroups(prev => prev.filter(g => g.nav_id !== navId));
-                  setNavList(prev => prev.filter(nav => nav.id !== navId));
-                  setCurrentFolderId(prev => {
-                    if (prev === `nav:${navId}`) return '';
-                    if (deletedGroup?.list?.some(item => item.id === prev)) {
-                      return '';
-                    }
-                    return prev;
-                  });
-                  if (
-                    deletedGroup?.list?.some(
-                      item => item.id === selectedDocumentId,
-                    )
-                  ) {
-                    setSelectedDocumentId(null);
-                  }
-                  setPreviewCollapsed(true);
-                }}
+                onDocumentSelect={handleDocumentSelect}
                 readOnlyUser={readOnlyUser}
-                menu={explorerMenu || undefined}
                 fill
               />
               {!previewCollapsed && (
@@ -556,6 +573,7 @@ const Content = () => {
           )}
           <DocPagePreview
             documentId={selectedDocumentId}
+            refreshTrigger={refreshTrigger}
             collapsed={fullscreen ? false : previewCollapsed}
             onToggle={() => setPreviewCollapsed(value => !value)}
             fullscreen={fullscreen}
@@ -584,7 +602,7 @@ const Content = () => {
           />
         </>
       )}
-    </>
+    </DocumentActionsProvider>
   );
 };
 
