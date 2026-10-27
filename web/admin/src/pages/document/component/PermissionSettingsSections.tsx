@@ -63,6 +63,7 @@ export function ReadingPermissionSection({
       </Stack>
       <Typography fontSize={12} color='text.secondary'>
         文档查阅和智能问答均需先登录；全员指所有已登录用户，不包括游客。
+        超级管理员始终可查阅所有文档，不受部门、等级、白名单或排除规则限制。
       </Typography>
       {children}
     </Stack>
@@ -97,7 +98,7 @@ export function ManagementPermissionSection({
         </Stack>
         <Typography fontSize={13} color='text.secondary'>
           设置哪些人可以编辑、移动、删除文档，以及可管理的目录范围。
-          仅管理员账号可管理文档。
+          仅管理员账号可管理文档；超级管理员始终可管理所有文档。
         </Typography>
         <Typography fontSize={12} color='text.secondary' sx={{ mt: 0.5 }}>
           查阅权限与管理权限分别保存。

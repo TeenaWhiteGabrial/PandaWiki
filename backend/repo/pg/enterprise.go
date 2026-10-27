@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/chaitin/panda-wiki/config"
+	"github.com/chaitin/panda-wiki/consts"
 	"sort"
 	"strings"
 
@@ -170,7 +171,12 @@ func (r *EnterpriseRepository) GetUserAccessContext(ctx context.Context, userID 
 	}
 
 	result := &domain.EnterpriseAccessContext{
-		PrincipalID: userID,
+		PrincipalID:  userID,
+		IsSuperAdmin: consts.IsSuperAdmin(user.Role),
+	}
+	// Global readers do not depend on department or permission-level records.
+	if result.IsSuperAdmin {
+		return result, nil
 	}
 
 	if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {

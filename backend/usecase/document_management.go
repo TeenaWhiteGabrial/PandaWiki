@@ -229,7 +229,8 @@ func (u *EnterpriseUsecase) ValidateManagementGrantNarrowing(ctx context.Context
 
 func managementGrantAudienceWithinParents(users []domain.UserSummary, grants []domain.DocumentManagementGrant, inherited [][]domain.DocumentManagementGrant, departmentAncestors map[string][]string) bool {
 	for _, user := range users {
-		if !consts.IsAdministrator(user.Role) {
+		// Super-admins already manage both parent and child globally.
+		if !consts.IsAdministrator(user.Role) || consts.IsSuperAdmin(user.Role) {
 			continue
 		}
 		principal := &domain.EnterpriseAccessContext{
@@ -380,6 +381,7 @@ func (u *EnterpriseUsecase) validateReadAudienceWithinParent(ctx context.Context
 		departmentIDs := expandAudienceDepartmentIDs(user.DepartmentIDs, departmentAncestors)
 		userAccess := &domain.EnterpriseAccessContext{
 			PrincipalID:         user.ID,
+			IsSuperAdmin:        consts.IsSuperAdmin(user.Role),
 			DepartmentIDs:       departmentIDs,
 			PermissionLevelID:   user.PermissionLevelID,
 			PermissionLevelRank: levelRanks[user.PermissionLevelID],

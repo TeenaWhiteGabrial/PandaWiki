@@ -23,6 +23,7 @@ func documentManagementAccess(ctx context.Context, db *store.DB, kbID, userID st
 		return access, nil
 	}
 	access.Global = consts.IsSuperAdmin(user.Role)
+	access.Principal.IsSuperAdmin = access.Global
 	if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {
 		var level domain.PermissionLevel
 		if err := db.WithContext(ctx).Where("id = ? AND status = ?", *user.PermissionLevelID, domain.PermissionLevelStatusActive).First(&level).Error; err == nil {

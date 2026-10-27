@@ -62,7 +62,9 @@ func (PermissionLevel) TableName() string {
 }
 
 type EnterpriseAccessContext struct {
-	PrincipalID         string   `json:"principal_id"`
+	PrincipalID string `json:"principal_id"`
+	// Derived from the current database role, never accepted from client input.
+	IsSuperAdmin        bool     `json:"-"`
 	DepartmentIDs       []string `json:"department_ids"`
 	PermissionLevelID   string   `json:"permission_level_id"`
 	PermissionLevelRank int      `json:"permission_level_rank"`

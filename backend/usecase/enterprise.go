@@ -359,6 +359,11 @@ func (u *EnterpriseUsecase) ListDescendantDepartmentIDs(ctx context.Context, dep
 }
 
 func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domain.EnterpriseAccessContext) bool {
+	// This account-level fallback takes precedence over all node, ancestor,
+	// navigation, department, level, whitelist and explicit deny rules.
+	if access != nil && access.IsSuperAdmin && access.PrincipalID != "" && access.PrincipalID != "visitor" {
+		return true
+	}
 	for _, constraint := range perm.Constraints {
 		if !u.canAccess(constraint, access) {
 			return false

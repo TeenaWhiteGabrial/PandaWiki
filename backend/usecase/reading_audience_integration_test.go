@@ -61,9 +61,13 @@ func TestReadingAudiencePostgres(t *testing.T) {
 	enterprise := &EnterpriseUsecase{repo: pg.NewEnterpriseRepository(storeDB, l), nodeRepo: nodes, navRepo: navs}
 	u := &NodeUsecase{nodeRepo: nodes, navRepo: navs, enterprise: enterprise}
 	ctx := context.WithValue(context.Background(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{UserId: adminID})
-	req := &v1.ReadingAudienceReq{KBID: kbID, IDs: []string{childID}, TargetType: "node", IncludeUsers: true}
+	var superAdminCount int64
+	if err := tx.Model(&domain.User{}).Where("role = ?", consts.UserRoleAdmin).Count(&superAdminCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	req := &v1.ReadingAudienceReq{KBID: kbID, IDs: []string{childID}, TargetType: "node", Keyword: "reading-a-" + readerA, IncludeUsers: true}
 	saved, err := u.ReadingAudience(ctx, req)
-	if err != nil || saved.Total != 1 || len(saved.Users) != 1 || saved.Users[0].ID != readerA || saved.Source == nil || saved.Source.Name != "真实权限来源" {
+	if err != nil || saved.Total != int(superAdminCount)+1 || saved.FilteredTotal != 1 || len(saved.Users) != 1 || saved.Users[0].ID != readerA || saved.Source == nil || saved.Source.Name != "真实权限来源" {
 		t.Fatalf("saved preview failed: %#v %v", saved, err)
 	}
 	// Compare the preview with the same user contexts used by live requests.
@@ -72,13 +76,13 @@ func TestReadingAudiencePostgres(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := enterprise.CanVisitable(saved.Permissions, access); got != (userID == readerA) {
+		if got := enterprise.CanVisitable(saved.Permissions, access); got != (userID == adminID || userID == readerA) {
 			t.Fatalf("preview differs from actual reader check for %s", userID)
 		}
 	}
 	req.Permissions = &domain.NodePermissions{ScopeType: "custom", AllowAllUsers: true, DeniedUserIDs: []string{readerA}}
 	draft, err := u.ReadingAudience(ctx, req)
-	if err != nil || draft.Total != 0 {
+	if err != nil || draft.Total != int(superAdminCount) || draft.FilteredTotal != 0 {
 		t.Fatalf("unsaved exclusion not applied: %#v %v", draft, err)
 	}
 	child, err := nodes.GetNodeByID(ctx, childID)
@@ -87,7 +91,7 @@ func TestReadingAudiencePostgres(t *testing.T) {
 	}
 	req = &v1.ReadingAudienceReq{KBID: kbID, IDs: []string{navID}, TargetType: "nav", Keyword: "测试乙", IncludeUsers: true, Page: 1, PageSize: 1}
 	nav, err := u.ReadingAudience(ctx, req)
-	if err != nil || nav.Total != 2 || nav.FilteredTotal != 1 || len(nav.Users) != 1 || nav.Users[0].ID != readerB {
+	if err != nil || nav.Total != int(superAdminCount)+2 || nav.FilteredTotal != 1 || len(nav.Users) != 1 || nav.Users[0].ID != readerB {
 		t.Fatalf("nav/search preview failed: %#v %v", nav, err)
 	}
 	deniedCtx := context.WithValue(context.Background(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{UserId: managerID})

@@ -7,6 +7,7 @@ import (
 
 	v1 "github.com/chaitin/panda-wiki/api/node/v1"
 	"github.com/chaitin/panda-wiki/config"
+	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 )
 
@@ -197,7 +198,7 @@ func (u *EnterpriseUsecase) filterReadingAudience(policy domain.NodePermissions,
 		pageSize = 20
 	}
 	for _, user := range users {
-		principal := &domain.EnterpriseAccessContext{PrincipalID: user.ID, DepartmentIDs: user.DepartmentIDs, PermissionLevelID: user.PermissionLevelID, PermissionLevelRank: ranks[user.PermissionLevelID]}
+		principal := &domain.EnterpriseAccessContext{PrincipalID: user.ID, IsSuperAdmin: consts.IsSuperAdmin(user.Role), DepartmentIDs: user.DepartmentIDs, PermissionLevelID: user.PermissionLevelID, PermissionLevelRank: ranks[user.PermissionLevelID]}
 		if !u.CanVisitable(policy, principal) {
 			continue
 		}

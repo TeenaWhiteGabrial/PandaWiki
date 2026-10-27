@@ -31,19 +31,19 @@ func TestReadingAudienceUsesTheFullPermissionIntersection(t *testing.T) {
 		{ID: "blocked", Account: "Blocked", DepartmentIDs: []string{"engineering", "blocked"}, PermissionLevelID: "senior"},
 	}
 	result := u.filterReadingAudience(policy, users, map[string]int{"senior": 10, "junior": 1}, "", 1, 2, true)
-	if result.Total != 3 || result.FilteredTotal != 3 || len(result.Users) != 2 || result.Users[0].ID != "a" || result.Users[1].ID != "b" {
+	if result.Total != 4 || result.FilteredTotal != 4 || len(result.Users) != 2 || result.Users[0].ID != "a" || result.Users[1].ID != "b" {
 		t.Fatalf("wrong final audience: %#v", result)
 	}
 	result = u.filterReadingAudience(policy, users, nil, "", 2, 2, true)
-	if result.Total != 3 || len(result.Users) != 1 || result.Users[0].ID != "guest" {
+	if result.Total != 4 || len(result.Users) != 2 || result.Users[0].ID != "guest" || result.Users[1].ID != "admin" {
 		t.Fatalf("pagination lost members: %#v", result)
 	}
 	result = u.filterReadingAudience(policy, users, nil, "  ALP  ", 1, 20, true)
-	if result.Total != 3 || result.FilteredTotal != 1 || len(result.Users) != 1 || result.Users[0].ID != "a" {
+	if result.Total != 4 || result.FilteredTotal != 1 || len(result.Users) != 1 || result.Users[0].ID != "a" {
 		t.Fatalf("search must filter the authorized set while keeping total: %#v", result)
 	}
 	result = u.filterReadingAudience(policy, users, nil, "李四", 1, 20, false)
-	if result.Total != 3 || result.FilteredTotal != 1 || len(result.Users) != 0 {
+	if result.Total != 4 || result.FilteredTotal != 1 || len(result.Users) != 0 {
 		t.Fatalf("count-only preview leaked a full list or lost name search: %#v", result)
 	}
 }
