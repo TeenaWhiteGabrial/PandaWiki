@@ -266,6 +266,7 @@ type GetNodeListReq struct {
 }
 
 type NodeListItemResp struct {
+	HasChildren                    bool                        `json:"has_children" gorm:"-"`
 	CanCreateDocument              bool                        `json:"can_create_document" gorm:"-"`
 	CanCreateFolder                bool                        `json:"can_create_folder" gorm:"-"`
 	CanManage                      bool                        `json:"can_manage" gorm:"-"`
@@ -372,6 +373,7 @@ type UpdateNodeReq struct {
 }
 
 type ShareNodeListItemResp struct {
+	HasChildren bool            `json:"has_children" gorm:"-"`
 	ID          string          `json:"id"`
 	Name        string          `json:"name"`
 	Type        NodeType        `json:"type"`

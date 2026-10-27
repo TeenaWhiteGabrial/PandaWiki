@@ -189,6 +189,9 @@ export type UpdateNodeData = {
 };
 
 export interface ITreeItem {
+  hasChildren?: boolean;
+  placeholder?: 'loading' | 'error';
+  retry?: () => void;
   can_create_document?: boolean;
   can_create_folder?: boolean;
   can_manage?: boolean;

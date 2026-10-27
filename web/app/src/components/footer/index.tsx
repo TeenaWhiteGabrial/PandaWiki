@@ -4,10 +4,8 @@ import { useMemo } from 'react';
 import { getImagePath } from '@/utils/getImagePath';
 import { useBasePath } from '@/hooks';
 
-import {
-  Footer,
-  WelcomeFooter as WelcomeFooterComponent,
-} from '@panda-wiki/ui';
+import Footer from '@panda-wiki/ui/footer';
+import WelcomeFooterComponent from '@panda-wiki/ui/welcomeFooter';
 
 export const FooterProvider = ({
   showBrand = false,

@@ -42,7 +42,9 @@ func NewNodeHandler(
 	readGroup := group.Group("", h.auth.ValidateKBUserPerm(consts.UserKBPermissionNotNull))
 	readGroup.GET("/list", h.GetNodeList)
 	readGroup.GET("/list/group/nav", h.NodeListGroupNav)
+	readGroup.POST("/tree", h.NodeTree)
 	readGroup.GET("/stats", h.NodeStats)
+	readGroup.POST("/tree/status", h.TreeNodeStatuses)
 	readGroup.GET("/detail", h.GetNodeDetail)
 	readGroup.GET("/recommend_nodes", h.RecommendNodes)
 	readGroup.GET("/permission", h.NodePermission)
@@ -685,4 +687,40 @@ func (h *NodeHandler) NodeLearningCancel(c echo.Context) error {
 	}
 
 	return h.NewResponseWithData(c, &v1.NodeLearningCancelResp{Count: count})
+}
+
+func (h *NodeHandler) TreeNodeStatuses(c echo.Context) error {
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	var req struct {
+		KBID string   `json:"kb_id" validate:"required"`
+		IDs  []string `json:"ids" validate:"max=1000"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid status request", err)
+	}
+	if err := c.Validate(req); err != nil {
+		return h.NewResponseWithError(c, "invalid status request", err)
+	}
+	result, err := h.usecase.GetTreeNodeStatuses(c.Request().Context(), req.KBID, req.IDs)
+	if err != nil {
+		return h.NewResponseWithError(c, "get indexing statuses failed", err)
+	}
+	return h.NewResponseWithData(c, result)
+}
+
+func (h *NodeHandler) NodeTree(c echo.Context) error {
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	defer h.TrackTreeLoad(c)()
+	var req v1.NodeListGroupNavReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid tree request", err)
+	}
+	if err := c.Validate(req); err != nil {
+		return h.NewResponseWithError(c, "invalid tree request", err)
+	}
+	result, err := h.usecase.GetNodeTree(c.Request().Context(), req)
+	if err != nil {
+		return h.NewResponseWithError(c, "get node tree failed", err)
+	}
+	return h.NewTreeResponseWithData(c, result)
 }

@@ -159,6 +159,7 @@ export interface NodeDetail {
 }
 
 export interface NodeListItem {
+  has_children?: boolean;
   id: string;
   name: string;
   type: 1 | 2;
@@ -179,6 +180,11 @@ export interface ChunkResultItem {
 }
 
 export interface ITreeItem {
+  hasChildren?: boolean;
+  childrenLoading?: boolean;
+  childrenError?: boolean;
+  navId?: string;
+  kind?: 'nav';
   id: string;
   name: string;
   level: number;

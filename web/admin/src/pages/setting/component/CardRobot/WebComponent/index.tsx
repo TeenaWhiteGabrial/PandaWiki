@@ -1,3 +1,4 @@
+import { resolveReaderBaseUrl } from '@/utils/readerUrl';
 import { FreeSoloAutocomplete } from '@/components/FreeSoloAutocomplete';
 import ShowText from '@/components/ShowText';
 import UploadFile from '@/components/UploadFile';
@@ -82,21 +83,7 @@ const CardRobotWebComponent = ({ kb }: CardRobotWebComponentProps) => {
   });
 
   useEffect(() => {
-    if (kb.access_settings?.base_url) {
-      setUrl(kb.access_settings.base_url);
-      return;
-    }
-    const host = kb.access_settings?.hosts?.[0] || '';
-    if (host === '') return;
-    const { ssl_ports = [], ports = [] } = kb.access_settings || {};
-
-    if (ssl_ports) {
-      if (ssl_ports.includes(443)) setUrl(`https://${host}`);
-      else if (ssl_ports.length > 0) setUrl(`https://${host}:${ssl_ports[0]}`);
-    } else if (ports) {
-      if (ports.includes(80)) setUrl(`http://${host}`);
-      else if (ports.length > 0) setUrl(`http://${host}:${ports[0]}`);
-    }
+    setUrl(resolveReaderBaseUrl(kb.access_settings));
   }, [kb]);
 
   const getDetail = () => {

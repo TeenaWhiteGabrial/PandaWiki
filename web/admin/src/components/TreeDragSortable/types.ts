@@ -8,6 +8,7 @@ export type TreeItem<T> = {
   Default: false.
    */
   collapsed?: boolean;
+  hasChildren?: boolean;
 
   /*
   If false, doesn't allow to drag&drop nodes so that they become children of current node.

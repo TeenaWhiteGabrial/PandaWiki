@@ -12,10 +12,8 @@ import { Modal } from '@ctzhian/ui';
 import ErrorIcon from '@mui/icons-material/Error';
 import { alpha, Box, Button, IconButton, Stack, Tooltip } from '@mui/material';
 import { IconDengchu } from '@panda-wiki/icons';
-import {
-  Header as CustomHeader,
-  WelcomeHeader as WelcomeHeaderComponent,
-} from '@panda-wiki/ui';
+import CustomHeader from '@panda-wiki/ui/header';
+import WelcomeHeaderComponent from '@panda-wiki/ui/welcomeHeader';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import QaModal from '../QaModal';

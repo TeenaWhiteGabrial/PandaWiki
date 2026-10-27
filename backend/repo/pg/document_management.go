@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func documentManagementAccess(ctx context.Context, db *store.DB, kbID, userID string) (*domain.DocumentManagementAccess, error) {
+func documentManagementAccess(ctx context.Context, db *store.DB, kbID, userID string, policyOnly ...bool) (*domain.DocumentManagementAccess, error) {
 	var user domain.User
 	if err := db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
 		return nil, err
@@ -44,7 +44,11 @@ func documentManagementAccess(ctx context.Context, db *store.DB, kbID, userID st
 		return nil, err
 	}
 	var nodes []*domain.Node
-	if err := db.WithContext(ctx).Select("id, kb_id, nav_id, parent_id, type, name, permissions, meta").Where("kb_id = ?", kbID).Find(&nodes).Error; err != nil {
+	columns := "id, kb_id, nav_id, parent_id, type, name, position, permissions, meta"
+	if len(policyOnly) > 0 && policyOnly[0] {
+		columns = "id, kb_id, nav_id, parent_id, type, position, permissions"
+	}
+	if err := db.WithContext(ctx).Select(columns).Where("kb_id = ?", kbID).Find(&nodes).Error; err != nil {
 		return nil, err
 	}
 	for _, node := range nodes {
@@ -91,6 +95,11 @@ func (r *UserAccessRepository) DocumentManagementAccess(ctx context.Context, kbI
 }
 func (r *EnterpriseRepository) DocumentManagementAccess(ctx context.Context, kbID, userID string) (*domain.DocumentManagementAccess, error) {
 	return documentManagementAccess(ctx, r.db, kbID, userID)
+}
+
+// DocumentManagementTreeAccess omits names and file metadata from the policy graph.
+func (r *EnterpriseRepository) DocumentManagementTreeAccess(ctx context.Context, kbID, userID string) (*domain.DocumentManagementAccess, error) {
+	return documentManagementAccess(ctx, r.db, kbID, userID, true)
 }
 
 func (r *UserAccessRepository) GetReleaseNodeForManagement(ctx context.Context, kbID, releaseID string) (string, error) {

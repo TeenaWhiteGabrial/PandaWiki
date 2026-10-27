@@ -1,3 +1,4 @@
+import { getReaderDocumentUrl } from '@/utils/readerUrl';
 import { ITreeItem } from '@/api';
 import { type DragTreeHandle } from '@/components/Drag/DragTree';
 import { postApiV1NodeRestudy } from '@/request/Node';
@@ -167,7 +168,14 @@ const DocPageListContainer = ({
         message.warning('当前文档未发布，无法查看前台文档');
         return;
       }
-      window.open(`${wikiUrl}/node/${id}`, '_blank');
+      const url = getReaderDocumentUrl(wikiUrl, id);
+      if (!url) {
+        message.warning(
+          '未配置有效的用户端地址，请在“设置 → 门户网站 → 网站基本信息”中设置“网址绝对路径前缀”',
+        );
+        return;
+      }
+      window.open(url, '_blank');
     },
     [list, wikiUrl],
   );

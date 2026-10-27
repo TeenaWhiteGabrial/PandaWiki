@@ -7,44 +7,44 @@ import { Ellipsis } from '@ctzhian/ui';
 import {
   Box,
   Chip,
-  CircularProgress,
+  Skeleton,
+  Button,
   Stack,
   useTheme,
   IconButton,
 } from '@mui/material';
 import Link from 'next/link';
-import { useLinkStatus } from 'next/link';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
 
 interface CatalogFolderProps {
   item: ITreeItem;
   depth?: number;
+  searchView?: boolean;
 }
 
-// Link navigation and the following document-detail request are separate
-// loading phases. Keep feedback on the selected folder through both phases.
-const FolderIcon = ({ item }: { item: ITreeItem }) => {
-  const { pending } = useLinkStatus();
-  const { loadingNodeId } = useStore();
-  if (pending || loadingNodeId === item.id) {
-    return (
-      <CircularProgress
-        size={14}
-        aria-label={`正在加载 ${item.name} 的目录`}
-        sx={{ flexShrink: 0 }}
-      />
-    );
-  }
-  return item.emoji ? (
+const FolderIcon = ({ item }: { item: ITreeItem }) =>
+  item.emoji ? (
     <Box sx={{ flexShrink: 0, fontSize: 12 }}>{item.emoji}</Box>
   ) : (
     <IconWenjianjia sx={{ flexShrink: 0, fontSize: 12 }} />
   );
-};
 
-const CatalogFolder = ({ item, depth = 1 }: CatalogFolderProps) => {
+const CatalogFolder = ({
+  item,
+  depth = 1,
+  searchView = false,
+}: CatalogFolderProps) => {
+  const [searchExpanded, setSearchExpanded] = useState(true);
+  const expanded = searchView ? searchExpanded : item.expanded;
   const theme = useTheme();
-  const { themeMode = 'light', setTree } = useStore();
+  const {
+    themeMode = 'light',
+    setTree,
+    lazyCatalog,
+    toggleCatalogFolder,
+    loadCatalogChildren,
+  } = useStore();
   const params = useParams() || {};
   const activeId = params.id as string;
   const basePath = useBasePath();
@@ -104,7 +104,14 @@ const CatalogFolder = ({ item, depth = 1 }: CatalogFolderProps) => {
             sx={{ flex: 1, minWidth: 0, pl: depth * 2, pr: 1 }}
           >
             <Link
-              href={`${basePath}/node/${item.id}`}
+              href={item.kind === 'nav' ? '#' : `${basePath}/node/${item.id}`}
+              onClick={e => {
+                if (item.kind === 'nav') {
+                  e.preventDefault();
+                  if (searchView) setSearchExpanded(v => !v);
+                  else toggleCatalogFolder?.(item);
+                }
+              }}
               prefetch={false}
               style={{ flex: 1, minWidth: 0, display: 'block' }}
             >
@@ -129,42 +136,76 @@ const CatalogFolder = ({ item, depth = 1 }: CatalogFolderProps) => {
               </Stack>
             </Link>
 
-            <IconButton
-              size='small'
-              sx={{
-                flexShrink: 0,
-                position: 'relative',
-                zIndex: 1,
-                '&:hover': {
-                  color: 'primary.main',
-                },
-              }}
-              onClick={e => {
-                e.stopPropagation();
-                if (item.type === 1) {
-                  setTree?.(tree =>
-                    (tree || []).map(node => toggleNodeExpanded(node, item.id)),
-                  );
-                  return;
-                }
-              }}
-            >
-              <IconXiajiantou
+            {(item.children?.length ||
+              (!searchView && (item.hasChildren || !lazyCatalog))) && (
+              <IconButton
+                size='small'
                 sx={{
                   flexShrink: 0,
-                  fontSize: 16,
-                  transform: item.expanded ? 'none' : 'rotate(-90deg)',
-                  transition: 'transform 0.2s',
+                  position: 'relative',
+                  zIndex: 1,
+                  '&:hover': {
+                    color: 'primary.main',
+                  },
                 }}
-              />
-            </IconButton>
+                onClick={e => {
+                  e.stopPropagation();
+                  if (searchView) {
+                    setSearchExpanded(v => !v);
+                    return;
+                  }
+                  if (lazyCatalog) {
+                    toggleCatalogFolder?.(item);
+                    return;
+                  }
+                  if (item.type === 1) {
+                    setTree?.(tree =>
+                      (tree || []).map(node =>
+                        toggleNodeExpanded(node, item.id),
+                      ),
+                    );
+                    return;
+                  }
+                }}
+              >
+                <IconXiajiantou
+                  sx={{
+                    flexShrink: 0,
+                    fontSize: 16,
+                    transform: expanded ? 'none' : 'rotate(-90deg)',
+                    transition: 'transform 0.2s',
+                  }}
+                />
+              </IconButton>
+            )}
           </Stack>
         )}
       </Stack>
-      {item.children && item.children.length > 0 && item.expanded && (
+      {expanded && item.childrenLoading && (
+        <Stack sx={{ pl: (depth + 1) * 2 }}>
+          <Skeleton width='75%' height={32} />
+          <Skeleton width='55%' height={32} />
+        </Stack>
+      )}
+      {expanded && item.childrenError && (
+        <Button
+          size='small'
+          color='error'
+          sx={{ ml: (depth + 1) * 2, alignSelf: 'flex-start' }}
+          onClick={() => void loadCatalogChildren?.(item)}
+        >
+          加载失败，点击重试
+        </Button>
+      )}
+      {item.children && item.children.length > 0 && expanded && (
         <Stack gap={0.5}>
           {item.children.map(child => (
-            <CatalogFolder key={child.id} depth={depth + 1} item={child} />
+            <CatalogFolder
+              key={child.id}
+              depth={depth + 1}
+              item={child}
+              searchView={searchView}
+            />
           ))}
         </Stack>
       )}

@@ -23,7 +23,7 @@ import {
   Box,
   Button,
   Checkbox,
-  CircularProgress,
+  Skeleton,
   PaletteColor,
   Stack,
   TextField,
@@ -89,7 +89,7 @@ const TreeItem = React.forwardRef<
     disabled,
     scrollToItem,
     onItemClick,
-    loading: treeLoading = false,
+    onExpand,
   } = context;
 
   const readOnly = contextReadOnly || item.can_manage === false;
@@ -100,7 +100,8 @@ const TreeItem = React.forwardRef<
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   const createItem = useCallback(
-    (type: 1 | 2, contentType?: string) => {
+    async (type: 1 | 2, contentType?: string) => {
+      await onExpand?.(item);
       const newItemId = new Date().getTime().toString();
       // A navigation root is a virtual grouping node, not a real node in
       // `nodes`. Its ID belongs in nav_id, never in parent_id. Real folders
@@ -215,7 +216,7 @@ const TreeItem = React.forwardRef<
   }, [isEditting]);
 
   const menuList = useMemo(() => {
-    if (readOnly) return [];
+    if (readOnly || item.placeholder) return [];
     if (menu) {
       return (
         menu({
@@ -244,6 +245,37 @@ const TreeItem = React.forwardRef<
     !isChecked &&
     item.type === 1 &&
     hasSelectedDescendant(item, selectedSet);
+
+  if (item.placeholder) {
+    return (
+      <TreeItemWrapper
+        {...props}
+        ref={ref}
+        showDragHandle={false}
+        handleProps={{
+          ...props.handleProps,
+          role: undefined,
+          'aria-disabled': undefined,
+          tabIndex: undefined,
+        }}
+      >
+        {item.placeholder === 'loading' ? (
+          <Skeleton width={180} height={28} aria-label='正在加载目录内容' />
+        ) : (
+          <Button
+            size='small'
+            color='error'
+            onClick={e => {
+              e.stopPropagation();
+              item.retry?.();
+            }}
+          >
+            加载失败，点击重试
+          </Button>
+        )}
+      </TreeItemWrapper>
+    );
+  }
 
   return (
     <Box
@@ -455,12 +487,7 @@ const TreeItem = React.forwardRef<
                     onClick={e => e.stopPropagation()}
                     sx={{ flexShrink: 0, cursor: 'pointer' }}
                   >
-                    {item.type === 1 && treeLoading ? (
-                      <CircularProgress
-                        size={18}
-                        aria-label={`正在加载 ${item.name} 的目录`}
-                      />
-                    ) : item.type === 1 ? (
+                    {item.type === 1 ? (
                       <Emoji
                         readOnly={readOnly}
                         sx={{ width: 24, height: 24, fontSize: 14 }}

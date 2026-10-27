@@ -289,7 +289,10 @@ function SortableTreeInner<
           key={item.id}
           id={item.id as any}
           item={item}
-          childCount={item.children?.length}
+          childCount={Math.max(
+            item.children?.length || 0,
+            item.hasChildren ? 1 : 0,
+          )}
           depth={
             item.id === activeId && projected && !keepGhostInPlace
               ? projected.depth
@@ -297,8 +300,14 @@ function SortableTreeInner<
           }
           indentationWidth={indentationWidth}
           indicator={indicator}
-          collapsed={Boolean(item.collapsed && item.children?.length)}
-          onCollapse={item.children?.length ? handleCollapse : undefined}
+          collapsed={Boolean(
+            item.collapsed && (item.children?.length || item.hasChildren),
+          )}
+          onCollapse={
+            item.children?.length || item.hasChildren
+              ? handleCollapse
+              : undefined
+          }
           onRemove={handleRemove}
           isLast={
             item.id === activeId && projected ? projected.isLast : item.isLast
@@ -307,7 +316,7 @@ function SortableTreeInner<
             item.id === activeId && projected ? projected.parent : item.parent
           }
           TreeItemComponent={TreeItemComponent}
-          disableSorting={disableSorting}
+          disableSorting={disableSorting || item.disableSorting}
           sortableProps={sortableProps}
           keepGhostInPlace={keepGhostInPlace}
         />
@@ -353,7 +362,10 @@ function SortableTreeInner<
               key={item.id}
               id={item.id as any}
               item={item}
-              childCount={item.children?.length}
+              childCount={Math.max(
+                item.children?.length || 0,
+                item.hasChildren ? 1 : 0,
+              )}
               depth={
                 item.id === activeId && projected && !keepGhostInPlace
                   ? projected.depth
@@ -361,8 +373,14 @@ function SortableTreeInner<
               }
               indentationWidth={indentationWidth}
               indicator={indicator}
-              collapsed={Boolean(item.collapsed && item.children?.length)}
-              onCollapse={item.children?.length ? handleCollapse : undefined}
+              collapsed={Boolean(
+                item.collapsed && (item.children?.length || item.hasChildren),
+              )}
+              onCollapse={
+                item.children?.length || item.hasChildren
+                  ? handleCollapse
+                  : undefined
+              }
               onRemove={handleRemove}
               isLast={
                 item.id === activeId && projected
@@ -375,7 +393,7 @@ function SortableTreeInner<
                   : item.parent
               }
               TreeItemComponent={TreeItemComponent}
-              disableSorting={disableSorting}
+              disableSorting={disableSorting || item.disableSorting}
               sortableProps={sortableProps}
               keepGhostInPlace={keepGhostInPlace}
             />

@@ -36,6 +36,7 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
       canRootHaveChildren,
       registerDragHandlers,
       onItemClick,
+      onExpand,
     },
     ref,
   ) => {
@@ -69,6 +70,7 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
             sortableTreeRef.current?.scrollToItem(itemId);
           },
           onItemClick,
+          onExpand,
         }}
       >
         <SortableTree
@@ -127,6 +129,7 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
               });
             } else {
               updateData?.(newItems);
+              if (reason.type === 'expanded') onExpand?.(reason.item);
             }
           }}
           TreeItemComponent={TreeItem}

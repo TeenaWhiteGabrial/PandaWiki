@@ -1,22 +1,21 @@
+import { useLazyDocumentTree, branchKey } from '@/hooks/useLazyDocumentTree';
+import { getTreeNodeStatuses } from '@/request/NodeTree';
 import { useURLSearchParams } from '@/hooks';
 import VersionPublish from '@/pages/release/components/VersionPublish';
 import RagErrorReStart from '@/pages/document/component/RagErrorReStart';
 import { postApiV1NavMove } from '@/request/Nav';
-import {
-  getApiV1NodeListGroupNav,
-  postApiV1NodeBatchMove,
-  postApiV1NodeMoveNav,
-} from '@/request/Node';
-import {
-  GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
-  V1NavListResp,
-} from '@/request/types';
+import { postApiV1NodeBatchMove, postApiV1NodeMoveNav } from '@/request/Node';
+import { V1NavListResp } from '@/request/types';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setIsRefreshDocList, setNavId } from '@/store/slices/config';
 import type { TreeDragHandlers } from '@/utils/drag';
 import { isOrdinaryReadOnlyUser } from '@/utils/permission';
+import { resolveReaderBaseUrl } from '@/utils/readerUrl';
 import { message } from '@/components/ui';
-import { hasPollingRagTask } from '@/pages/document/utils/ragStatus';
+import {
+  getRagStatusMeta,
+  hasPollingRagTask,
+} from '@/pages/document/utils/ragStatus';
 import {
   DndContext,
   DragEndEvent,
@@ -29,8 +28,8 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { Box, Stack } from '@mui/material';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Box, Button, Stack } from '@mui/material';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DocPageHeader from './DocPageHeader';
 import DocPageNavs from './DocPageNavs';
 import DocPagePreview from './DocPagePreview';
@@ -56,12 +55,16 @@ const Content = () => {
   const [uploadTaskOpen, setUploadTaskOpen] = useState(false);
   const [learningProgressOpen, setLearningProgressOpen] = useState(false);
   const [publishIds, setPublishIds] = useState<string[]>([]);
-  const [groups, setGroups] = useState<
-    GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
-  >([]);
+  const {
+    groups,
+    setGroups,
+    loading,
+    error: treeError,
+    branches,
+    loadChildren,
+    refresh: reloadTree,
+  } = useLazyDocumentTree(kb_id || '', user?.id || '', search);
   const [navList, setNavList] = useState<V1NavListResp[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [navWidth, setNavWidth] = useState(() =>
     Math.max(300, Math.round(window.innerWidth * 0.3)),
   );
@@ -98,60 +101,44 @@ const Content = () => {
     height: 'calc(100vh - 183px)',
     minWidth: 0,
   };
+  const explorerNavId = currentFolderId.startsWith('nav:')
+    ? currentFolderId.slice(4)
+    : groups.find(g => g.list?.some(n => n.id === currentFolderId))?.nav_id ||
+      nav_id ||
+      '';
+  const explorerParentId = currentFolderId.startsWith('nav:')
+    ? ''
+    : currentFolderId;
+  const explorerBranchState = currentFolderId
+    ? branches[branchKey(explorerNavId, explorerParentId)]
+    : undefined;
   const shouldPollRagStatus = hasPollingRagTask(groups);
-  const treeRequestVersion = useRef(0);
-
-  const getData = useCallback(() => {
-    const requestVersion = ++treeRequestVersion.current;
-    if (!kb_id) {
-      setLoading(false);
-      return;
-    }
-    const params: { kb_id: string; search?: string } = { kb_id };
-    if (search) params.search = search;
-    setLoading(true);
-    return getApiV1NodeListGroupNav(params)
-      .then(res => {
-        if (requestVersion !== treeRequestVersion.current) return;
-        const list = res || [];
-        setGroups(list);
-        const nextNavList = list
-          .map(g => ({
-            id: g.nav_id,
-            name: g.nav_name,
-            position: g.position ?? 0,
-            permissions: g.permissions,
-            can_manage: g.can_manage,
-            can_create_document: g.can_create_document,
-            can_create_folder: g.can_create_folder,
-            can_configure: g.can_configure,
-          }))
-          .filter(n => n.id)
-          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-        setNavList(nextNavList);
-        if (nextNavList.length > 0) {
-          const storedNavId = kb_id
-            ? localStorage.getItem(`nav_id_${kb_id}`)
-            : null;
-          const validInList =
-            storedNavId && nextNavList.some(n => n.id === storedNavId);
-          const idToUse = validInList ? storedNavId! : nextNavList[0].id!;
-          dispatch(setNavId(idToUse));
-        } else {
-          dispatch(setNavId(''));
-        }
-        setHasLoadedOnce(true);
-      })
-      .finally(() => {
-        if (requestVersion === treeRequestVersion.current) setLoading(false);
-      });
-  }, [search, kb_id, dispatch]);
+  useEffect(() => {
+    const next = groups
+      .map(g => ({
+        id: g.nav_id,
+        name: g.nav_name,
+        position: g.position ?? 0,
+        permissions: g.permissions,
+        can_manage: g.can_manage,
+        can_create_document: g.can_create_document,
+        can_create_folder: g.can_create_folder,
+        can_configure: g.can_configure,
+      }))
+      .filter(n => n.id);
+    setNavList(next);
+    const stored = kb_id ? localStorage.getItem(`nav_id_${kb_id}`) : '';
+    if (!next.some(n => n.id === nav_id))
+      dispatch(
+        setNavId(next.find(n => n.id === stored)?.id || next[0]?.id || ''),
+      );
+  }, [groups, kb_id, nav_id, dispatch]);
 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const refresh = useCallback(() => {
-    getData();
+    void reloadTree();
     setRefreshTrigger(t => t + 1);
-  }, [getData]);
+  }, [reloadTree]);
 
   const handleExplorerResizeStart = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -185,7 +172,10 @@ const Content = () => {
     [readOnlyUser],
   );
 
-  const [wikiUrl, setWikiUrl] = useState<string>('');
+  const wikiUrl = useMemo(
+    () => resolveReaderBaseUrl(kbDetail?.access_settings),
+    [kbDetail?.access_settings],
+  );
   const treeDragHandlersRef = useRef<TreeDragHandlers | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
@@ -294,40 +284,24 @@ const Content = () => {
   }, []);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && kb_id) {
-        getData();
-      }
+    const revalidate = () => {
+      if (document.visibilityState === 'visible') void reloadTree();
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [getData, kb_id]);
+    document.addEventListener('visibilitychange', revalidate);
+    return () => document.removeEventListener('visibilitychange', revalidate);
+  }, [reloadTree]);
 
   useEffect(() => {
-    if (kbDetail?.access_settings?.base_url) {
-      setWikiUrl(kbDetail.access_settings.base_url);
-      return;
-    }
-    const host = kbDetail?.access_settings?.hosts?.[0] || '';
-    if (host === '') return;
-    const { ssl_ports = [], ports = [] } = kbDetail?.access_settings || {};
-
-    if (ssl_ports) {
-      if (ssl_ports.includes(443)) setWikiUrl(`https://${host}`);
-      else if (ssl_ports.length > 0)
-        setWikiUrl(`https://${host}:${ssl_ports[0]}`);
-    } else if (ports) {
-      if (ports.includes(80)) setWikiUrl(`http://${host}`);
-      else if (ports.length > 0) setWikiUrl(`http://${host}:${ports[0]}`);
-    }
-  }, [kbDetail]);
-
-  useEffect(() => {
-    if (kb_id) getData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, kb_id]);
+    if (leftViewMode !== 'explorer' || !currentFolderId) return;
+    const nav = currentFolderId.startsWith('nav:')
+      ? currentFolderId.slice(4)
+      : groups.find(g => g.list?.some(n => n.id === currentFolderId))?.nav_id;
+    if (nav)
+      void loadChildren(
+        nav,
+        currentFolderId.startsWith('nav:') ? '' : currentFolderId,
+      );
+  }, [currentFolderId, leftViewMode, loadChildren, groups]);
 
   useEffect(() => {
     setCurrentFolderId('');
@@ -352,7 +326,40 @@ const Content = () => {
     let timer: number;
     const poll = async () => {
       try {
-        await getData();
+        const ids = groups
+          .flatMap(g => g.list || [])
+          .filter(
+            n =>
+              n.type === 2 &&
+              n.can_manage !== false &&
+              getRagStatusMeta(n)?.polling,
+          )
+          .map(n => n.id!);
+        const statuses = new Map<
+          string,
+          Awaited<ReturnType<typeof getTreeNodeStatuses>>[number]
+        >();
+        for (let i = 0; i < ids.length; i += 1000) {
+          const batch = await getTreeNodeStatuses(
+            kb_id,
+            ids.slice(i, i + 1000),
+          );
+          if (stopped) return;
+          for (const status of batch)
+            if (status.id) statuses.set(status.id, status);
+        }
+        if (!stopped)
+          setGroups(prev =>
+            prev.map(g => ({
+              ...g,
+              list: g.list?.map(n => {
+                const status = statuses.get(n.id!);
+                return status
+                  ? { ...n, status: status.status, rag_info: status.rag_info }
+                  : n;
+              }),
+            })),
+          );
       } catch {
         // Request errors are reported by the shared response interceptor.
       } finally {
@@ -364,7 +371,7 @@ const Content = () => {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [getData, kb_id, shouldPollRagStatus]);
+  }, [kb_id, shouldPollRagStatus, groups, setGroups]);
 
   useEffect(() => {
     document.body.classList.toggle('document-workbench-fullscreen', fullscreen);
@@ -375,6 +382,11 @@ const Content = () => {
 
   return (
     <>
+      {treeError && (
+        <Button color='error' onClick={refresh}>
+          目录加载失败，点击重试
+        </Button>
+      )}
       {!fullscreen && (
         <DocPageHeader
           onPublishClick={() => {
@@ -439,8 +451,9 @@ const Content = () => {
                 }}
                 refresh={refresh}
                 isSearching={!!search}
-                loading={loading && !hasLoadedOnce}
-                refreshing={loading && hasLoadedOnce}
+                loading={loading && groups.length === 0}
+                branches={branches}
+                onLoadChildren={loadChildren}
                 width={leftWidth}
                 onWidthChange={setNavWidth}
                 onDocumentSelect={item => {
@@ -471,7 +484,12 @@ const Content = () => {
               }}
             >
               <DocPageFileManager
-                loading={loading}
+                loading={loading || explorerBranchState === 'loading'}
+                loadError={explorerBranchState === 'error'}
+                onRetry={() => {
+                  if (explorerNavId)
+                    void loadChildren(explorerNavId, explorerParentId);
+                }}
                 groups={groups}
                 navId={nav_id}
                 folderId={currentFolderId}

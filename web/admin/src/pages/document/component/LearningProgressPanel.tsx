@@ -11,6 +11,7 @@ import {
   isLearningTaskActive,
 } from '@/pages/document/utils/ragStatus';
 import {
+  getApiV1NodeListGroupNav,
   postApiV1NodeLearningCancel,
   postApiV1NodeRestudy,
 } from '@/request/Node';
@@ -83,11 +84,32 @@ const needsAttention = (item: LearningDoc) =>
 
 const LearningProgressPanel = ({
   open,
-  groups,
+  groups: initialGroups,
   onClose,
   refresh,
 }: LearningProgressPanelProps) => {
   const { kb_id } = useAppSelector(state => state.config);
+  const [groups, setGroups] = useState(initialGroups);
+  useEffect(() => {
+    if (!open || !kb_id) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const load = async () => {
+      try {
+        const result = await getApiV1NodeListGroupNav({ kb_id });
+        if (!stopped) setGroups(result || []);
+      } catch {
+        if (!stopped) setGroups([]);
+      } finally {
+        if (!stopped) timer = setTimeout(load, 5000);
+      }
+    };
+    void load();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [open, kb_id]);
   const [detailId, setDetailId] = useState<string>();
   const [filter, setFilter] = useState<FilterKey>('attention');
   const [keyword, setKeyword] = useState('');

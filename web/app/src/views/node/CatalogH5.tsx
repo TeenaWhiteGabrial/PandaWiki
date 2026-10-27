@@ -1,11 +1,12 @@
 'use client';
 
 import { IconNav } from '@/components/icons';
+import type { ITreeItem } from '@/assets/type';
 import { useStore } from '@/provider';
 import { filterTreeBySearch } from '@/utils';
 import { addExpandState } from '@/utils/tree';
 import SearchIcon from '@mui/icons-material/Search';
-import { Box, Stack, TextField } from '@mui/material';
+import { Box, Button, Skeleton, Stack, TextField } from '@mui/material';
 import { IconXiajiantou } from '@panda-wiki/icons';
 import { useDebounce } from 'ahooks';
 import { useParams } from 'next/navigation';
@@ -17,20 +18,64 @@ const CatalogH5 = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const params = useParams() || {};
   const id = params.id as string;
-  const { tree: initialTree, kbDetail, nodeList } = useStore();
+  const {
+    tree: initialTree,
+    kbDetail,
+    nodeList,
+    searchCatalog,
+    lazyCatalog,
+    authRevision,
+    authInfo,
+  } = useStore();
+  const [searchTree, setSearchTree] = useState<ITreeItem[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const debouncedSearchTerm = useDebounce(searchTerm, { wait: 300 });
 
   const catalogSetting = kbDetail?.settings?.catalog_settings;
   const catalogFolderExpand = catalogSetting?.catalog_folder !== 2;
 
+  useEffect(() => {
+    let disposed = false;
+    setSearchTree([]);
+    setSearchError(false);
+    if (!debouncedSearchTerm || !searchCatalog) {
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    searchCatalog(debouncedSearchTerm)
+      .then(result => {
+        if (!disposed) setSearchTree(result);
+      })
+      .catch(() => {
+        if (!disposed) setSearchError(true);
+      })
+      .finally(() => {
+        if (!disposed) setSearchLoading(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [debouncedSearchTerm, searchCatalog, authRevision, authInfo?.id, retry]);
   const tree = useMemo(() => {
+    if (lazyCatalog)
+      return debouncedSearchTerm ? searchTree : initialTree || [];
     const { tree: originalTree } = addExpandState(
       initialTree || [],
       id as string,
       catalogFolderExpand,
     );
     return filterTreeBySearch(originalTree, debouncedSearchTerm);
-  }, [initialTree, id, catalogFolderExpand, debouncedSearchTerm]);
+  }, [
+    initialTree,
+    id,
+    catalogFolderExpand,
+    debouncedSearchTerm,
+    lazyCatalog,
+    searchTree,
+  ]);
 
   useEffect(() => {
     if (open) {
@@ -141,8 +186,29 @@ const CatalogH5 = () => {
           }}
         />
         <Box sx={{ py: 3 }}>
+          {searchLoading && (
+            <>
+              <Skeleton height={36} />
+              <Skeleton height={36} />
+            </>
+          )}
+          {searchError && (
+            <Button onClick={() => setRetry(n => n + 1)}>
+              搜索失败，点击重试
+            </Button>
+          )}
+          {!searchLoading &&
+            !searchError &&
+            debouncedSearchTerm &&
+            tree.length === 0 && (
+              <Box sx={{ color: 'text.secondary', p: 2 }}>无搜索结果</Box>
+            )}
           {tree.map(item => (
-            <CatalogFolder key={item.id} item={item} />
+            <CatalogFolder
+              key={`${debouncedSearchTerm}:${item.id}`}
+              item={item}
+              searchView={!!debouncedSearchTerm}
+            />
           ))}
         </Box>
       </Box>

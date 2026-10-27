@@ -77,6 +77,7 @@ func TestDocumentTreeQueriesPostgres(t *testing.T) {
 	}
 	hiddenID := uuid.NewString()
 	nodes = append(nodes, domain.Node{ID: hiddenID, KBID: kbID, NavId: navID, Type: domain.NodeTypeDocument, Name: "unmanaged", CreatorId: adminID, EditorId: adminID})
+	nodes[4].Meta = domain.NodeMeta{FileKey: "private/test-object.pdf", Summary: "tree fixture summary"}
 	if err := tx.CreateInBatches(nodes, 100).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -153,6 +154,7 @@ func TestDocumentTreeQueriesPostgres(t *testing.T) {
 	if err := tx.CreateInBatches(releaseLinks, 100).Error; err != nil {
 		t.Fatal(err)
 	}
+	assertLazyTrees(t, u, kbID, navID, adminID, managerID, nodes)
 	readerNodes := func() []*domain.ShareNodeListItemResp {
 		result := make([]*domain.ShareNodeListItemResp, 0, len(nodes))
 		for _, node := range nodes {
@@ -194,6 +196,10 @@ func TestDocumentTreeQueriesPostgres(t *testing.T) {
 	rootPermissions.DeniedUserIDs = []string{managerID}
 	if err := tx.Model(&domain.Node{}).Where("id = ?", nodes[0].ID).Update("permissions", rootPermissions).Error; err != nil {
 		t.Fatal(err)
+	}
+	lazyAfter, err := u.GetShareNodeTree(context.Background(), kbID, managerID, v1.NodeListGroupNavReq{NavID: navID})
+	if err != nil || len(lazyAfter) != 1 || len(lazyAfter[0].List) != 1 || lazyAfter[0].List[0].ID != hiddenID || lazyAfter[0].List[0].HasChildren {
+		t.Fatalf("lazy tree leaked revoked branch: %+v %v", lazyAfter, err)
 	}
 	// The ancestor need not be included in the published/search result rows.
 	readable, err := u.filterShareNodesWithNavigationPaths(context.Background(), kbID, managerID, readerNodes()[1:])

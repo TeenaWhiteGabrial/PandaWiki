@@ -1,6 +1,7 @@
 package share
 
 import (
+	nodeV1 "github.com/chaitin/panda-wiki/api/node/v1"
 	"github.com/labstack/echo/v4"
 
 	shareV1 "github.com/chaitin/panda-wiki/api/share/v1"
@@ -34,9 +35,28 @@ func NewShareNodeHandler(
 		h.ShareAuthMiddleware.Authorize,
 	)
 	group.GET("/list", h.ShareNodeList)
+	group.GET("/tree", h.ShareNodeTree)
 	group.GET("/detail", h.GetNodeDetail)
 
 	return h
+}
+
+func (h *ShareNodeHandler) ShareNodeTree(c echo.Context) error {
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	defer h.TrackTreeLoad(c)()
+	var req nodeV1.NodeListGroupNavReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "invalid tree request", err)
+	}
+	kbID := c.Request().Header.Get("X-KB-ID")
+	if kbID == "" {
+		return h.NewResponseWithError(c, "kb_id is required", nil)
+	}
+	nodes, err := h.usecase.GetShareNodeTree(c.Request().Context(), kbID, domain.GetShareUserID(c), req)
+	if err != nil {
+		return h.NewResponseWithError(c, "failed to get node tree", err)
+	}
+	return h.NewTreeResponseWithData(c, nodes)
 }
 
 // ShareNodeList

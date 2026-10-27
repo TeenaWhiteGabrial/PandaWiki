@@ -31,9 +31,14 @@ type ShareNodeDetailResp struct {
 }
 
 type NodeListGroupNavResp struct {
-	NavName  string                         `json:"nav_name"`
-	NavID    string                         `json:"nav_id"`
-	Position float64                        `json:"position"`
-	Count    int64                          `json:"count"`
-	List     []domain.ShareNodeListItemResp `json:"list"`
+	ViewerID      string                         `json:"viewer_id,omitempty"`
+	TreeRevision  string                         `json:"tree_revision,omitempty"`
+	HasChildren   bool                           `json:"has_children"`
+	LoadedParents []string                       `json:"loaded_parents,omitempty"`
+	EntryNodeID   string                         `json:"entry_node_id,omitempty"`
+	NavName       string                         `json:"nav_name"`
+	NavID         string                         `json:"nav_id"`
+	Position      float64                        `json:"position"`
+	Count         int64                          `json:"count"`
+	List          []domain.ShareNodeListItemResp `json:"list"`
 }

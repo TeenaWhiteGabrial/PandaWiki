@@ -133,7 +133,13 @@ const Header = ({
     }
 
     // 刷新目录数据（删除后更新目录显示）
-    await refreshCatalog();
+    const refreshedGroups = await refreshCatalog();
+    if (!nextDoc) {
+      const entry =
+        refreshedGroups.find(group => group.nav_id === nav_id)?.entry_node_id ||
+        refreshedGroups.find(group => group.entry_node_id)?.entry_node_id;
+      if (entry) nextDoc = { id: entry } as ITreeItem;
+    }
 
     // 导航到下一个文档或首页
     if (nextDoc) {

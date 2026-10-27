@@ -603,26 +603,19 @@ func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId, userID string)
 }
 
 func (u *NodeUsecase) GetNodeReleaseListByParentID(ctx context.Context, kbID, parentID, userID string) ([]*domain.ShareNodeDetailItem, error) {
-	// 一次性查询所有节点
-	allNodes, err := u.nodeRepo.GetNodeReleaseListByKBID(ctx, kbID)
+	groups, err := u.GetShareNodeTree(ctx, kbID, userID, v1.NodeListGroupNavReq{ParentID: parentID})
 	if err != nil {
 		return nil, err
 	}
-
-	visibleNodes, err := u.filterShareNodesWithNavigationPaths(ctx, kbID, userID, allNodes)
-	if err != nil {
-		return nil, err
+	result := []*domain.ShareNodeDetailItem{}
+	for _, group := range groups {
+		for _, n := range group.List {
+			if n.ParentID != parentID {
+				continue
+			}
+			result = append(result, &domain.ShareNodeDetailItem{ID: n.ID, Name: n.Name, Type: n.Type, PathOnly: n.PathOnly, ParentID: n.ParentID, Position: n.Position, Emoji: n.Emoji, Meta: n.Meta, UpdatedAt: n.UpdatedAt})
+		}
 	}
-
-	// 构建父子关系映射
-	childrenMap := make(map[string][]*domain.ShareNodeListItemResp)
-	for _, node := range visibleNodes {
-		childrenMap[node.ParentID] = append(childrenMap[node.ParentID], node)
-	}
-
-	// 构建树结构
-	result := u.buildNodeTree(parentID, childrenMap)
-
 	return result, nil
 }
 
@@ -1481,6 +1474,9 @@ func (u *NodeUsecase) GetNodeStats(ctx context.Context, kbId string) (*v1.NodeSt
 }
 
 func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeListGroupNavReq) ([]*v1.NodeListGroupNavResp, error) {
+	if req.Tree {
+		return u.GetNodeTree(ctx, req)
+	}
 	done := domain.MeasureTreeLoadPhase(ctx, "nodes_query")
 	nodes, err := u.nodeRepo.GetNodeListByStatus(ctx, req.KbId, req.Status, req.Search)
 	done()

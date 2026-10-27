@@ -1,3 +1,4 @@
+import { branchKey, type BranchState } from '@/hooks/useLazyDocumentTree';
 import { ITreeItem } from '@/api';
 import Cascader from '@/components/Cascader';
 import Loading from '@/components/Loading';
@@ -19,6 +20,7 @@ import {
   IconButton,
   Popover,
   Stack,
+  Skeleton,
   useTheme,
 } from '@mui/material';
 import {
@@ -60,6 +62,8 @@ interface CatalogProps {
   groups: GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[];
   nav_id: string;
   loading?: boolean;
+  branches?: Record<string, BranchState>;
+  onLoadChildren?: (nav: string, parent?: string) => Promise<void>;
   onRefresh: () => Promise<
     GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
   >;
@@ -73,6 +77,8 @@ const Catalog = ({
   groups,
   nav_id,
   loading = false,
+  branches = {},
+  onLoadChildren,
   onRefresh,
   onSaveCurrentDoc,
 }: CatalogProps) => {
@@ -122,7 +128,8 @@ const Catalog = ({
       dispatch(setNavId(targetNavId));
       setNavPopoverAnchor(null);
       const targetGroup = groups.find(g => g.nav_id === targetNavId);
-      const firstDocId = getFirstDocId(targetGroup?.list);
+      const firstDocId =
+        targetGroup?.entry_node_id || getFirstDocId(targetGroup?.list);
       if (firstDocId) {
         if (isHistory) {
           navigate(`/doc/editor/history/${firstDocId}`);
@@ -189,7 +196,7 @@ const Catalog = ({
           }
           cur = parent;
         }
-        setExpandedFolders(expanded);
+        setExpandedFolders(prev => new Set([...prev, ...expanded]));
       } catch (e) {
         setExpandedFolders(new Set());
       }
@@ -199,6 +206,7 @@ const Catalog = ({
   }, [externalData, id]);
 
   const toggleFolder = (folderId: string) => {
+    if (!expandedFolders.has(folderId)) void onLoadChildren?.(nav_id, folderId);
     setExpandedFolders(prev => {
       const newSet = new Set(prev);
       if (newSet.has(folderId)) {
@@ -382,6 +390,21 @@ const Catalog = ({
           )}
           {item.type === 1 && renderAdd(item.id)}
         </Stack>
+        {expandedFolders.has(item.id) &&
+          branches[branchKey(nav_id, item.id)] && (
+            <Box sx={{ pl: (depth + 1) * 2.5 }}>
+              {branches[branchKey(nav_id, item.id)] === 'loading' ? (
+                <Skeleton height={32} />
+              ) : (
+                <Button
+                  color='error'
+                  onClick={() => void onLoadChildren?.(nav_id, item.id)}
+                >
+                  加载失败，点击重试
+                </Button>
+              )}
+            </Box>
+          )}
         {item.children &&
           item.children.length > 0 &&
           expandedFolders.has(item.id) && (
@@ -536,7 +559,11 @@ const Catalog = ({
           overflowX: 'hidden',
         }}
       >
-        {loading ? (
+        {branches[branchKey(nav_id)] === 'error' ? (
+          <Button color='error' onClick={() => void onLoadChildren?.(nav_id)}>
+            目录加载失败，点击重试
+          </Button>
+        ) : loading || branches[branchKey(nav_id)] === 'loading' ? (
           <Loading />
         ) : data.length === 0 ? (
           <Stack gap={1}>

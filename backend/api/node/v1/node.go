@@ -98,13 +98,22 @@ type NodeMoveNavReq struct {
 }
 
 type NodeListGroupNavReq struct {
-	KbId   string   `json:"kb_id" query:"kb_id" validate:"required"`
-	NavIds []string `json:"nav_ids" query:"nav_ids[]"`
-	Search string   `json:"search" query:"search"`
-	Status string   `json:"status" query:"status" validate:"omitempty,oneof=released unpublished unstudied"`
+	Tree     bool     `query:"tree"`
+	NavID    string   `query:"nav_id" json:"nav_id"`
+	ParentID string   `query:"parent_id" json:"parent_id"`
+	PathID   string   `query:"path_id" json:"path_id"`
+	Parents  []string `query:"parents[]" json:"parents" validate:"max=5000"`
+	KbId     string   `json:"kb_id" query:"kb_id" validate:"required"`
+	NavIds   []string `json:"nav_ids" query:"nav_ids[]"`
+	Search   string   `json:"search" query:"search"`
+	Status   string   `json:"status" query:"status" validate:"omitempty,oneof=released unpublished unstudied"`
 }
 
 type NodeListGroupNavResp struct {
+	EntryNodeID       string                    `json:"entry_node_id,omitempty"`
+	TreeRevision      string                    `json:"tree_revision,omitempty"`
+	HasChildren       bool                      `json:"has_children"`
+	LoadedParents     []string                  `json:"loaded_parents,omitempty"`
 	CanCreateDocument bool                      `json:"can_create_document"`
 	CanCreateFolder   bool                      `json:"can_create_folder"`
 	CanConfigure      bool                      `json:"can_configure"`

@@ -33,6 +33,11 @@ const NavBar = ({
     (_: React.SyntheticEvent, newValue: string) => {
       if (newValue === selectedNavId) return;
       setSelectedNavId?.(newValue);
+      const entry = navList.find(n => n.id === newValue)?.entryNodeId;
+      if (entry) {
+        router.push(`${basePath}/node/${entry}`);
+        return;
+      }
       const nodeList = navDataMap[newValue];
       if (nodeList?.length) {
         const tree = filterEmptyFolders(convertToTree(nodeList));
@@ -42,7 +47,7 @@ const NavBar = ({
         }
       }
     },
-    [selectedNavId, setSelectedNavId, navDataMap, basePath, router],
+    [selectedNavId, setSelectedNavId, navDataMap, navList, basePath, router],
   );
 
   if (!navList.length || navList.length <= 1) {

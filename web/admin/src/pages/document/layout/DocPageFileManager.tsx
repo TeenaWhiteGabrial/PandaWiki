@@ -55,6 +55,8 @@ import { useEffect, useMemo, useState } from 'react';
 interface DocPageFileManagerProps {
   groups: GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[];
   loading?: boolean;
+  loadError?: boolean;
+  onRetry?: () => void;
   navId?: string;
   folderId: string;
   onFolderChange: (id: string) => void;
@@ -77,6 +79,8 @@ const NAV_PATH_PREFIX = 'nav:';
 const DocPageFileManager = ({
   groups,
   loading = false,
+  loadError = false,
+  onRetry,
   navId,
   folderId,
   onFolderChange,
@@ -588,7 +592,15 @@ const DocPageFileManager = ({
                 <FolderOutlinedIcon sx={{ fontSize: 48, opacity: 0.35 }} />
               )}
               <Typography variant='body2'>
-                {loading ? '正在加载目录…' : '此目录为空'}
+                {loadError ? (
+                  <Button color='error' onClick={onRetry}>
+                    加载失败，点击重试
+                  </Button>
+                ) : loading ? (
+                  '正在加载目录…'
+                ) : (
+                  '此目录为空'
+                )}
               </Typography>
             </Stack>
           ) : (
@@ -887,13 +899,7 @@ const DocPageFileManager = ({
                         />
                       )}
                     </Box>
-                    {isFolder && loading ? (
-                      <CircularProgress
-                        size={24}
-                        aria-label={`正在加载 ${item.name} 的目录`}
-                        sx={{ mx: '2px' }}
-                      />
-                    ) : isFolder ? (
+                    {isFolder ? (
                       <FolderOutlinedIcon
                         sx={{ color: 'warning.main', fontSize: 28 }}
                       />

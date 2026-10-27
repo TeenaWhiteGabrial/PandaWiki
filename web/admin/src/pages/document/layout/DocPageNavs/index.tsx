@@ -1,3 +1,5 @@
+import { branchKey, type BranchState } from '@/hooks/useLazyDocumentTree';
+import { getReaderDocumentUrl } from '@/utils/readerUrl';
 import Card from '@/components/Card';
 import DragTree, { type DragTreeHandle } from '@/components/Drag/DragTree';
 import type { TreeMenuItem } from '@/components/Drag/DragTree/TreeMenu';
@@ -281,7 +283,8 @@ interface DocPageNavsProps {
   refresh?: () => void;
   isSearching?: boolean;
   loading?: boolean;
-  refreshing?: boolean;
+  branches?: Record<string, BranchState>;
+  onLoadChildren?: (nav: string, parent?: string) => Promise<void>;
   width?: number;
   onWidthChange?: (width: number) => void;
   onDocumentSelect?: (item: ITreeItem) => void;
@@ -302,7 +305,8 @@ const DocPageNavs = ({
   refresh,
   isSearching = false,
   loading = false,
-  refreshing = false,
+  branches = {},
+  onLoadChildren,
   width = 300,
   onWidthChange,
   onDocumentSelect,
@@ -403,13 +407,28 @@ const DocPageNavs = ({
       items.map(item => ({
         ...item,
         nav_id: navId,
+        collapsed: isSearching ? false : item.collapsed,
+        children:
+          item.type === 1 && branches[branchKey(navId, item.id)]
+            ? [
+                {
+                  id: `loading:${item.id}`,
+                  parentId: item.id,
+                  name: '',
+                  type: 2,
+                  level: item.level + 1,
+                  placeholder: branches[branchKey(navId, item.id)],
+                  disableSorting: true,
+                  retry: () => void onLoadChildren?.(navId, item.id),
+                },
+              ]
+            : item.children
+              ? attachNav(item.children, navId)
+              : item.children,
         canHaveChildren:
           item.type === 1
             ? (dragItem: ITreeItem) => dragItem.kind !== 'nav'
             : false,
-        children: item.children
-          ? attachNav(item.children, navId)
-          : item.children,
       }));
 
     const tree: ITreeItem[] = sortedNavs.map(nav => {
@@ -432,15 +451,36 @@ const DocPageNavs = ({
           nav.can_create_document ?? group?.can_create_document,
         can_create_folder: nav.can_create_folder ?? group?.can_create_folder,
         nav_id: nav.id!,
-        children,
+        hasChildren: group?.has_children,
+        children: branches[branchKey(nav.id!)]
+          ? [
+              {
+                id: `loading:${nav.id}`,
+                parentId: nav.id,
+                name: '',
+                type: 2,
+                level: 1,
+                placeholder: branches[branchKey(nav.id!)],
+                disableSorting: true,
+                retry: () => void onLoadChildren?.(nav.id!, ''),
+              },
+            ]
+          : children,
         canHaveChildren: (dragItem: ITreeItem) => dragItem.kind !== 'nav',
         // Entering the document workspace starts compact; users can expand
         // any directory on demand.
-        collapsed: true,
+        collapsed: !isSearching,
       };
     });
     return addDocumentPermissionTags(tree, permissionCatalog);
-  }, [groups, sortedNavs, permissionCatalog]);
+  }, [
+    groups,
+    sortedNavs,
+    permissionCatalog,
+    branches,
+    onLoadChildren,
+    isSearching,
+  ]);
   const [treeData, setTreeData] = useState<ITreeItem[]>(unifiedTree);
 
   useEffect(() => {
@@ -743,7 +783,14 @@ const DocPageNavs = ({
         message.warning('当前文档未发布，无法查看前台文档');
         return;
       }
-      window.open(`${wikiUrl}/node/${id}`, '_blank');
+      const url = getReaderDocumentUrl(wikiUrl, id);
+      if (!url) {
+        message.warning(
+          '未配置有效的用户端地址，请在“设置 → 门户网站 → 网站基本信息”中设置“网址绝对路径前缀”',
+        );
+        return;
+      }
+      window.open(url, '_blank');
     },
     [groups, wikiUrl],
   );
@@ -821,13 +868,25 @@ const DocPageNavs = ({
       if (targetNavId && targetNavId !== selectedId) {
         handleSelect(targetNavId);
       }
+      if (item.type === 1 && !isSearching)
+        void onLoadChildren?.(
+          targetNavId || item.id,
+          item.kind === 'nav' ? '' : item.id,
+        );
       if (item.kind !== 'nav' && item.type === 2) {
         onDocumentSelect?.(item);
       } else if (item.kind !== 'nav' && item.type === 1) {
         onFolderSelect?.(item);
       }
     },
-    [handleSelect, onDocumentSelect, selectedId],
+    [
+      handleSelect,
+      onDocumentSelect,
+      onFolderSelect,
+      selectedId,
+      isSearching,
+      onLoadChildren,
+    ],
   );
 
   const handleResizeStart = useCallback(
@@ -932,7 +991,15 @@ const DocPageNavs = ({
               }}
             >
               <DragTree
-                loading={refreshing}
+                onExpand={item =>
+                  !isSearching
+                    ? onLoadChildren?.(
+                        item.nav_id || item.id,
+                        item.kind === 'nav' ? '' : item.id,
+                      )
+                    : undefined
+                }
+                refresh={refresh}
                 readOnly={readOnlyUser}
                 supportSelect={false}
                 ref={dragTreeRef}

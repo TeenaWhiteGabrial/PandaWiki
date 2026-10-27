@@ -8,7 +8,9 @@ import { useBasePath } from '@/hooks';
 
 const NodePage = () => {
   const basePath = useBasePath();
-  const { tree } = useStore();
+  const { tree, navList = [], lazyCatalog } = useStore();
+  const entry = navList.find(n => n.entryNodeId)?.entryNodeId;
+  if (lazyCatalog) return entry ? redirect(`${basePath}/node/${entry}`) : <></>;
   const firstNode = deepSearchFirstNode(tree || []);
 
   if (firstNode) {

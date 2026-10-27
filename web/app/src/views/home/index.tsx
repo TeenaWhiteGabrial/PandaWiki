@@ -1,6 +1,6 @@
 'use client';
 
-import { Banner } from '@panda-wiki/ui';
+import Banner from '@panda-wiki/ui/banner';
 import dynamic from 'next/dynamic';
 import { DomainRecommendNodeListResp } from '@/request/types';
 import { convertToTree } from '@/utils/tree';
@@ -198,25 +198,21 @@ const handleQuestionProps = (config: any = {}) => {
 
 const componentMap = {
   banner: Banner,
-  basic_doc: dynamic(() => import('@panda-wiki/ui').then(mod => mod.BasicDoc)),
-  dir_doc: dynamic(() => import('@panda-wiki/ui').then(mod => mod.DirDoc)),
-  simple_doc: dynamic(() =>
-    import('@panda-wiki/ui').then(mod => mod.SimpleDoc),
-  ),
-  carousel: dynamic(() => import('@panda-wiki/ui').then(mod => mod.Carousel)),
-  faq: dynamic(() => import('@panda-wiki/ui').then(mod => mod.Faq)),
-  text: dynamic(() => import('@panda-wiki/ui').then(mod => mod.Text)),
-  nav_doc: dynamic(() => import('@panda-wiki/ui').then(mod => mod.NavDoc)),
-  case: dynamic(() => import('@panda-wiki/ui').then(mod => mod.Case)),
-  metrics: dynamic(() => import('@panda-wiki/ui').then(mod => mod.Metrics)),
-  feature: dynamic(() => import('@panda-wiki/ui').then(mod => mod.Feature)),
-  text_img: dynamic(() => import('@panda-wiki/ui').then(mod => mod.ImgText)),
-  img_text: dynamic(() => import('@panda-wiki/ui').then(mod => mod.ImgText)),
-  comment: dynamic(() => import('@panda-wiki/ui').then(mod => mod.Comment)),
-  block_grid: dynamic(() =>
-    import('@panda-wiki/ui').then(mod => mod.BlockGrid),
-  ),
-  question: dynamic(() => import('@panda-wiki/ui').then(mod => mod.Question)),
+  basic_doc: dynamic(() => import('@panda-wiki/ui/basicDoc')),
+  dir_doc: dynamic(() => import('@panda-wiki/ui/dirDoc')),
+  simple_doc: dynamic(() => import('@panda-wiki/ui/simpleDoc')),
+  carousel: dynamic(() => import('@panda-wiki/ui/carousel')),
+  faq: dynamic(() => import('@panda-wiki/ui/faq')),
+  text: dynamic(() => import('@panda-wiki/ui/text')),
+  nav_doc: dynamic(() => import('@panda-wiki/ui/navDoc')),
+  case: dynamic(() => import('@panda-wiki/ui/case')),
+  metrics: dynamic(() => import('@panda-wiki/ui/metrics')),
+  feature: dynamic(() => import('@panda-wiki/ui/feature')),
+  text_img: dynamic(() => import('@panda-wiki/ui/imgText')),
+  img_text: dynamic(() => import('@panda-wiki/ui/imgText')),
+  comment: dynamic(() => import('@panda-wiki/ui/comment')),
+  block_grid: dynamic(() => import('@panda-wiki/ui/blockGrid')),
+  question: dynamic(() => import('@panda-wiki/ui/question')),
 } as const;
 
 const Welcome = () => {

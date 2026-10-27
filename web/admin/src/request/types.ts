@@ -1106,6 +1106,7 @@ export interface DomainNodeGroupDetail {
 }
 
 export interface DomainNodeListItemResp {
+  has_children?: boolean;
   can_create_document?: boolean;
   can_create_folder?: boolean;
   can_manage?: boolean;
@@ -1657,6 +1658,10 @@ export interface GithubComChaitinPandaWikiApiAuthV1AuthGetResp {
 }
 
 export interface GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp {
+  has_children?: boolean;
+  loaded_parents?: string[];
+  entry_node_id?: string;
+  tree_revision?: string;
   can_create_document?: boolean;
   can_create_folder?: boolean;
   can_configure?: boolean;
@@ -2256,6 +2261,11 @@ export interface GetApiV1NodeListParams {
 }
 
 export interface GetApiV1NodeListGroupNavParams {
+  tree?: boolean;
+  nav_id?: string;
+  parent_id?: string;
+  path_id?: string;
+  "parents[]"?: string[];
   kb_id: string;
   nav_ids?: string[];
   search?: string;

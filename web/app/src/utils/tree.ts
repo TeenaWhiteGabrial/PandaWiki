@@ -6,6 +6,7 @@ export interface NavItem {
   id: string;
   name: string;
   position?: number;
+  entryNodeId?: string;
 }
 
 /**
@@ -121,6 +122,7 @@ export function convertToTree(data: NodeListItem[]) {
       order: item.position,
       emoji: item.emoji,
       pathOnly: item.path_only,
+      hasChildren: item.has_children,
       type: item.type,
       parentId: item.parent_id || null,
       children: [],
@@ -212,7 +214,7 @@ export const filterEmptyFolders = (
     })
     .filter(item => {
       if (item.type === 1) {
-        return item.children && item.children.length > 0;
+        return !!item.hasChildren || !!item.children?.length;
       }
       return true;
     });

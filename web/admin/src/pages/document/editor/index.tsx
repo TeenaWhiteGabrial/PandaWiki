@@ -1,7 +1,8 @@
+import { useLazyDocumentTree } from '@/hooks/useLazyDocumentTree';
 import { ITreeItem } from '@/api';
 import { getApiV1AppDetailCompat } from '@/request/appCompat';
 import { getApiV1KnowledgeBaseList } from '@/request/KnowledgeBase';
-import { getApiV1NodeListGroupNav, putApiV1NodeDetail } from '@/request/Node';
+import { putApiV1NodeDetail } from '@/request/Node';
 import {
   GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
   V1NodeDetailResp,
@@ -25,7 +26,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Outlet, useOutletContext } from 'react-router-dom';
+import { Outlet, useOutletContext, useParams } from 'react-router-dom';
 import Catalog from './Catalog';
 
 export interface WrapContext {
@@ -66,13 +67,17 @@ const DocEditor = () => {
   const catalogWidth = 292;
   const isWideScreen = useMediaQuery('(min-width:1400px)');
   const dispatch = useAppDispatch();
-  const { kb_id = '' } = useAppSelector(state => state.config);
+  const { kb_id = '', user } = useAppSelector(state => state.config);
+  const { id: pathID = '' } = useParams();
   const [nodeDetail, setNodeDetail] = useState<V1NodeDetailResp>({});
   const [catalogOpen, setCatalogOpen] = useState(true);
-  const [groups, setGroups] = useState<
-    GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
-  >([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
+  const {
+    groups,
+    loading: catalogLoading,
+    branches,
+    loadChildren,
+    refresh: refreshCatalog,
+  } = useLazyDocumentTree(kb_id, user?.id || '', '', pathID);
   const nav_id = useAppSelector(state => state.config.nav_id) || '';
 
   const [docWidth, setDocWidth] = useState<string>('full');
@@ -107,30 +112,6 @@ const DocEditor = () => {
     },
     [dispatch],
   );
-
-  const refreshCatalog = useCallback(async (): Promise<
-    GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[]
-  > => {
-    const params = {
-      kb_id: kb_id || localStorage.getItem('kb_id') || '',
-    };
-    setCatalogLoading(true);
-    try {
-      const res = await getApiV1NodeListGroupNav(params);
-      const list = res || [];
-      setGroups(list);
-      if (list.length > 0) {
-        const storedNavId = localStorage.getItem(`nav_id_${params.kb_id}`);
-        const validInList =
-          storedNavId && list.some(g => g.nav_id === storedNavId);
-        const idToUse = validInList ? storedNavId! : list[0].nav_id || '';
-        dispatch(setNavId(idToUse));
-      }
-      return list;
-    } finally {
-      setCatalogLoading(false);
-    }
-  }, [dispatch, kb_id]);
 
   const onSave = async (
     content: string,
@@ -177,10 +158,10 @@ const DocEditor = () => {
   }, [getKbList, kb_id]);
 
   useEffect(() => {
-    if (kb_id) {
-      refreshCatalog();
-    }
-  }, [kb_id, refreshCatalog]);
+    if (nav_id && groups.some(g => g.nav_id === nav_id))
+      void loadChildren(nav_id);
+    else if (groups[0]?.nav_id) dispatch(setNavId(groups[0].nav_id));
+  }, [nav_id, groups, loadChildren, dispatch]);
 
   useEffect(() => {
     if (nodeDetail.nav_id && groups.some(g => g.nav_id === nodeDetail.nav_id)) {
@@ -215,6 +196,8 @@ const DocEditor = () => {
           groups={groups}
           nav_id={nav_id}
           loading={catalogLoading}
+          branches={branches}
+          onLoadChildren={loadChildren}
           onRefresh={refreshCatalog}
           onSaveCurrentDoc={() =>
             saveCurrentDocRef.current?.() ?? Promise.resolve()

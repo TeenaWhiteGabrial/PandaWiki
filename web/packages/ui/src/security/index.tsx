@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 import {
   Alert,
   Button,
@@ -8,6 +9,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  InputAdornment,
   Stack,
   TextField,
 } from '@mui/material';
@@ -59,7 +62,13 @@ export function PasswordChangeDialog({
   const [confirmation, setConfirmation] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState({
+    current: false,
+    next: false,
+    confirmation: false,
+  });
   useEffect(() => {
+    setVisible({ current: false, next: false, confirmation: false });
     if (open) {
       setCurrent(initialPassword);
       setNext('');
@@ -67,6 +76,23 @@ export function PasswordChangeDialog({
       setError('');
     }
   }, [open, initialPassword]);
+  const passwordToggle = (field: keyof typeof visible, label: string) => (
+    <InputAdornment position='end'>
+      <IconButton
+        type='button'
+        edge='end'
+        aria-label={`${visible[field] ? '隐藏' : '显示'}${label}`}
+        aria-pressed={visible[field]}
+        disabled={loading}
+        onMouseDown={event => event.preventDefault()}
+        onClick={() =>
+          setVisible(previous => ({ ...previous, [field]: !previous[field] }))
+        }
+      >
+        {visible[field] ? <VisibilityOff /> : <Visibility />}
+      </IconButton>
+    </InputAdornment>
+  );
   const submit = async () => {
     const invalid = passwordError(next, account);
     if (!current || invalid || next !== confirmation || current === next) {
@@ -107,7 +133,10 @@ export function PasswordChangeDialog({
           <TextField
             label='当前密码'
             value={current}
-            type='password'
+            type={visible.current ? 'text' : 'password'}
+            slotProps={{
+              input: { endAdornment: passwordToggle('current', '当前密码') },
+            }}
             autoComplete='current-password'
             onChange={e => setCurrent(e.target.value)}
             disabled={loading}
@@ -115,7 +144,10 @@ export function PasswordChangeDialog({
           <TextField
             label='新密码'
             value={next}
-            type='password'
+            type={visible.next ? 'text' : 'password'}
+            slotProps={{
+              input: { endAdornment: passwordToggle('next', '新密码') },
+            }}
             autoComplete='new-password'
             helperText={PASSWORD_POLICY}
             onChange={e => setNext(e.target.value)}
@@ -124,7 +156,15 @@ export function PasswordChangeDialog({
           <TextField
             label='再次输入新密码'
             value={confirmation}
-            type='password'
+            type={visible.confirmation ? 'text' : 'password'}
+            slotProps={{
+              input: {
+                endAdornment: passwordToggle(
+                  'confirmation',
+                  '再次输入的新密码',
+                ),
+              },
+            }}
             autoComplete='new-password'
             onChange={e => setConfirmation(e.target.value)}
             disabled={loading}

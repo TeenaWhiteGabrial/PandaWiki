@@ -40,6 +40,7 @@ export interface DragTreeProps {
   /** 使用外部 DndContext 时由父级传入，用于注册树的拖拽回调（如从树拖到目录） */
   registerDragHandlers?: (handlers: TreeDragHandlers | null) => void;
   onItemClick?: (item: ITreeItem) => void;
+  onExpand?: (item: ITreeItem) => void | Promise<void>;
 }
 
 // 定义上下文类型
@@ -109,6 +110,8 @@ export function convertToTree(data: DomainNodeListItemResp[]) {
   data.forEach(item => {
     const node: ITreeItem = {
       id: item.id!,
+      hasChildren: item.has_children,
+      collapsed: true,
       summary: item.summary,
       name: item.name!,
       level: 0,

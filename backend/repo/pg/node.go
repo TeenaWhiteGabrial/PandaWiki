@@ -934,7 +934,13 @@ func (r *NodeRepository) GetRecommendNodeListByParentIDs(ctx context.Context, kb
 }
 
 // GetNodeReleaseListByKBID get node list by kb id
-func (r *NodeRepository) GetNodeReleaseListByKBID(ctx context.Context, kbID string) ([]*domain.ShareNodeListItemResp, error) {
+type TreeNodeQuery struct {
+	IDs        []string
+	PolicyOnly bool
+	Search     string
+}
+
+func (r *NodeRepository) GetNodeReleaseListByKBID(ctx context.Context, kbID string, scope ...TreeNodeQuery) ([]*domain.ShareNodeListItemResp, error) {
 	// get kb release
 	var kbRelease *domain.KBRelease
 	if err := r.db.WithContext(ctx).
@@ -956,6 +962,17 @@ func (r *NodeRepository) GetNodeReleaseListByKBID(ctx context.Context, kbID stri
 		Where("kb_release_node_releases.kb_id = ?", kbID).
 		Where("kb_release_node_releases.release_id = ?", kbRelease.ID).
 		Select("node_releases.node_id as id, node_releases.name, node_releases.type, node_releases.parent_id, nodes.position, node_releases.meta->>'emoji' as emoji, node_releases.updated_at, nodes.permissions, nodes.meta, kb_release_node_releases.nav_id")
+	if len(scope) > 0 {
+		if scope[0].IDs != nil {
+			qs = qs.Where("node_releases.node_id IN ?", scope[0].IDs)
+		}
+		if scope[0].PolicyOnly {
+			qs = qs.Select("node_releases.node_id AS id, node_releases.type, node_releases.parent_id, nodes.permissions, kb_release_node_releases.nav_id, nodes.position")
+		}
+		if scope[0].Search != "" {
+			qs = qs.Where("node_releases.name ILIKE ? OR node_releases.content ILIKE ?", "%"+scope[0].Search+"%", "%"+scope[0].Search+"%")
+		}
+	}
 
 	if err := qs.Find(&nodes).Error; err != nil {
 		return nil, err
@@ -1979,7 +1996,7 @@ func (r *NodeRepository) GetNodeIDsByNavId(ctx context.Context, kbId, navId stri
 	return ids, nil
 }
 
-func (r *NodeRepository) GetNodeListByStatus(ctx context.Context, kbId, status, search string) ([]*domain.NodeListItemResp, error) {
+func (r *NodeRepository) GetNodeListByStatus(ctx context.Context, kbId, status, search string, ids ...[]string) ([]*domain.NodeListItemResp, error) {
 	var nodes []*domain.NodeListItemResp
 	query := r.db.WithContext(ctx).
 		Model(&domain.Node{}).
@@ -1987,6 +2004,9 @@ func (r *NodeRepository) GetNodeListByStatus(ctx context.Context, kbId, status, 
 		Joins("LEFT JOIN users eu ON nodes.editor_id = eu.id").
 		Where("nodes.kb_id = ?", kbId).
 		Select("cu.account AS creator, eu.account AS editor, nodes.editor_id, nodes.nav_id, nodes.rag_info, nodes.creator_id, nodes.id, nodes.permissions, nodes.type, nodes.status, nodes.name, nodes.parent_id, nodes.position, nodes.created_at, nodes.edit_time as updated_at, nodes.meta->>'summary' as summary, nodes.meta->>'emoji' as emoji, nodes.meta->>'content_type' as content_type, nodes.meta->>'file_key' as file_key, nodes.meta->>'file_name' as file_name, COALESCE((nodes.meta->>'file_readonly')::boolean, false) as file_readonly")
+	if len(ids) > 0 {
+		query = query.Where("nodes.id IN ?", ids[0])
+	}
 
 	if search != "" {
 		searchPattern := "%" + search + "%"
@@ -2042,4 +2062,11 @@ func (r *NodeRepository) GetNodeStats(ctx context.Context, kbId string) (*v1.Nod
 	}
 
 	return &stats, nil
+}
+
+// GetTreeNodeStatuses deliberately omits names, paths, ACLs and file metadata.
+func (r *NodeRepository) GetTreeNodeStatuses(ctx context.Context, kbID string, ids []string) ([]*domain.NodeListItemResp, error) {
+	var nodes []*domain.NodeListItemResp
+	err := r.db.WithContext(ctx).Model(&domain.Node{}).Where("kb_id = ? AND id IN ?", kbID, ids).Select("id, status, rag_info").Find(&nodes).Error
+	return nodes, err
 }

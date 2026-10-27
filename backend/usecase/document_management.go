@@ -14,6 +14,19 @@ import (
 )
 
 func (u *EnterpriseUsecase) ManagementAccess(ctx context.Context, kbID string) (*domain.DocumentManagementAccess, error) {
+	return u.managementAccess(ctx, kbID, false)
+}
+
+func (u *EnterpriseUsecase) ManagementTreeAccess(ctx context.Context, kbID string) (*domain.DocumentManagementAccess, error) {
+	return u.managementAccess(ctx, kbID, true)
+}
+
+func (u *EnterpriseUsecase) managementAccess(ctx context.Context, kbID string, policyOnly bool) (*domain.DocumentManagementAccess, error) {
+	load := u.repo.DocumentManagementAccess
+	if policyOnly {
+		load = u.repo.DocumentManagementTreeAccess
+	}
+
 	auth := domain.GetAuthInfoFromCtx(ctx)
 	if auth == nil {
 		return nil, fmt.Errorf("未登录")
@@ -22,7 +35,7 @@ func (u *EnterpriseUsecase) ManagementAccess(ctx context.Context, kbID string) (
 		if auth.KBId != kbID {
 			return nil, fmt.Errorf("知识库不匹配")
 		}
-		ownerAccess, err := u.repo.DocumentManagementAccess(ctx, kbID, auth.UserId)
+		ownerAccess, err := load(ctx, kbID, auth.UserId)
 		if err != nil {
 			return nil, err
 		}
@@ -40,7 +53,7 @@ func (u *EnterpriseUsecase) ManagementAccess(ctx context.Context, kbID string) (
 	if access := domain.DocumentManagementAccessFromContext(ctx, kbID, auth.UserId); access != nil {
 		return access, nil
 	}
-	return u.repo.DocumentManagementAccess(ctx, kbID, auth.UserId)
+	return load(ctx, kbID, auth.UserId)
 }
 
 func (u *EnterpriseUsecase) NormalizeManagementGrants(ctx context.Context, grants []domain.DocumentManagementGrant) error {

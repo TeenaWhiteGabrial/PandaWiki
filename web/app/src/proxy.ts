@@ -6,14 +6,9 @@ import { getShareV1AppWidgetInfo } from './request/ShareApp';
 
 import { getBasePath, parsePathname } from '@/utils';
 import { postShareV1StatPage } from '@/request/ShareStat';
-import { getShareV1NodeList } from '@/request/ShareNode';
+import { getShareNodeTree } from '@/request/NodeTree';
 import { getFreshWebAppInfo } from '@/request/appInfo';
-import {
-  filterEmptyFolders,
-  convertToTree,
-  parseNodeListResponse,
-} from '@/utils/tree';
-import { deepSearchFirstNode } from '@/utils';
+import { proxyApiRequest } from '@/utils/proxyApi';
 
 const StatPage = {
   welcome: 1,
@@ -23,17 +18,9 @@ const StatPage = {
 } as const;
 
 const getFirstNode = async () => {
-  const nodeListResult: any = await getShareV1NodeList();
-  const { isGrouped, navDataMap, defaultNavId } = parseNodeListResponse(
-    nodeListResult || [],
-  );
-  const nodeListForTree = isGrouped
-    ? (navDataMap[defaultNavId || ''] ?? navDataMap[Object.keys(navDataMap)[0]])
-    : nodeListResult || [];
-  const tree = filterEmptyFolders(
-    convertToTree(Array.isArray(nodeListForTree) ? nodeListForTree : []),
-  );
-  return deepSearchFirstNode(tree);
+  const roots = await getShareNodeTree();
+  const first = roots?.find(g => g.entry_node_id);
+  return first?.entry_node_id ? { id: first.entry_node_id } : undefined;
 };
 
 const getHomePath = async () => {
@@ -219,15 +206,7 @@ const proxyShare = async (request: NextRequest, pathname?: string) => {
     fetchHeaders.delete('x-kb-id');
   }
 
-  const hasBody = !['GET', 'HEAD'].includes(request.method);
-  const fetchOptions: RequestInit = {
-    method: request.method,
-    headers: fetchHeaders,
-    body: hasBody ? request.body : undefined,
-    redirect: 'manual',
-    ...(hasBody && { duplex: 'half' as const }),
-  };
-  const proxyRes = await fetch(targetUrl.toString(), fetchOptions);
+  const proxyRes = await proxyApiRequest(request, targetUrl, fetchHeaders);
   const nextRes = new NextResponse(proxyRes.body, {
     status: proxyRes.status,
     headers: proxyRes.headers,
