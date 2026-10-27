@@ -89,6 +89,7 @@ const TreeItem = React.forwardRef<
     disabled,
     scrollToItem,
     onItemClick,
+    onItemDoubleClick,
     onExpand,
   } = context;
 
@@ -333,6 +334,20 @@ const TreeItem = React.forwardRef<
               gap={2}
               flex={1}
               sx={{ pr: 2 }}
+              onDoubleClick={event => {
+                if (
+                  ui !== 'move' ||
+                  item.type !== 2 ||
+                  item.placeholder ||
+                  isEditting ||
+                  (event.target as HTMLElement).closest(
+                    'button,input,textarea,a,[role="menuitem"]',
+                  )
+                )
+                  return;
+                event.stopPropagation();
+                onItemDoubleClick?.(item);
+              }}
               onClick={() => {
                 if (ui === 'select') {
                   if (disabled?.(item)) return;

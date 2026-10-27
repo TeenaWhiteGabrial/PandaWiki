@@ -363,8 +363,13 @@ const Content = () => {
 
   useEffect(() => {
     document.body.classList.toggle('document-workbench-fullscreen', fullscreen);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(false);
+    };
+    if (fullscreen) window.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.classList.remove('document-workbench-fullscreen');
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [fullscreen]);
 
@@ -444,6 +449,10 @@ const Content = () => {
       onPublish={handlePublishOpen}
       onNodesDeleted={handleNodesDeleted}
       onNavDeleted={handleNavDeleted}
+      onViewDocument={item => {
+        handleDocumentSelect(item);
+        setFullscreen(true);
+      }}
     >
       {treeError && (
         <Button color='error' onClick={refresh}>
@@ -575,7 +584,10 @@ const Content = () => {
             documentId={selectedDocumentId}
             refreshTrigger={refreshTrigger}
             collapsed={fullscreen ? false : previewCollapsed}
-            onToggle={() => setPreviewCollapsed(value => !value)}
+            onToggle={() => {
+              setFullscreen(false);
+              setPreviewCollapsed(true);
+            }}
             fullscreen={fullscreen}
             onToggleFullscreen={() => {
               setFullscreen(value => !value);

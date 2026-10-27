@@ -24,6 +24,7 @@ export function useDocTreeMenu(
     handleProperties,
     handleFrontDoc,
     handleEdit,
+    handleView,
   } = handlers;
 
   return useCallback(
@@ -93,6 +94,13 @@ export function useDocTreeMenu(
       }
 
       if (item.type === 2) {
+        if (handleView) {
+          menuItems.push({
+            key: 'view-document',
+            label: '查看',
+            onClick: () => handleView(item),
+          });
+        }
         if (handleEdit && !item.file_readonly) {
           menuItems.push({
             key: 'edit-document',
@@ -145,7 +153,7 @@ export function useDocTreeMenu(
           });
         }
         menuItems.push({
-          label: '前台查看',
+          label: '用户端查看',
           key: 'front_doc',
           onClick: () => handleFrontDoc(item.id),
         });
@@ -189,6 +197,7 @@ export function useDocTreeMenu(
       handleProperties,
       handleFrontDoc,
       handleEdit,
+      handleView,
       readOnly,
     ],
   );

@@ -36,6 +36,7 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
       canRootHaveChildren,
       registerDragHandlers,
       onItemClick,
+      onItemDoubleClick,
       onExpand,
     },
     ref,
@@ -70,6 +71,7 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
             sortableTreeRef.current?.scrollToItem(itemId);
           },
           onItemClick,
+          onItemDoubleClick,
           onExpand,
         }}
       >

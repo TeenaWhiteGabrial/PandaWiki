@@ -64,6 +64,7 @@ const DocPageNavs = ({
     menu: treeMenu,
     permissionCatalog,
     openAddNav,
+    viewDocument,
   } = useDocumentActions();
   const dragTreeRef = useRef<DragTreeHandle>(null);
   const expend = true;
@@ -270,6 +271,7 @@ const DocPageNavs = ({
                 ref={dragTreeRef}
                 menu={treeMenu}
                 onItemClick={handleTreeItemClick}
+                onItemDoubleClick={viewDocument}
                 data={treeData}
                 updateData={data => {
                   setTreeData([...data]);

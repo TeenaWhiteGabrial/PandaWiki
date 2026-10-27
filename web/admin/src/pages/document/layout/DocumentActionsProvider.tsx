@@ -56,6 +56,7 @@ interface Props {
   onPublish: (ids?: string[]) => void;
   onNodesDeleted: (ids: string[]) => void;
   onNavDeleted: (id: string) => void;
+  onViewDocument: (item: DomainNodeListItemResp) => void;
 }
 
 type Target = { parentId: string | null; navId: string; name: string };
@@ -81,6 +82,7 @@ function useActions({
   onPublish,
   onNodesDeleted,
   onNavDeleted,
+  onViewDocument,
 }: Omit<Props, 'children'>) {
   const [mutationVersion, setMutationVersion] = useState(0);
   const refresh = () => {
@@ -241,6 +243,11 @@ function useActions({
     [kb_id],
   );
 
+  const viewDocument = (item: ITreeItem) => {
+    if (item.placeholder || item.type !== 2) return;
+    onViewDocument(dataOf(item));
+  };
+
   const baseMenu = useDocTreeMenu(
     {
       handleUrl: item => openImport(item),
@@ -261,6 +268,7 @@ function useActions({
         setStorageInfoOpen(true);
       },
       handleMove: item => openMove([dataOf(item)]),
+      handleView: viewDocument,
       handleDelete: item => openDelete([dataOf(item)]),
       handleProperties: item => setPropertyItems([dataOf(item)]),
       handlePublish: item => onPublish([item.id]),
@@ -281,7 +289,7 @@ function useActions({
           .flatMap(group => group.list || [])
           .find(node => node.id === id);
         if (item?.status !== 2 && !item?.publisher_id) {
-          message.warning('当前文档未发布，无法查看前台文档');
+          message.warning('当前文档未发布，无法查看用户端文档');
           return;
         }
         const url = getReaderDocumentUrl(wikiUrl, id);
@@ -540,6 +548,7 @@ function useActions({
 
   return {
     menu,
+    viewDocument,
     mutationVersion,
     permissionCatalog,
     openCreate,

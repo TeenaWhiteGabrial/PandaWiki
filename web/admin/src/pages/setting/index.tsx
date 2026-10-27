@@ -12,7 +12,11 @@ import { GithubComChaitinPandaWikiDomainModelListItem } from '@/request/types';
 import { ConstsUserRole } from '@/request/types';
 import { DomainKnowledgeBaseDetail } from '@/request/types';
 import { useAppDispatch, useAppSelector } from '@/store';
-import { setModelList, setModelStatus } from '@/store/slices/config';
+import {
+  setKbDetail,
+  setModelList,
+  setModelStatus,
+} from '@/store/slices/config';
 import { Box, Tab, Tabs } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import CardFeedback from './component/CardFeedback';
@@ -57,7 +61,10 @@ const Setting = () => {
 
   const getKb = () => {
     if (!kb_id) return;
-    getApiV1KnowledgeBaseDetail({ id: kb_id }).then(res => setKb(res));
+    getApiV1KnowledgeBaseDetail({ id: kb_id }).then(res => {
+      setKb(res);
+      dispatch(setKbDetail(res));
+    });
   };
 
   const getModelList = () => {

@@ -165,7 +165,7 @@ const DocPageListContainer = ({
     (id: string) => {
       const currentNode = list.find(item => item.id === id);
       if (currentNode?.status !== 2 && !currentNode?.publisher_id) {
-        message.warning('当前文档未发布，无法查看前台文档');
+        message.warning('当前文档未发布，无法查看用户端文档');
         return;
       }
       const url = getReaderDocumentUrl(wikiUrl, id);

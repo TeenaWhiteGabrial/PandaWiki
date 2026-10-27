@@ -73,6 +73,7 @@ const DocPageFileManager = ({
     openMove,
     openDelete,
     openAddNav,
+    viewDocument,
   } = useDocumentActions();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -540,9 +541,16 @@ const DocPageFileManager = ({
                       setSelectedId(item.id || null);
                       if (!isFolder) onDocumentSelect(item);
                     }}
-                    onDoubleClick={() => {
+                    onDoubleClick={event => {
+                      if (
+                        (event.target as HTMLElement).closest(
+                          'button,input,textarea,a,[role="menuitem"]',
+                        )
+                      )
+                        return;
                       setSelectedId(item.id || null);
                       if (isFolder) onFolderChange(item.id || '');
+                      else viewDocument(treeItem);
                     }}
                   >
                     <Box

@@ -82,6 +82,7 @@ const CardBasicInfo = ({
             }
           }}
           placeholder={baseUrlPlaceholder()}
+          helperText='用于“用户端查看”和文档引用。请填写用户端实际访问地址，使用独立端口时需包含端口。'
         />
       </FormItem>
     </SettingCardItem>

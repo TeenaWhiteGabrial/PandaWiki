@@ -71,11 +71,11 @@ const DocPagePreview = ({
       }}
     >
       <Tooltip title='收起预览'>
-        <IconButton size='small' onClick={onToggle}>
+        <IconButton size='small' aria-label='收起预览' onClick={onToggle}>
           <IconMuluzhankai />
         </IconButton>
       </Tooltip>
-      {detail && detail.can_manage !== false && !detail.meta?.file_readonly ? (
+      {detail && detail.can_manage !== false && !detail.meta?.file_readonly && (
         <Tooltip title='全屏编辑'>
           <IconButton
             size='small'
@@ -84,13 +84,16 @@ const DocPagePreview = ({
             <EditOutlinedIcon />
           </IconButton>
         </Tooltip>
-      ) : (
-        <Tooltip title={fullscreen ? '退出全屏预览' : '全屏预览'}>
-          <IconButton size='small' onClick={onToggleFullscreen}>
-            {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-          </IconButton>
-        </Tooltip>
       )}
+      <Tooltip title={fullscreen ? '退出全屏预览' : '全屏预览'}>
+        <IconButton
+          size='small'
+          aria-label={fullscreen ? '退出全屏预览' : '全屏预览'}
+          onClick={onToggleFullscreen}
+        >
+          {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+        </IconButton>
+      </Tooltip>
     </Stack>
   );
 
@@ -115,20 +118,19 @@ const DocPagePreview = ({
             borderColor: 'divider',
           }}
         >
+          {previewActions}
           {loading ? (
             <Loading sx={{ flex: 1, justifyContent: 'center' }} />
           ) : !detail ? (
             <EmptyState text='请选择一个文档查看预览' sx={{ flex: 1 }} />
           ) : detail.meta?.file_readonly ? (
             <Stack sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              {previewActions}
               <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 <FilePreview detail={detail} />
               </Box>
             </Stack>
           ) : (
             <Stack sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              {previewActions}
               <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 3 }}>
                 <MarkDown content={detail.content || ''} />
               </Box>
