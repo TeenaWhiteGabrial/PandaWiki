@@ -32,6 +32,8 @@ import {
 interface StoreContextType {
   authInfo?: V1UserInfoResp;
   authRevision?: number;
+  loadingNodeId?: string;
+  setLoadingNodeId?: Dispatch<SetStateAction<string | undefined>>;
   setAuthInfo?: Dispatch<SetStateAction<V1UserInfoResp | undefined>>;
   widget?: WidgetInfo;
   kbDetail?: KBDetail;
@@ -121,6 +123,7 @@ export default function StoreProvider({
     authInfo,
   );
   const [authRevision, setAuthRevision] = useState(0);
+  const [loadingNodeId, setLoadingNodeId] = useState<string>();
   const [navList, setNavList] = useState<NavItem[]>(initialNavList);
   const [navDataMap, setNavDataMap] =
     useState<Record<string, NodeListItem[]>>(initialNavDataMap);
@@ -312,6 +315,8 @@ export default function StoreProvider({
         mobile: isMobile,
         authInfo: authInfoState,
         authRevision,
+        loadingNodeId,
+        setLoadingNodeId,
         setAuthInfo,
         setNodeList,
         catalogWidth,

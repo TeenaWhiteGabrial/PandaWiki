@@ -33,6 +33,7 @@ const Doc = ({
     catalogWidth,
     authInfo,
     authRevision = 0,
+    setLoadingNodeId,
   } = useStore();
   const requestedNodeId = nodeId || node?.id;
   const requestScope = `${authInfo?.id || 'anonymous'}:${authRevision}:${requestedNodeId || ''}`;
@@ -66,6 +67,7 @@ const Doc = ({
     }
 
     let disposed = false;
+    setLoadingNodeId?.(requestedNodeId);
     // Always reauthorize the document on navigation or identity changes.
     // A process-wide cache keyed only by document ID can replay content
     // obtained by a previous login without consulting the permission API.
@@ -94,12 +96,21 @@ const Doc = ({
           setPageError(err as Error);
           setLoading(false);
         }
+      })
+      .finally(() => {
+        if (!disposed)
+          setLoadingNodeId?.(current =>
+            current === requestedNodeId ? undefined : current,
+          );
       });
 
     return () => {
       disposed = true;
+      setLoadingNodeId?.(current =>
+        current === requestedNodeId ? undefined : current,
+      );
     };
-  }, [requestedNodeId, requestScope]);
+  }, [requestedNodeId, requestScope, setLoadingNodeId]);
 
   useEffect(() => {
     if (isReadonlyFilePreview || isMarkdown) {

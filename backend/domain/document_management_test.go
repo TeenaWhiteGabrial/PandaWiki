@@ -2,8 +2,43 @@ package domain
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
+
+func TestManagementEvaluationMatchesUncachedAndExpiresWithOperation(t *testing.T) {
+	for _, scope := range []string{ManagementScopeTree, ManagementScopeCurrent} {
+		raw := managementFixture(scope)
+		raw.Nodes["sub"].Permissions.ManagementGrants = []DocumentManagementGrant{{SubjectType: ManagementSubjectUser, SubjectIDs: []string{"alice"}, DirectoryScope: ManagementScopeTree}}
+		raw.Nodes["cycle-a"] = &Node{ID: "cycle-a", ParentID: "cycle-b", Type: NodeTypeFolder, Permissions: raw.Nodes["sub"].Permissions}
+		raw.Nodes["cycle-b"] = &Node{ID: "cycle-b", ParentID: "cycle-a", Type: NodeTypeFolder, Permissions: raw.Nodes["sub"].Permissions}
+		evaluated := raw.ForEvaluation()
+		ids := []string{"subdoc", "sub", "root", "doc", "other", "missing", "cycle-a", "cycle-b"}
+		for pass := 0; pass < 2; pass++ {
+			for _, id := range ids {
+				if got, want := evaluated.CanManageNode(id), raw.CanManageNode(id); got != want {
+					t.Fatalf("%s: %s cached=%v uncached=%v", scope, id, got, want)
+				}
+				if !reflect.DeepEqual(evaluated.ManagementGrantConstraintsForNode(id), raw.ManagementGrantConstraintsForNode(id)) || !reflect.DeepEqual(evaluated.ManagementGrantsForNode(id), raw.ManagementGrantsForNode(id)) {
+					t.Fatalf("%s: hierarchy summary changed for %s", scope, id)
+				}
+				for _, kind := range []NodeType{NodeTypeFolder, NodeTypeDocument} {
+					if evaluated.CanCreate(id, kind) != raw.CanCreate(id, kind) {
+						t.Fatalf("%s: creation scope changed for %s", scope, id)
+					}
+				}
+			}
+		}
+		if len(evaluated.evaluation.constraints) == 0 || raw.evaluation != nil {
+			t.Fatal("cache must be used only by the operation-local evaluator")
+		}
+		// A later operation must not retain an earlier permission decision.
+		raw.Nodes["root"].Permissions.ManagementGrants = nil
+		if raw.CanManageNode("root") || raw.ForEvaluation().CanManageNode("root") {
+			t.Fatal("revoked grant survived into a new evaluation")
+		}
+	}
+}
 
 func managementFixture(scope string) *DocumentManagementAccess {
 	return &DocumentManagementAccess{Principal: &EnterpriseAccessContext{PrincipalID: "alice", PermissionLevelID: "editor", DepartmentIDs: []string{"engineering"}}, Nodes: map[string]*Node{

@@ -20,6 +20,7 @@ export type TreeDragHandlers = {
 export interface DragTreeProps {
   data: ITreeItem[];
   readOnly?: boolean;
+  loading?: boolean;
   menu?: (opra: TreeMenuOptions) => TreeMenuItem[];
   refresh?: () => void;
   updateData?: (data: TreeItems<ITreeItem>) => void;

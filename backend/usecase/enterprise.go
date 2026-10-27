@@ -178,6 +178,10 @@ func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nod
 // resolvePermissionHierarchy keeps the closest explicit rule as the primary
 // rule and adds every applicable ancestor rule as an AND constraint.
 func (u *EnterpriseUsecase) resolvePermissionHierarchy(ctx context.Context, nodeID, parentID string, current domain.NodePermissions) (domain.NodePermissions, error) {
+	return u.newTreePermissionResolver(ctx, nil)(nodeID, parentID, current)
+}
+
+func resolvePermissionHierarchy(nodeID, parentID string, current domain.NodePermissions, lookup func(string) (*domain.Node, error)) (domain.NodePermissions, error) {
 	entries := []nodePermissionHierarchyEntry{{permissions: current, parentID: parentID}}
 	visited := map[string]struct{}{nodeID: {}}
 	nextParentID := parentID
@@ -187,7 +191,7 @@ func (u *EnterpriseUsecase) resolvePermissionHierarchy(ctx context.Context, node
 		}
 		visited[nextParentID] = struct{}{}
 
-		parentNode, err := u.nodeRepo.GetNodeByID(ctx, nextParentID)
+		parentNode, err := lookup(nextParentID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Navigation roots are stored separately from nodes.
 			break
@@ -198,8 +202,7 @@ func (u *EnterpriseUsecase) resolvePermissionHierarchy(ctx context.Context, node
 		entries = append(entries, nodePermissionHierarchyEntry{permissions: parentNode.Permissions, parentID: parentNode.ParentID})
 		nextParentID = parentNode.ParentID
 	}
-	resolved := composeNodePermissionHierarchy(entries)
-	return u.normalizeResolvedNodePermissions(ctx, resolved)
+	return composeNodePermissionHierarchy(entries), nil
 }
 
 type nodePermissionHierarchyEntry struct {
@@ -464,8 +467,14 @@ func validateNodePermissionScope(perm domain.NodePermissions) error {
 }
 
 func (u *EnterpriseUsecase) normalizePermissionLevelReferences(ctx context.Context, perm domain.NodePermissions) (domain.NodePermissions, error) {
+	return normalizePermissionLevelReferences(perm, func(id string) (*domain.PermissionLevel, error) {
+		return u.repo.GetPermissionLevelByID(ctx, id)
+	})
+}
+
+func normalizePermissionLevelReferences(perm domain.NodePermissions, lookup func(string) (*domain.PermissionLevel, error)) (domain.NodePermissions, error) {
 	if perm.MinPermissionLevelID != "" {
-		level, err := u.repo.GetPermissionLevelByID(ctx, perm.MinPermissionLevelID)
+		level, err := lookup(perm.MinPermissionLevelID)
 		if err != nil {
 			return perm, fmt.Errorf("权限等级不存在：%w", err)
 		}
@@ -477,7 +486,7 @@ func (u *EnterpriseUsecase) normalizePermissionLevelReferences(ctx context.Conte
 		perm.MinPermissionLevelRank = 0
 	}
 	for _, id := range perm.AllowedPermissionLevelIDs {
-		level, err := u.repo.GetPermissionLevelByID(ctx, id)
+		level, err := lookup(id)
 		if err != nil {
 			return perm, err
 		}
@@ -489,19 +498,25 @@ func (u *EnterpriseUsecase) normalizePermissionLevelReferences(ctx context.Conte
 }
 
 func (u *EnterpriseUsecase) normalizeResolvedNodePermissions(ctx context.Context, perm domain.NodePermissions) (domain.NodePermissions, error) {
+	return normalizeResolvedNodePermissions(perm, func(id string) (*domain.PermissionLevel, error) {
+		return u.repo.GetPermissionLevelByID(ctx, id)
+	})
+}
+
+func normalizeResolvedNodePermissions(perm domain.NodePermissions, lookup func(string) (*domain.PermissionLevel, error)) (domain.NodePermissions, error) {
 	if !config.PermissionLevelsDisabled() && (perm.MinPermissionLevelID != "" || len(perm.AllowedPermissionLevelIDs) > 0) {
 		// Existing permission data may predate current validation rules. Reading
 		// effective permissions must still resolve level references, but must not
 		// apply the write-form validation that requires a selected audience. A
 		// malformed department/user audience remains fail-closed in canAccess.
-		normalized, err := u.normalizePermissionLevelReferences(ctx, perm)
+		normalized, err := normalizePermissionLevelReferences(perm, lookup)
 		if err != nil {
 			return domain.NodePermissions{}, err
 		}
 		perm = normalized
 	}
 	for index := range perm.Constraints {
-		normalized, err := u.normalizeResolvedNodePermissions(ctx, perm.Constraints[index])
+		normalized, err := normalizeResolvedNodePermissions(perm.Constraints[index], lookup)
 		if err != nil {
 			return domain.NodePermissions{}, err
 		}

@@ -173,6 +173,7 @@ func (h *NodeHandler) GetNodeList(c echo.Context) error {
 //	@Success		200		{object}	domain.PWResponse{data=[]v1.NodeListGroupNavResp}
 //	@Router			/api/v1/node/list/group/nav [get]
 func (h *NodeHandler) NodeListGroupNav(c echo.Context) error {
+	defer h.TrackTreeLoad(c)()
 	var req v1.NodeListGroupNavReq
 	if err := c.Bind(&req); err != nil {
 		return h.NewResponseWithError(c, "invalid request", err)
@@ -185,7 +186,7 @@ func (h *NodeHandler) NodeListGroupNav(c echo.Context) error {
 	if err != nil {
 		return h.NewResponseWithError(c, "get node list group by nav failed", err)
 	}
-	return h.NewResponseWithData(c, result)
+	return h.NewTreeResponseWithData(c, result)
 }
 
 // GetNodeDetail

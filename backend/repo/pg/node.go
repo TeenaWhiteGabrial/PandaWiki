@@ -433,6 +433,20 @@ func (r *NodeRepository) GetNodeByID(ctx context.Context, id string) (*domain.No
 	return node, nil
 }
 
+// GetNodePermissionSnapshot loads current ancestor rules without document
+// bodies or file metadata. Published reader trees still obey current policies.
+func (r *NodeRepository) GetNodePermissionSnapshot(ctx context.Context, kbID string) (map[string]*domain.Node, error) {
+	var nodes []*domain.Node
+	if err := r.db.WithContext(ctx).Select("id, parent_id, permissions").Where("kb_id = ?", kbID).Find(&nodes).Error; err != nil {
+		return nil, err
+	}
+	result := make(map[string]*domain.Node, len(nodes))
+	for _, node := range nodes {
+		result[node.ID] = node
+	}
+	return result, nil
+}
+
 // GetNodesByIDs retrieves nodes by their IDs
 func (r *NodeRepository) GetNodesByIDs(ctx context.Context, ids []string) (map[string]*domain.Node, error) {
 	if len(ids) == 0 {

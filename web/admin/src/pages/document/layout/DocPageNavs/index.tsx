@@ -281,6 +281,7 @@ interface DocPageNavsProps {
   refresh?: () => void;
   isSearching?: boolean;
   loading?: boolean;
+  refreshing?: boolean;
   width?: number;
   onWidthChange?: (width: number) => void;
   onDocumentSelect?: (item: ITreeItem) => void;
@@ -301,6 +302,7 @@ const DocPageNavs = ({
   refresh,
   isSearching = false,
   loading = false,
+  refreshing = false,
   width = 300,
   onWidthChange,
   onDocumentSelect,
@@ -930,6 +932,7 @@ const DocPageNavs = ({
               }}
             >
               <DragTree
+                loading={refreshing}
                 readOnly={readOnlyUser}
                 supportSelect={false}
                 ref={dragTreeRef}

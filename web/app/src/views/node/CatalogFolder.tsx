@@ -4,14 +4,43 @@ import { useStore } from '@/provider';
 import { useBasePath } from '@/hooks';
 import { addOpacityToColor } from '@/utils';
 import { Ellipsis } from '@ctzhian/ui';
-import { Box, Chip, Stack, useTheme, IconButton } from '@mui/material';
+import {
+  Box,
+  Chip,
+  CircularProgress,
+  Stack,
+  useTheme,
+  IconButton,
+} from '@mui/material';
 import Link from 'next/link';
+import { useLinkStatus } from 'next/link';
 import { useParams } from 'next/navigation';
 
 interface CatalogFolderProps {
   item: ITreeItem;
   depth?: number;
 }
+
+// Link navigation and the following document-detail request are separate
+// loading phases. Keep feedback on the selected folder through both phases.
+const FolderIcon = ({ item }: { item: ITreeItem }) => {
+  const { pending } = useLinkStatus();
+  const { loadingNodeId } = useStore();
+  if (pending || loadingNodeId === item.id) {
+    return (
+      <CircularProgress
+        size={14}
+        aria-label={`正在加载 ${item.name} 的目录`}
+        sx={{ flexShrink: 0 }}
+      />
+    );
+  }
+  return item.emoji ? (
+    <Box sx={{ flexShrink: 0, fontSize: 12 }}>{item.emoji}</Box>
+  ) : (
+    <IconWenjianjia sx={{ flexShrink: 0, fontSize: 12 }} />
+  );
+};
 
 const CatalogFolder = ({ item, depth = 1 }: CatalogFolderProps) => {
   const theme = useTheme();
@@ -85,13 +114,7 @@ const CatalogFolder = ({ item, depth = 1 }: CatalogFolderProps) => {
                 gap={1}
                 sx={{ flex: 1, minWidth: 0 }}
               >
-                {item.emoji ? (
-                  <Box sx={{ flexShrink: 0, fontSize: 12 }}>{item.emoji}</Box>
-                ) : item.type === 1 ? (
-                  <IconWenjianjia sx={{ flexShrink: 0, fontSize: 12 }} />
-                ) : (
-                  <IconWenjian sx={{ flexShrink: 0, fontSize: 12 }} />
-                )}
+                <FolderIcon item={item} />
                 <Ellipsis sx={{ flex: 1, width: 0, pr: 1 }}>
                   {item.name}
                 </Ellipsis>

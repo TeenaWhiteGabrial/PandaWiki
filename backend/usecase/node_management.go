@@ -76,57 +76,44 @@ func (u *NodeUsecase) filterManagedNodes(ctx context.Context, kbID string, nodes
 	if err != nil {
 		return nil, err
 	}
-	navs, err := u.navRepo.GetList(ctx, kbID)
-	if err != nil {
-		return nil, err
-	}
-	navMap := map[string]domain.NodePermissions{}
-	for _, nav := range navs {
-		navMap[nav.ID] = nav.Permissions
-	}
-	if access.Global {
-		for _, node := range nodes {
-			node.CanManage = true
-			node.CanCreateDocument = node.Type == domain.NodeTypeFolder
-			node.CanCreateFolder = node.Type == domain.NodeTypeFolder
-			node.EffectiveManagementGrants = access.ManagementGrantsForNode(node.ID)
-			node.EffectiveManagementConstraints = access.ManagementGrantConstraintsForNode(node.ID)
-			permissions, err := u.enterprise.ResolveNodePermissions(ctx, &domain.Node{
-				ID: node.ID, KBID: kbID, ParentID: node.ParentID, Permissions: node.Permissions,
-			})
-			if err != nil {
-				return nil, err
-			}
-			effectivePermissions := u.enterprise.MergeNodeAndNavPermissions(permissions, navMap[node.NavId])
-			node.EffectivePermissions = &effectivePermissions
-		}
-		return nodes, nil
-	}
-	keep := managementVisibleNodeIDs(access)
-	for _, node := range nodes {
-		node.CanManage = access.CanManageNode(node.ID)
-		node.CanCreateDocument = access.CanCreate(node.ID, domain.NodeTypeDocument)
-		node.CanCreateFolder = access.CanCreate(node.ID, domain.NodeTypeFolder)
-		perm, err := u.enterprise.ResolveNodePermissions(ctx, &domain.Node{ID: node.ID, KBID: kbID, ParentID: node.ParentID, Permissions: node.Permissions})
-		if err != nil {
-			return nil, err
-		}
-		effectivePermissions := u.enterprise.MergeNodeAndNavPermissions(perm, navMap[node.NavId])
-		clearManagementGrantsFromPermissions(&effectivePermissions)
-		node.EffectivePermissions = &effectivePermissions
-		node.EffectiveManagementGrants = access.ManagementGrantsForNode(node.ID)
-		node.EffectiveManagementConstraints = access.ManagementGrantConstraintsForNode(node.ID)
-		if node.CanManage || keep[node.ID] {
-			keep[node.ID] = true
-		}
+	return u.filterManagedNodesWithAccess(ctx, access, nodes)
+}
+
+func (u *NodeUsecase) filterManagedNodesWithAccess(ctx context.Context, access *domain.DocumentManagementAccess, nodes []*domain.NodeListItemResp) ([]*domain.NodeListItemResp, error) {
+	done := domain.MeasureTreeLoadPhase(ctx, "management_permissions")
+	defer done()
+	access = access.ForEvaluation()
+	resolve := u.enterprise.newTreePermissionResolver(ctx, access.Nodes)
+	var keep map[string]bool
+	if !access.Global {
+		keep = managementVisibleNodeIDs(access)
 	}
 	result := make([]*domain.NodeListItemResp, 0, len(nodes))
 	for _, node := range nodes {
-		if keep[node.ID] {
-			result = append(result, node)
+		if !access.Global && !keep[node.ID] {
+			continue
 		}
+		node.CanManage = access.CanManageNode(node.ID)
+		node.CanCreateDocument = node.Type == domain.NodeTypeFolder && access.CanCreate(node.ID, domain.NodeTypeDocument)
+		node.CanCreateFolder = node.Type == domain.NodeTypeFolder && access.CanCreate(node.ID, domain.NodeTypeFolder)
+		permissions, err := resolve(node.ID, node.ParentID, node.Permissions)
+		if err != nil {
+			return nil, err
+		}
+		if nav := access.Navs[node.NavId]; nav != nil {
+			permissions = u.enterprise.MergeNodeAndNavPermissions(permissions, nav.Permissions)
+		}
+		if !access.Global {
+			clearManagementGrantsFromPermissions(&permissions)
+		}
+		node.EffectivePermissions = &permissions
+		node.EffectiveManagementGrants = access.ManagementGrantsForNode(node.ID)
+		node.EffectiveManagementConstraints = access.ManagementGrantConstraintsForNode(node.ID)
+		result = append(result, node)
 	}
-	clearSensitiveNodeFieldsForNonManagers(result)
+	if !access.Global {
+		clearSensitiveNodeFieldsForNonManagers(result)
+	}
 	return result, nil
 }
 

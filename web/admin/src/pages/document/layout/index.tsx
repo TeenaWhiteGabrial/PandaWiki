@@ -7,7 +7,6 @@ import {
   postApiV1NodeBatchMove,
   postApiV1NodeMoveNav,
 } from '@/request/Node';
-import { getApiV1NavList } from '@/request/Nav';
 import {
   GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
   V1NavListResp,
@@ -100,8 +99,10 @@ const Content = () => {
     minWidth: 0,
   };
   const shouldPollRagStatus = hasPollingRagTask(groups);
+  const treeRequestVersion = useRef(0);
 
   const getData = useCallback(() => {
+    const requestVersion = ++treeRequestVersion.current;
     if (!kb_id) {
       setLoading(false);
       return;
@@ -109,26 +110,17 @@ const Content = () => {
     const params: { kb_id: string; search?: string } = { kb_id };
     if (search) params.search = search;
     setLoading(true);
-    Promise.all([
-      getApiV1NodeListGroupNav(params),
-      getApiV1NavList({ kb_id }).catch(() => undefined),
-    ])
-      .then(([res, navListResp]) => {
+    return getApiV1NodeListGroupNav(params)
+      .then(res => {
+        if (requestVersion !== treeRequestVersion.current) return;
         const list = res || [];
         setGroups(list);
-        const navPermissions = new Map(
-          (navListResp || [])
-            .filter(nav => nav.id)
-            .map(nav => [nav.id!, nav.permissions] as const),
-        );
         const nextNavList = list
           .map(g => ({
             id: g.nav_id,
             name: g.nav_name,
             position: g.position ?? 0,
-            // Prefer the dedicated nav API so column permission labels do not
-            // depend on fields added to the grouped node-list response.
-            permissions: navPermissions.get(g.nav_id || '') ?? g.permissions,
+            permissions: g.permissions,
             can_manage: g.can_manage,
             can_create_document: g.can_create_document,
             can_create_folder: g.can_create_folder,
@@ -150,7 +142,9 @@ const Content = () => {
         }
         setHasLoadedOnce(true);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (requestVersion === treeRequestVersion.current) setLoading(false);
+      });
   }, [search, kb_id, dispatch]);
 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -354,10 +348,22 @@ const Content = () => {
 
   useEffect(() => {
     if (!kb_id || !shouldPollRagStatus) return;
-    const timer = window.setInterval(() => {
-      getData();
-    }, 5000);
-    return () => window.clearInterval(timer);
+    let stopped = false;
+    let timer: number;
+    const poll = async () => {
+      try {
+        await getData();
+      } catch {
+        // Request errors are reported by the shared response interceptor.
+      } finally {
+        if (!stopped) timer = window.setTimeout(poll, 5000);
+      }
+    };
+    timer = window.setTimeout(poll, 5000);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
   }, [getData, kb_id, shouldPollRagStatus]);
 
   useEffect(() => {
@@ -434,6 +440,7 @@ const Content = () => {
                 refresh={refresh}
                 isSearching={!!search}
                 loading={loading && !hasLoadedOnce}
+                refreshing={loading && hasLoadedOnce}
                 width={leftWidth}
                 onWidthChange={setNavWidth}
                 onDocumentSelect={item => {
@@ -464,6 +471,7 @@ const Content = () => {
               }}
             >
               <DocPageFileManager
+                loading={loading}
                 groups={groups}
                 navId={nav_id}
                 folderId={currentFolderId}

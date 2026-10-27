@@ -38,10 +38,31 @@ func (g DocumentManagementGrant) Matches(access *EnterpriseAccessContext) bool {
 }
 
 type DocumentManagementAccess struct {
-	Global    bool
-	Principal *EnterpriseAccessContext
-	Nodes     map[string]*Node
-	Navs      map[string]*Nav
+	Global     bool
+	Principal  *EnterpriseAccessContext
+	Nodes      map[string]*Node
+	Navs       map[string]*Nav
+	evaluation *managementEvaluationCache
+}
+
+type managementEvaluationCache struct {
+	constraints map[string][][]DocumentManagementGrant
+	managed     map[string]bool
+}
+
+// ForEvaluation reuses hierarchy calculations within one read-only operation.
+// The original access remains uncached so permission edits cannot reuse stale
+// answers. Do not mutate Nodes, Navs or Principal while using this evaluator.
+func (a *DocumentManagementAccess) ForEvaluation() *DocumentManagementAccess {
+	if a == nil {
+		return nil
+	}
+	copy := *a
+	copy.evaluation = &managementEvaluationCache{
+		constraints: make(map[string][][]DocumentManagementGrant),
+		managed:     make(map[string]bool),
+	}
+	return &copy
 }
 
 func (a *DocumentManagementAccess) CanManageNode(id string) bool {
@@ -55,7 +76,16 @@ func (a *DocumentManagementAccess) CanManageNode(id string) bool {
 	if a.Global {
 		return true
 	}
-	return a.matchesAllManagementConstraints(a.ManagementGrantConstraintsForNode(id))
+	if a.evaluation != nil {
+		if allowed, found := a.evaluation.managed[id]; found {
+			return allowed
+		}
+	}
+	allowed := a.matchesAllManagementConstraints(a.ManagementGrantConstraintsForNode(id))
+	if a.evaluation != nil {
+		a.evaluation.managed[id] = allowed
+	}
+	return allowed
 }
 
 // ManagementGrantsForNode returns the management rules that apply to this node
@@ -76,13 +106,19 @@ func (a *DocumentManagementAccess) ManagementGrantConstraintsForNode(id string) 
 	return a.managementGrantConstraintsForNode(id, map[string]bool{})
 }
 
-func (a *DocumentManagementAccess) managementGrantConstraintsForNode(id string, visiting map[string]bool) [][]DocumentManagementGrant {
+func (a *DocumentManagementAccess) managementGrantConstraintsForNode(id string, visiting map[string]bool) (constraints [][]DocumentManagementGrant) {
 	if a == nil {
 		return nil
 	}
 	node, exists := a.Nodes[id]
 	if !exists || visiting[id] {
 		return nil
+	}
+	if a.evaluation != nil {
+		if cached, found := a.evaluation.constraints[id]; found {
+			return slices.Clone(cached)
+		}
+		defer func() { a.evaluation.constraints[id] = slices.Clone(constraints) }()
 	}
 	visiting[id] = true
 	defer delete(visiting, id)
@@ -91,7 +127,7 @@ func (a *DocumentManagementAccess) managementGrantConstraintsForNode(id string, 
 	// authorize a nested folder. If any rule authorizes this folder, also require
 	// the principal to manage every parent folder, even if a direct child grant
 	// would otherwise match.
-	constraints := a.managementGrantConstraints(node, node.ParentID, 0, node.Type)
+	constraints = a.managementGrantConstraints(node, node.ParentID, 0, node.Type)
 	if len(constraints) == 0 || node.Type != NodeTypeFolder || node.ParentID == "" || node.ParentID == node.NavId {
 		return constraints
 	}

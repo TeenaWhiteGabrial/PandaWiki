@@ -33,6 +33,7 @@ import {
   Card,
   Checkbox,
   Chip,
+  CircularProgress,
   Divider,
   IconButton,
   Stack,
@@ -53,6 +54,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 interface DocPageFileManagerProps {
   groups: GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[];
+  loading?: boolean;
   navId?: string;
   folderId: string;
   onFolderChange: (id: string) => void;
@@ -74,6 +76,7 @@ const NAV_PATH_PREFIX = 'nav:';
 
 const DocPageFileManager = ({
   groups,
+  loading = false,
   navId,
   folderId,
   onFolderChange,
@@ -427,6 +430,9 @@ const DocPageFileManager = ({
                 </Typography>
               ))}
             </Breadcrumbs>
+            {loading && (
+              <CircularProgress size={16} aria-label='正在加载当前目录' />
+            )}
           </Stack>
           {!readOnlyUser &&
             (folderId ? currentFolderCanCreate : canManageRoots) && (
@@ -572,8 +578,18 @@ const DocPageFileManager = ({
               justifyContent='center'
               sx={{ height: '100%', color: 'text.secondary' }}
             >
-              <FolderOutlinedIcon sx={{ fontSize: 48, opacity: 0.35 }} />
-              <Typography variant='body2'>此目录为空</Typography>
+              {loading ? (
+                <CircularProgress
+                  size={32}
+                  aria-label='正在加载目录'
+                  sx={{ mb: 1 }}
+                />
+              ) : (
+                <FolderOutlinedIcon sx={{ fontSize: 48, opacity: 0.35 }} />
+              )}
+              <Typography variant='body2'>
+                {loading ? '正在加载目录…' : '此目录为空'}
+              </Typography>
             </Stack>
           ) : (
             <Stack gap={0.5}>
@@ -871,7 +887,13 @@ const DocPageFileManager = ({
                         />
                       )}
                     </Box>
-                    {isFolder ? (
+                    {isFolder && loading ? (
+                      <CircularProgress
+                        size={24}
+                        aria-label={`正在加载 ${item.name} 的目录`}
+                        sx={{ mx: '2px' }}
+                      />
+                    ) : isFolder ? (
                       <FolderOutlinedIcon
                         sx={{ color: 'warning.main', fontSize: 28 }}
                       />

@@ -50,6 +50,7 @@ func NewShareNodeHandler(
 //	@Success		200		{object}	domain.Response
 //	@Router			/share/v1/node/list [get]
 func (h *ShareNodeHandler) ShareNodeList(c echo.Context) error {
+	defer h.TrackTreeLoad(c)()
 
 	kbId := c.Request().Header.Get("X-KB-ID")
 	if kbId == "" {
@@ -61,7 +62,7 @@ func (h *ShareNodeHandler) ShareNodeList(c echo.Context) error {
 		return h.NewResponseWithError(c, "failed to get node list", err)
 	}
 
-	return h.NewResponseWithData(c, nodes)
+	return h.NewTreeResponseWithData(c, nodes)
 }
 
 // GetNodeDetail

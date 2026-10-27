@@ -537,25 +537,39 @@ func (u *NodeUsecase) convertMDToHTML(mdStr string) string {
 }
 
 func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId, userID string) ([]*shareV1.NodeListGroupNavResp, error) {
+	done := domain.MeasureTreeLoadPhase(ctx, "nodes_query")
 	nodes, err := u.nodeRepo.GetNodeReleaseListByKBID(ctx, kbId)
+	done()
 	if err != nil {
 		return nil, err
 	}
-
-	nodes, err = u.filterShareNodesWithNavigationPaths(ctx, kbId, userID, nodes)
-	if err != nil {
-		return nil, err
+	if metrics := domain.TreeLoadMetricsFromContext(ctx); metrics != nil {
+		metrics.InputNodes = len(nodes)
 	}
 
+	done = domain.MeasureTreeLoadPhase(ctx, "navs_query")
 	navs, err := u.navRepo.GetReleaseList(ctx, kbId)
+	done()
 	if err != nil {
 		return nil, err
 	}
+	done = domain.MeasureTreeLoadPhase(ctx, "access_load")
 	shareAccess, err := u.enterprise.BuildShareAccessContext(ctx, userID)
+	done()
 	if err != nil {
 		return nil, err
 	}
 
+	nodes, err = u.filterShareNodesWithAccess(ctx, kbId, nodes, navs, shareAccess)
+	if err != nil {
+		return nil, err
+	}
+
+	if metrics := domain.TreeLoadMetricsFromContext(ctx); metrics != nil {
+		metrics.VisibleNodes = len(nodes)
+	}
+	done = domain.MeasureTreeLoadPhase(ctx, "tree_assembly")
+	defer done()
 	result := make([]*shareV1.NodeListGroupNavResp, 0, len(navs))
 	navIndexMap := make(map[string]int, len(navs))
 	for _, nav := range navs {
@@ -575,6 +589,13 @@ func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId, userID string)
 		if idx, ok := navIndexMap[node.NavId]; ok {
 			result[idx].List = append(result[idx].List, *node)
 			result[idx].Count++
+		}
+	}
+
+	if metrics := domain.TreeLoadMetricsFromContext(ctx); metrics != nil {
+		metrics.VisibleNodes = 0
+		for _, group := range result {
+			metrics.VisibleNodes += len(group.List)
 		}
 	}
 
@@ -614,11 +635,24 @@ func (u *NodeUsecase) filterShareNodesWithNavigationPaths(ctx context.Context, k
 	if err != nil {
 		return nil, err
 	}
+	return u.filterShareNodesWithAccess(ctx, kbID, nodes, navs, shareAccess)
+}
+
+func (u *NodeUsecase) filterShareNodesWithAccess(ctx context.Context, kbID string, nodes []*domain.ShareNodeListItemResp, navs []navV1.NavListResp, shareAccess *domain.EnterpriseAccessContext) ([]*domain.ShareNodeListItemResp, error) {
 	navPermissions := make(map[string]domain.NodePermissions, len(navs))
 	for _, nav := range navs {
 		navPermissions[nav.ID] = nav.Permissions
 	}
 
+	done := domain.MeasureTreeLoadPhase(ctx, "permission_snapshot")
+	permissionNodes, err := u.nodeRepo.GetNodePermissionSnapshot(ctx, kbID)
+	done()
+	if err != nil {
+		return nil, err
+	}
+	done = domain.MeasureTreeLoadPhase(ctx, "read_permissions")
+	defer done()
+	resolve := u.enterprise.newTreePermissionResolver(ctx, permissionNodes)
 	nodeByID := make(map[string]*domain.ShareNodeListItemResp, len(nodes))
 	readable := make(map[string]bool, len(nodes))
 	for _, node := range nodes {
@@ -629,7 +663,7 @@ func (u *NodeUsecase) filterShareNodesWithNavigationPaths(ctx context.Context, k
 				continue
 			}
 		}
-		resolved, resolveErr := u.enterprise.ResolveShareNodePermissions(ctx, node.ID, node.ParentID, node.Permissions)
+		resolved, resolveErr := resolve(node.ID, node.ParentID, node.Permissions)
 		if resolveErr != nil {
 			return nil, resolveErr
 		}
@@ -1447,17 +1481,26 @@ func (u *NodeUsecase) GetNodeStats(ctx context.Context, kbId string) (*v1.NodeSt
 }
 
 func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeListGroupNavReq) ([]*v1.NodeListGroupNavResp, error) {
+	done := domain.MeasureTreeLoadPhase(ctx, "nodes_query")
 	nodes, err := u.nodeRepo.GetNodeListByStatus(ctx, req.KbId, req.Status, req.Search)
+	done()
 	if err != nil {
 		return nil, err
 	}
+	if metrics := domain.TreeLoadMetricsFromContext(ctx); metrics != nil {
+		metrics.InputNodes = len(nodes)
+	}
 
+	done = domain.MeasureTreeLoadPhase(ctx, "navs_query")
 	navs, err := u.navRepo.GetListByIds(ctx, req.KbId, req.NavIds)
+	done()
 	if err != nil {
 		return nil, err
 	}
 
+	done = domain.MeasureTreeLoadPhase(ctx, "released_navs_query")
 	navsReleased, err := u.navRepo.GetReleaseList(ctx, req.KbId)
+	done()
 	if err != nil {
 		return nil, err
 	}
@@ -1467,18 +1510,25 @@ func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeList
 		navsReleasedMap[nr.ID] = &nr
 	}
 
-	nodes, err = u.filterManagedNodes(ctx, req.KbId, nodes)
+	done = domain.MeasureTreeLoadPhase(ctx, "access_load")
+	management, err := u.managementAccess(ctx, req.KbId)
+	done()
 	if err != nil {
 		return nil, err
 	}
+	nodes, err = u.filterManagedNodesWithAccess(ctx, management, nodes)
+	if err != nil {
+		return nil, err
+	}
+	if metrics := domain.TreeLoadMetricsFromContext(ctx); metrics != nil {
+		metrics.VisibleNodes = len(nodes)
+	}
+	done = domain.MeasureTreeLoadPhase(ctx, "tree_assembly")
+	defer done()
 	// Keep navigation roots for readable or manageable descendants.
 	visibleNavs := map[string]bool{}
 	for _, node := range nodes {
 		visibleNavs[node.NavId] = true
-	}
-	management, err := u.managementAccess(ctx, req.KbId)
-	if err != nil {
-		return nil, err
 	}
 	if !management.Global {
 		filtered := navs[:0]
@@ -1514,6 +1564,13 @@ func (u *NodeUsecase) GetNodeListGroupByNav(ctx context.Context, req v1.NodeList
 		if idx, ok := navIndexMap[node.NavId]; ok {
 			result[idx].List = append(result[idx].List, *node)
 			result[idx].Count++
+		}
+	}
+
+	if metrics := domain.TreeLoadMetricsFromContext(ctx); metrics != nil {
+		metrics.VisibleNodes = 0
+		for _, group := range result {
+			metrics.VisibleNodes += len(group.List)
 		}
 	}
 

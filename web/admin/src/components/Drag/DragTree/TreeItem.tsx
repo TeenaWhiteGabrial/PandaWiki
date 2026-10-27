@@ -23,6 +23,7 @@ import {
   Box,
   Button,
   Checkbox,
+  CircularProgress,
   PaletteColor,
   Stack,
   TextField,
@@ -88,6 +89,7 @@ const TreeItem = React.forwardRef<
     disabled,
     scrollToItem,
     onItemClick,
+    loading: treeLoading = false,
   } = context;
 
   const readOnly = contextReadOnly || item.can_manage === false;
@@ -453,7 +455,12 @@ const TreeItem = React.forwardRef<
                     onClick={e => e.stopPropagation()}
                     sx={{ flexShrink: 0, cursor: 'pointer' }}
                   >
-                    {item.type === 1 ? (
+                    {item.type === 1 && treeLoading ? (
+                      <CircularProgress
+                        size={18}
+                        aria-label={`正在加载 ${item.name} 的目录`}
+                      />
+                    ) : item.type === 1 ? (
                       <Emoji
                         readOnly={readOnly}
                         sx={{ width: 24, height: 24, fontSize: 14 }}
