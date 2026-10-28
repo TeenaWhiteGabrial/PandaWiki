@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  transpilePackages: ['mermaid'],
+  transpilePackages: ['mermaid', '@panda-wiki/file-preview'],
   async headers() {
     const fileHeaders = [
       { key: 'Content-Disposition', value: 'attachment' },

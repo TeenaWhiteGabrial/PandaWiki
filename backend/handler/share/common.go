@@ -1,6 +1,7 @@
 package share
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	v1 "github.com/chaitin/panda-wiki/api/share/v1"
+	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
 	"github.com/chaitin/panda-wiki/log"
@@ -21,7 +23,13 @@ type ShareCommonHandler struct {
 	*handler.BaseHandler
 	logger      *log.Logger
 	fileUsecase *usecase.FileUsecase
-	nodeUsecase *usecase.NodeUsecase
+	nodeUsecase fileNodeAccess
+}
+
+type fileNodeAccess interface {
+	ValidateNodePerm(context.Context, string, string, string) *domain.PWResponseErrCode
+	GetNodeReleaseDetailByKBIDAndID(context.Context, string, string, string) (*v1.ShareNodeDetailResp, error)
+	FileMetaForAdmin(context.Context, string, string) (domain.NodeMeta, error)
 }
 
 func NewShareCommonHandler(
@@ -50,6 +58,10 @@ func NewShareCommonHandler(
 	share.POST("/file/upload", h.FileUpload, h.ShareAuthMiddleware.Authorize)
 	share.POST("/file/upload/url", h.FileUploadByUrl, h.ShareAuthMiddleware.Authorize)
 	share.GET("/file/download/url", h.FileDownloadURL, h.ShareAuthMiddleware.Authorize)
+	share.GET("/file/content", h.ReaderFileContent, h.ShareAuthMiddleware.Authorize)
+	share.HEAD("/file/content", h.ReaderFileContent, h.ShareAuthMiddleware.Authorize)
+	e.GET("/api/v1/file/content", h.AdminFileContent, h.V1Auth.Authorize, h.V1Auth.ValidateKBUserPerm(consts.UserKBPermissionNotNull))
+	e.HEAD("/api/v1/file/content", h.AdminFileContent, h.V1Auth.Authorize, h.V1Auth.ValidateKBUserPerm(consts.UserKBPermissionNotNull))
 	return h
 }
 
@@ -198,7 +210,12 @@ func (h *ShareCommonHandler) FileDownloadURL(c echo.Context) error {
 	if !shareNodeOwnsFileKey(node.Meta, key) {
 		return h.NewResponseWithError(c, "file key is invalid", fmt.Errorf("file key does not belong to current node"))
 	}
-	url, err := h.fileUsecase.SignFileURL(c.Request().Context(), key, 30*time.Minute)
+	var url string
+	if c.QueryParam("attachment") == "true" {
+		url, err = h.fileUsecase.SignFileDownloadURL(c.Request().Context(), key, domain.NodeFileName(node.Meta, key), 30*time.Minute)
+	} else {
+		url, err = h.fileUsecase.SignFileURL(c.Request().Context(), key, 30*time.Minute)
+	}
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to create file download url", err)
 	}
@@ -206,16 +223,5 @@ func (h *ShareCommonHandler) FileDownloadURL(c echo.Context) error {
 }
 
 func shareNodeOwnsFileKey(meta domain.NodeMeta, key string) bool {
-	if key == "" {
-		return false
-	}
-	if meta.FileKey == key || meta.PreviewKey == key {
-		return true
-	}
-	for _, attachment := range meta.Attachments {
-		if attachment.FileKey == key || attachment.PreviewKey == key {
-			return true
-		}
-	}
-	return false
+	return domain.NodeOwnsFileKey(meta, key)
 }

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -114,6 +115,14 @@ func TestSuperAdminDocumentFallbackPostgres(t *testing.T) {
 		access, err := repo.DocumentManagementAccess(ctx, kbID, userID)
 		if err != nil || access.Global != want || access.CanManageNode(docID) != want || access.CanManageNode(folderID) != want || access.CanManageNav(navID) != want {
 			t.Fatalf("management fallback for %s: %+v %v", userID, access, err)
+		}
+		adminCtx := context.WithValue(ctx, domain.CtxAuthInfoKey, &domain.CtxAuthInfo{UserId: userID})
+		meta, fileErr := u.FileMetaForAdmin(adminCtx, kbID, docID)
+		if want && (fileErr != nil || meta.FileKey != "private/fallback.pdf") {
+			t.Fatalf("super-admin preview metadata: %+v %v", meta, fileErr)
+		}
+		if !want && !errors.Is(fileErr, ErrFileContentForbidden) {
+			t.Fatalf("unassigned user obtained preview metadata: %v", fileErr)
 		}
 	}
 	if code := u.ValidateNodePerm(ctx, uuid.NewString(), docID, rootID); code == nil || *code != domain.ErrCodeNotFound {

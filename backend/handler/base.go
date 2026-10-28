@@ -49,6 +49,12 @@ func (h *BaseHandler) NewResponseWithErrCode(c echo.Context, resp domain.PWRespo
 }
 
 func (h *BaseHandler) NewResponseWithError(c echo.Context, msg string, err error) error {
+	return h.NewResponseWithStatusError(c, http.StatusOK, msg, err)
+}
+
+// Binary endpoints need real HTTP errors so a file reader cannot mistake JSON
+// authorization failures for PDF bytes. Keep legacy JSON endpoint status codes.
+func (h *BaseHandler) NewResponseWithStatusError(c echo.Context, status int, msg string, err error) error {
 	traceID := ""
 	if h.config.GetBool("apm.enabled") {
 		span := trace.SpanFromContext(c.Request().Context())
@@ -58,7 +64,7 @@ func (h *BaseHandler) NewResponseWithError(c echo.Context, msg string, err error
 		traceID = uuid.New().String()
 	}
 	h.baseLogger.LogAttrs(c.Request().Context(), slog.LevelError, msg, slog.String("trace_id", traceID), slog.Any("error", err))
-	return c.JSON(http.StatusOK, domain.PWResponse{
+	return c.JSON(status, domain.PWResponse{
 		Success: false,
 		Message: msg,
 		TraceID: traceID,

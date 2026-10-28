@@ -12,10 +12,17 @@ import {
   Stack,
   Tooltip,
   Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import { IconShanchu, IconWenjian } from '@panda-wiki/icons';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { getStaticFileUrl } from '@/utils/staticFileUrl';
+import AdminSecureFilePreview, {
+  adminFileContentUrl,
+} from '@/components/SecureFilePreview';
 
 interface AttachmentListProps {
   detail: V1NodeDetailResp;
@@ -31,6 +38,7 @@ const AttachmentList = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [removingKey, setRemovingKey] = useState<string | null>(null);
+  const [preview, setPreview] = useState<DomainNodeAttachmentMeta | null>(null);
 
   const attachments = useMemo(
     () => detail.meta?.attachments || [],
@@ -285,9 +293,7 @@ const AttachmentList = ({
                   <Button
                     size='small'
                     variant='outlined'
-                    href={previewUrl}
-                    target='_blank'
-                    rel='noreferrer'
+                    onClick={() => setPreview(attachment)}
                   >
                     预览
                   </Button>
@@ -296,9 +302,13 @@ const AttachmentList = ({
                   <Button
                     size='small'
                     variant='text'
-                    href={fileUrl}
+                    href={adminFileContentUrl(
+                      detail.id || '',
+                      detail.kb_id || '',
+                      attachment.file_key || '',
+                      'download',
+                    )}
                     download={attachment.file_name || `attachment-${index + 1}`}
-                    target='_blank'
                     rel='noreferrer'
                   >
                     下载
@@ -326,6 +336,28 @@ const AttachmentList = ({
           );
         })
       )}
+      <Dialog
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        maxWidth='lg'
+        fullWidth
+      >
+        <DialogTitle>{preview?.file_name || '附件预览'}</DialogTitle>
+        <DialogContent sx={{ height: '80vh', display: 'flex', p: 1 }}>
+          {preview && (
+            <AdminSecureFilePreview
+              nodeId={detail.id || ''}
+              kbId={detail.kb_id || ''}
+              fileKey={preview.preview_key || preview.file_key || ''}
+              kind='pdf'
+              title={preview.file_name}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreview(null)}>关闭</Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 };

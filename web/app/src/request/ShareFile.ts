@@ -84,6 +84,7 @@ export const getShareV1CommonFileDownloadUrl = (
   query: {
     key: string;
     node_id: string;
+    attachment?: boolean;
   },
   params: RequestParams = {},
 ) =>

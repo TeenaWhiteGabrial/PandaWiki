@@ -23,11 +23,12 @@ export const resolveShareFileUrl = async (
   key: string,
   nodeId: string,
   kbId: string,
+  attachment = false,
 ) => {
   const normalized = normalizeFileKey(key);
   if (!normalized || !kbId) return '';
 
-  const cacheKey = `${kbId}:${nodeId}:${normalized}`;
+  const cacheKey = `${kbId}:${nodeId}:${normalized}:${attachment}`;
   const cached = signedUrlCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.url;
@@ -37,6 +38,7 @@ export const resolveShareFileUrl = async (
     {
       key: normalized,
       node_id: nodeId,
+      attachment,
     },
     {
       headers: {
@@ -63,7 +65,7 @@ export const openShareFile = async (
   const popup =
     typeof window !== 'undefined' ? window.open('about:blank', target) : null;
   try {
-    const url = await resolveShareFileUrl(key, nodeId, kbId);
+    const url = await resolveShareFileUrl(key, nodeId, kbId, true);
     if (url) {
       if (popup) popup.location.href = url;
       else window.open(url, target, 'noopener,noreferrer');

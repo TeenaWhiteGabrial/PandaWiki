@@ -4,6 +4,7 @@ import { Box, Button, Stack, Typography } from '@mui/material';
 import type { V1ShareNodeDetailResp } from '@/request/types';
 import { openShareFile, resolveShareFileUrl } from '@/utils/shareFileUrl';
 import { useEffect, useState } from 'react';
+import ShareSecureFilePreview from './SecureFilePreview';
 
 interface FilePreviewProps {
   info: V1ShareNodeDetailResp;
@@ -79,6 +80,17 @@ const FilePreview = ({ info }: FilePreviewProps) => {
   const kbId = info.kb_id || '';
   const fileType = getFileType(info);
   const fileName = info.meta?.file_name || info.name || '未命名文件';
+  const secureKind =
+    fileType === 'pdf' || previewKey
+      ? 'pdf'
+      : ['html', 'htm'].includes(fileType)
+        ? 'html'
+        : ['md', 'markdown', 'txt', 'csv', 'json', 'xml', 'log'].includes(
+              fileType,
+            )
+          ? 'text'
+          : null;
+  const [fileError, setFileError] = useState('');
   const [fileUrl, setFileUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
   const effectivePreviewUrl = previewUrl || fileUrl;
@@ -91,15 +103,19 @@ const FilePreview = ({ info }: FilePreviewProps) => {
     let disposed = false;
     setFileUrl('');
     setPreviewUrl('');
+    setFileError('');
 
-    if (!fileKey) return;
+    if (!fileKey || secureKind) return;
 
     resolveShareFileUrl(fileKey, nodeId, kbId)
       .then(url => {
         if (!disposed) setFileUrl(url);
       })
       .catch(() => {
-        if (!disposed) setFileUrl('');
+        if (!disposed) {
+          setFileUrl('');
+          setFileError('文件地址加载失败，请刷新后重试或下载原文件检查');
+        }
       });
 
     if (previewKey) {
@@ -115,7 +131,7 @@ const FilePreview = ({ info }: FilePreviewProps) => {
     return () => {
       disposed = true;
     };
-  }, [fileKey, kbId, nodeId, previewKey]);
+  }, [fileKey, kbId, nodeId, previewKey, secureKind]);
 
   if (!fileKey) {
     return (
@@ -159,14 +175,22 @@ const FilePreview = ({ info }: FilePreviewProps) => {
         </Box>
         <Button
           variant='outlined'
-          disabled={!fileUrl}
+          disabled={!fileKey}
           onClick={() => openShareFile(fileKey, nodeId, kbId)}
         >
           下载原文件
         </Button>
       </Stack>
 
-      {!effectivePreviewUrl ? (
+      {secureKind ? (
+        <ShareSecureFilePreview
+          nodeId={nodeId}
+          kbId={kbId}
+          fileKey={secureKind === 'pdf' ? previewKey || fileKey : fileKey}
+          kind={secureKind}
+          title={fileName}
+        />
+      ) : !effectivePreviewUrl ? (
         <Box
           sx={{
             p: 4,
@@ -176,7 +200,9 @@ const FilePreview = ({ info }: FilePreviewProps) => {
             bgcolor: 'background.paper',
           }}
         >
-          <Typography color='text.secondary'>文件地址加载中...</Typography>
+          <Typography color='text.secondary'>
+            {fileError || '文件地址加载中...'}
+          </Typography>
         </Box>
       ) : canImagePreview ? (
         <Box

@@ -38,7 +38,7 @@ export function pageSecurityHeaders({
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy': `default-src 'self'; script-src ${scripts}${development ? " 'unsafe-eval'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; media-src 'self' blob: http: https:; frame-src 'self' blob: http: https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors ${widget ? '*' : "'self'"}`,
+    'Content-Security-Policy': `default-src 'self'; script-src ${scripts} 'wasm-unsafe-eval'${development ? " 'unsafe-eval'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; media-src 'self' blob: http: https:; frame-src 'self' blob: http: https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors ${widget ? '*' : "'self'"}`,
   };
   if (!widget) headers['X-Frame-Options'] = 'SAMEORIGIN';
   return headers;

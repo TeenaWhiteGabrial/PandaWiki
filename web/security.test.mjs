@@ -30,6 +30,7 @@ test('production page policy requires a nonce, widget embedding remains delibera
   const normal = pageSecurityHeaders({ nonce: 'testnonce' });
   assert.ok(normal['Content-Security-Policy'].includes("'nonce-testnonce'"));
   assert.ok(!normal['Content-Security-Policy'].includes("'unsafe-eval'"));
+  assert.ok(normal['Content-Security-Policy'].includes("'wasm-unsafe-eval'"));
   assert.ok(
     normal['Content-Security-Policy'].includes("frame-ancestors 'self'"),
   );

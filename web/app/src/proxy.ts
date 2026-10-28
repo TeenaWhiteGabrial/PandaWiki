@@ -298,8 +298,14 @@ export async function proxy(request: NextRequest) {
   );
   request.headers.set('x-nonce', nonce);
   const response = await appProxy(request);
-  for (const [key, value] of Object.entries(headers))
-    response.headers.set(key, value);
+  // Preserve the strict binary response policy; the reader fetches bytes,
+  // and direct navigation must never execute a file on the app origin.
+  const fileContent = /\/(?:share\/v1\/common|api\/v1)\/file\/content$/.test(
+    request.nextUrl.pathname,
+  );
+  if (!fileContent)
+    for (const [key, value] of Object.entries(headers))
+      response.headers.set(key, value);
   response.headers.delete('X-Powered-By');
   response.headers.delete('Server');
   return response;

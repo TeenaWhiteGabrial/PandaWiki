@@ -73,3 +73,7 @@ tmp/security-followup-20261026/security-proxy
 
 # Local verification scripts, captures, and compiled artifacts.
 /tmp/
+
+# Generated local PDF.js reader assets
+web/admin/public/pdfjs/
+web/app/public/pdfjs/

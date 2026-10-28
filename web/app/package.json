@@ -3,8 +3,8 @@
   "version": "2.9.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 0.0.0.0 -p 3010",
-    "build": "next build",
+    "dev": "node ../scripts/copy-pdf-assets.mjs && next dev -H 0.0.0.0 -p 3010",
+    "build": "node ../scripts/copy-pdf-assets.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "api": "cx-swagger-api",
@@ -17,6 +17,7 @@
     "@emoji-mart/react": "^1.1.1",
     "@emotion/cache": "^11.14.0",
     "@mui/material-nextjs": "^7.3.5",
+    "@panda-wiki/file-preview": "workspace:*",
     "@sentry/nextjs": "^10.8.0",
     "@tiptap/react": "^3.14.0",
     "@types/markdown-it": "13.0.1",

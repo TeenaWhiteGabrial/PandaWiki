@@ -1,0 +1,16 @@
+{
+  "name": "@panda-wiki/file-preview",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "dependencies": {
+    "pdfjs-dist": "6.4.299"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "@mui/material": "^7.0.0"
+  }
+}

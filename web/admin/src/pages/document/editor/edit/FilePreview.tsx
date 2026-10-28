@@ -1,9 +1,11 @@
 import { V1NodeDetailResp } from '@/request/types';
-import { getApiV1FileDownloadUrl } from '@/request/File';
 import { resolveStaticFileUrl } from '@/utils/staticFileUrl';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
 import FileStorageInfo from './FileStorageInfo';
+import AdminSecureFilePreview, {
+  adminFileContentUrl,
+} from '@/components/SecureFilePreview';
 
 interface FilePreviewProps {
   detail: V1NodeDetailResp;
@@ -83,8 +85,18 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
   const previewKey = detail.meta?.preview_key;
   const fileType = getFileType(detail);
   const fileName = detail.meta?.file_name || detail.name || '原始文件';
+  const secureKind =
+    fileType === 'pdf' || previewKey
+      ? 'pdf'
+      : ['html', 'htm'].includes(fileType)
+        ? 'html'
+        : ['md', 'markdown', 'txt', 'csv', 'json', 'xml', 'log'].includes(
+              fileType,
+            )
+          ? 'text'
+          : null;
+  const [fileError, setFileError] = useState('');
   const [fileUrl, setFileUrl] = useState('');
-  const [downloadUrl, setDownloadUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
   const effectivePreviewUrl = previewUrl || fileUrl;
   const canImagePreview = IMAGE_PREVIEW_TYPES.has(fileType);
@@ -98,8 +110,10 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
   useEffect(() => {
     let cancelled = false;
     setFileUrl('');
-    setDownloadUrl('');
     setPreviewUrl('');
+    setFileError('');
+
+    if (secureKind) return;
 
     resolveStaticFileUrl(fileKey)
       .then(resolvedFileUrl => {
@@ -110,43 +124,14 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
       .catch(() => {
         if (!cancelled) {
           setFileUrl('');
+          setFileError('文件地址加载失败，请刷新后重试或下载原文件检查');
         }
       });
-
-    if (fileKey && !/^(https?:|blob:|data:)/i.test(fileKey)) {
-      getApiV1FileDownloadUrl({
-        key: fileKey.replace(/^\/+/, ''),
-        attachment: true,
-        filename: fileName,
-      })
-        .then(({ url }) => {
-          if (!cancelled) setDownloadUrl(url);
-        })
-        .catch(() => {
-          if (!cancelled) setDownloadUrl('');
-        });
-    } else if (fileKey) {
-      setDownloadUrl(fileKey);
-    }
-
-    if (previewKey) {
-      resolveStaticFileUrl(previewKey)
-        .then(resolvedPreviewUrl => {
-          if (!cancelled) {
-            setPreviewUrl(resolvedPreviewUrl);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setPreviewUrl('');
-          }
-        });
-    }
 
     return () => {
       cancelled = true;
     };
-  }, [fileKey, fileName, previewKey]);
+  }, [fileKey, fileName, previewKey, secureKind]);
 
   return (
     <Stack
@@ -178,10 +163,14 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
             当前文件仅支持预览和下载，不支持在线编辑
           </Typography> */}
         </Box>
-        {(downloadUrl || fileUrl) && (
+        {fileKey && (
           <Button
-            href={downloadUrl || fileUrl}
-            target={downloadUrl ? undefined : '_blank'}
+            href={adminFileContentUrl(
+              detail.id || '',
+              detail.kb_id || '',
+              fileKey,
+              'download',
+            )}
             rel='noreferrer'
           >
             下载原文件
@@ -191,7 +180,15 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
 
       <FileStorageInfo fileKey={fileKey} />
 
-      {!effectivePreviewUrl ? (
+      {secureKind && fileKey ? (
+        <AdminSecureFilePreview
+          nodeId={detail.id || ''}
+          kbId={detail.kb_id || ''}
+          fileKey={secureKind === 'pdf' ? previewKey || fileKey : fileKey}
+          kind={secureKind}
+          title={fileName}
+        />
+      ) : !effectivePreviewUrl ? (
         <Stack
           alignItems='center'
           justifyContent='center'
@@ -204,7 +201,7 @@ const FilePreview = ({ detail }: FilePreviewProps) => {
           }}
         >
           <Typography variant='body2' color='text.secondary'>
-            文件地址加载中...
+            {fileError || '文件地址加载中...'}
           </Typography>
         </Stack>
       ) : canPreview ? (

@@ -11,8 +11,13 @@ import {
   TableCell,
   TableRow,
   Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import ShareSecureFilePreview from './SecureFilePreview';
 
 interface AttachmentListProps {
   attachments?: DomainNodeAttachmentMeta[];
@@ -34,6 +39,7 @@ const AttachmentList = ({
   nodeId,
   kbId,
 }: AttachmentListProps) => {
+  const [preview, setPreview] = useState<DomainNodeAttachmentMeta | null>(null);
   const normalizedAttachments = useMemo(() => {
     return attachments.filter(item => !!item?.file_key);
   }, [attachments]);
@@ -71,7 +77,6 @@ const AttachmentList = ({
         <TableBody>
           {normalizedAttachments.map((attachment, index) => {
             const fileKey = attachment.file_key || '';
-            const previewKey = attachment.preview_key || fileKey;
             const previewable = canPreviewInline(attachment);
 
             return (
@@ -91,7 +96,7 @@ const AttachmentList = ({
                     {previewable && (
                       <Button
                         variant='outlined'
-                        onClick={() => openShareFile(previewKey, nodeId, kbId)}
+                        onClick={() => setPreview(attachment)}
                       >
                         预览
                       </Button>
@@ -109,6 +114,28 @@ const AttachmentList = ({
           })}
         </TableBody>
       </Table>
+      <Dialog
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        maxWidth='lg'
+        fullWidth
+      >
+        <DialogTitle>{preview?.file_name || '附件预览'}</DialogTitle>
+        <DialogContent sx={{ height: '80vh', display: 'flex', p: 1 }}>
+          {preview && (
+            <ShareSecureFilePreview
+              nodeId={nodeId}
+              kbId={kbId}
+              fileKey={preview.preview_key || preview.file_key || ''}
+              kind='pdf'
+              title={preview.file_name}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreview(null)}>关闭</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
