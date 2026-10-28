@@ -39,6 +39,7 @@ func TestSuperAdminDocumentFallbackPostgres(t *testing.T) {
 	defer tx.Rollback()
 	ctx := context.Background()
 	kbID, navID, folderID, docID, releaseID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	emptyNavID := uuid.NewString()
 	rootID, managerID, readerID, levelID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	policy := domain.NodePermissions{
 		ScopeType: "custom", AllowedDepartmentIDs: []string{uuid.NewString()},
@@ -53,6 +54,7 @@ func TestSuperAdminDocumentFallbackPostgres(t *testing.T) {
 		&domain.User{ID: readerID, Account: "reader_" + readerID, Password: "unused", Role: consts.UserRoleUser},
 		&domain.KnowledgeBase{ID: kbID, Name: "super-admin fallback fixture"},
 		&domain.Nav{ID: navID, KbID: kbID, Name: "restricted column", Permissions: policy},
+		&domain.Nav{ID: emptyNavID, KbID: kbID, Name: "new empty column"},
 		&domain.Node{ID: folderID, KBID: kbID, NavId: navID, Type: domain.NodeTypeFolder, Name: "restricted folder", Permissions: policy, CreatorId: rootID, EditorId: rootID},
 		&domain.Node{ID: docID, KBID: kbID, NavId: navID, ParentID: folderID, Type: domain.NodeTypeDocument, Name: "restricted document", Permissions: domain.NodePermissions{Inherit: &inherit}, CreatorId: rootID, EditorId: rootID, Meta: domain.NodeMeta{FileKey: "private/fallback.pdf", FileReadonly: true}},
 		&domain.KBRelease{ID: releaseID, KBID: kbID},
@@ -82,6 +84,7 @@ func TestSuperAdminDocumentFallbackPostgres(t *testing.T) {
 	nodes, navs := pg.NewNodeRepository(storeDB, l), pg.NewNavRepository(storeDB, l)
 	enterprise := &EnterpriseUsecase{repo: repo, nodeRepo: nodes, navRepo: navs}
 	u := &NodeUsecase{nodeRepo: nodes, navRepo: navs, enterprise: enterprise}
+	navUsecase := &NavUsecase{nodeRepo: nodes, navRepo: navs, enterprise: enterprise}
 	llm := &LLMUsecase{nodeRepo: nodes, enterprise: enterprise}
 	for _, userID := range []string{rootID, managerID, readerID} {
 		want := userID == rootID
@@ -117,6 +120,31 @@ func TestSuperAdminDocumentFallbackPostgres(t *testing.T) {
 			t.Fatalf("management fallback for %s: %+v %v", userID, access, err)
 		}
 		adminCtx := context.WithValue(ctx, domain.CtxAuthInfoKey, &domain.CtxAuthInfo{UserId: userID})
+		// A brand-new, empty navigation root must carry configuration flags even
+		// before it has documents or explicit management grants.
+		adminGroups, err := u.GetNodeTree(adminCtx, v1.NodeListGroupNavReq{KbId: kbID, Tree: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		emptyVisible := false
+		for _, group := range adminGroups {
+			if group.NavID == emptyNavID {
+				emptyVisible = true
+				if !want || !group.CanConfigure || !group.CanManage || !group.CanCreateDocument || !group.CanCreateFolder {
+					t.Fatalf("incorrect empty-root capabilities for %s: %+v", userID, group)
+				}
+			}
+		}
+		if emptyVisible != want {
+			t.Fatalf("empty-root visibility for %s: %v", userID, emptyVisible)
+		}
+		management, managementErr := navUsecase.GetManagement(adminCtx, kbID, emptyNavID)
+		if want && (managementErr != nil || !management.CanConfigure) {
+			t.Fatalf("super-admin cannot configure new root: %+v %v", management, managementErr)
+		}
+		if !want && managementErr == nil {
+			t.Fatalf("unassigned user can configure new root: %s", userID)
+		}
 		meta, fileErr := u.FileMetaForAdmin(adminCtx, kbID, docID)
 		if want && (fileErr != nil || meta.FileKey != "private/fallback.pdf") {
 			t.Fatalf("super-admin preview metadata: %+v %v", meta, fileErr)

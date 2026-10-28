@@ -319,7 +319,17 @@ function useActions({
       value => value.nav_id === item.nav_id || value.nav_id === item.id,
     );
     if (!group) return [];
-    const nav: V1NavListResp = { id: group.nav_id, name: group.nav_name };
+    // The permission dialog needs the server's capability flags as well as
+    // identity; dropping can_configure makes even a super-admin read-only.
+    const nav: V1NavListResp = {
+      id: group.nav_id,
+      name: group.nav_name,
+      permissions: group.permissions,
+      can_manage: group.can_manage,
+      can_configure: group.can_configure,
+      can_create_document: group.can_create_document,
+      can_create_folder: group.can_create_folder,
+    };
     return [
       ...actions.filter(
         action =>
