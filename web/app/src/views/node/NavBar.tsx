@@ -50,10 +50,6 @@ const NavBar = ({
     [selectedNavId, setSelectedNavId, navDataMap, navList, basePath, router],
   );
 
-  if (!navList.length || navList.length <= 1) {
-    return null;
-  }
-
   const tabValue = selectedNavId || navList[0]?.id || '';
 
   const contentWidthStyle = useMemo(() => {
@@ -73,6 +69,10 @@ const NavBar = ({
       maxWidth: '100%',
     };
   }, [docWidth, catalogWidth]);
+
+  // Expiry/logout clears the navigation list. Keep every Hook above this
+  // branch so that hiding the bar does not change the Hook order.
+  if (navList.length <= 1) return null;
 
   return (
     <Box
