@@ -1056,6 +1056,13 @@ export interface DomainAutoModeProviderReq {
 }
 
 export interface DomainModelModeSetting {
+  /** Non-secret vector configuration last applied to the index. */
+  embedding_index_config?: {
+    provider: string;
+    model: string;
+    context_window: number;
+    max_tokens: number;
+  };
   active_auto_provider?: string;
   auto_provider?: DomainAutoModeProviderReq;
   auto_provider_configs?: DomainAutoProviderConfig[];

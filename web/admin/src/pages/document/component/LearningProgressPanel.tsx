@@ -5,6 +5,7 @@ import {
   stageElapsedMs,
 } from '../utils/learningProgress';
 import { Modal, message } from '@/components/ui';
+import { cancelPendingLearning } from '@/request/nodeLearning';
 import {
   getRagStatusMeta,
   hasAvailableRagIndex,
@@ -28,6 +29,7 @@ import {
   Button,
   Checkbox,
   Chip,
+  CircularProgress,
   Divider,
   Pagination,
   Stack,
@@ -69,8 +71,9 @@ const isRagRunningStatus = (status: LearningDoc['statusKey']) =>
   status === ConstsNodeRagInfoStatus.NodeRagStatusReindexing;
 
 const isDocRunning = (item: LearningDoc) =>
-  isLearningTaskActive(item.taskStatus) ||
-  (!item.available && isRagRunningStatus(item.statusKey));
+  item.taskStatus
+    ? isLearningTaskActive(item.taskStatus)
+    : !item.available && isRagRunningStatus(item.statusKey);
 
 const isDocFailed = (item: LearningDoc) =>
   item.taskStatus === ConstsNodeLearningTaskStatus.NodeLearningTaskFailed ||
@@ -88,20 +91,44 @@ const LearningProgressPanel = ({
   onClose,
   refresh,
 }: LearningProgressPanelProps) => {
-  const { kb_id } = useAppSelector(state => state.config);
+  const { kb_id, user } = useAppSelector(state => state.config);
   const [groups, setGroups] = useState(initialGroups);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadError, setLoadError] = useState<'initial' | 'refresh' | null>(
+    null,
+  );
+  const [reloadKey, setReloadKey] = useState(0);
+  const dataUnavailable = initialLoading || loadError === 'initial';
   useEffect(() => {
-    if (!open || !kb_id) return;
+    if (!open) {
+      setInitialLoading(true);
+      return;
+    }
+    if (!kb_id) {
+      setInitialLoading(false);
+      setLoadError('initial');
+      return;
+    }
+    setInitialLoading(true);
+    setLoadError(null);
     let stopped = false;
+    let loaded = false;
     let timer: ReturnType<typeof setTimeout>;
     const load = async () => {
       try {
         const result = await getApiV1NodeListGroupNav({ kb_id });
-        if (!stopped) setGroups(result || []);
+        if (!stopped) {
+          loaded = true;
+          setGroups(result || []);
+          setLoadError(null);
+        }
       } catch {
-        if (!stopped) setGroups([]);
+        if (!stopped) setLoadError(loaded ? 'refresh' : 'initial');
       } finally {
-        if (!stopped) timer = setTimeout(load, 5000);
+        if (!stopped) {
+          setInitialLoading(false);
+          timer = setTimeout(load, 5000);
+        }
       }
     };
     void load();
@@ -109,7 +136,7 @@ const LearningProgressPanel = ({
       stopped = true;
       clearTimeout(timer);
     };
-  }, [open, kb_id]);
+  }, [open, kb_id, reloadKey]);
   const [detailId, setDetailId] = useState<string>();
   const [filter, setFilter] = useState<FilterKey>('attention');
   const [keyword, setKeyword] = useState('');
@@ -117,6 +144,7 @@ const LearningProgressPanel = ({
   const [submitting, setSubmitting] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingCancelMessage, setPendingCancelMessage] = useState('');
 
   const docs = useMemo<LearningDoc[]>(() => {
     const result: LearningDoc[] = [];
@@ -215,7 +243,8 @@ const LearningProgressPanel = ({
 
   const totalPages = Math.max(1, Math.ceil(visibleDocs.length / pageSize));
   const pagedDocs = visibleDocs.slice((page - 1) * pageSize, page * pageSize);
-  const shouldAutoRefresh = docs.some(item => isDocRunning(item));
+  const shouldAutoRefresh =
+    !dataUnavailable && docs.some(item => isDocRunning(item));
   const pendingDocs = docs.filter(
     item =>
       !isDocRunning(item) &&
@@ -311,10 +340,37 @@ const LearningProgressPanel = ({
     })
       .then(res => {
         const count = res.count ?? ids.length;
-        message.success(`已停止 ${count} 个学习/重建任务`);
+        message.success(
+          `已取消 ${count} 个未提交任务；已提交或正在提交的任务继续处理`,
+        );
         refresh();
       })
       .finally(() => setSubmitting(false));
+  };
+
+  const confirmCancelPending = () => {
+    if (!kb_id) return;
+    const requestedKB = kb_id;
+    Modal.confirm({
+      title: '取消未提交任务？',
+      content:
+        '将取消当前知识库所有尚未提交的学习和重建任务（包含旧版静默全量重建，不受当前筛选条件限制）。已提交或已开始提交给 RAGLite 的任务继续处理，不删除原文件和已有索引。取消标记会保留，重启 Consumer 后也会跳过这些旧任务。',
+      okText: '取消未提交任务',
+      cancelText: '返回',
+      onOk: async () => {
+        setSubmitting(true);
+        try {
+          const result = await cancelPendingLearning(requestedKB);
+          const text = `已取消 ${result.count ?? 0} 个已登记的未提交任务；旧版队列也已设置取消标记，恢复 Consumer 后将跳过旧任务。已提交或正在提交的任务继续处理。`;
+          setPendingCancelMessage(text);
+          message.success('取消标记已保存');
+          refresh();
+          setReloadKey(value => value + 1);
+        } finally {
+          setSubmitting(false);
+        }
+      },
+    });
   };
 
   const confirmRebuildSelected = () => {
@@ -335,6 +391,7 @@ const LearningProgressPanel = ({
 
   useEffect(() => {
     if (!open) return;
+    setPendingCancelMessage('');
     setPage(1);
     setSelectionMode(false);
     setSelectedIds([]);
@@ -387,7 +444,7 @@ const LearningProgressPanel = ({
 
   return (
     <Modal
-      title='索引状态'
+      title='后台任务'
       open={open}
       width={1440}
       footer={null}
@@ -429,7 +486,7 @@ const LearningProgressPanel = ({
                 {item.label}
               </Typography>
               <Typography fontSize={22} fontWeight={700} color={item.color}>
-                {item.value}
+                {dataUnavailable ? '—' : item.value}
               </Typography>
             </Box>
           ))}
@@ -438,6 +495,18 @@ const LearningProgressPanel = ({
         <Typography fontSize={12} color='text.secondary'>
           可问答表示当前已有可用索引；本次异常表示最近一次学习/重建任务失败，通常不影响已有旧索引继续问答。
         </Typography>
+
+        {loadError === 'refresh' && (
+          <Typography role='status' fontSize={12} color='warning.main'>
+            刷新失败，当前保留上次加载的数据，稍后将自动重试。
+          </Typography>
+        )}
+
+        {pendingCancelMessage && (
+          <Typography role='status' fontSize={12} color='success.main'>
+            {pendingCancelMessage}
+          </Typography>
+        )}
 
         <Stack direction='row' alignItems='center' gap={1} flexWrap='wrap'>
           <Stack
@@ -451,6 +520,7 @@ const LearningProgressPanel = ({
               <Button
                 key={item.key}
                 size='small'
+                disabled={dataUnavailable}
                 variant={filter === item.key ? 'contained' : 'outlined'}
                 sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 72 }}
                 onClick={() => {
@@ -458,7 +528,7 @@ const LearningProgressPanel = ({
                   setPage(1);
                 }}
               >
-                {item.label} {item.count}
+                {item.label} {dataUnavailable ? '—' : item.count}
               </Button>
             ))}
           </Stack>
@@ -473,6 +543,7 @@ const LearningProgressPanel = ({
             <TextField
               size='small'
               placeholder='搜索文档 / 目录 / 原因'
+              disabled={dataUnavailable}
               value={keyword}
               onChange={event => {
                 setKeyword(event.target.value);
@@ -483,7 +554,11 @@ const LearningProgressPanel = ({
             <Button
               size='small'
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 64 }}
-              onClick={refresh}
+              disabled={initialLoading}
+              onClick={() => {
+                refresh();
+                setReloadKey(value => value + 1);
+              }}
             >
               刷新
             </Button>
@@ -491,16 +566,32 @@ const LearningProgressPanel = ({
               size='small'
               color='warning'
               variant='outlined'
-              disabled={submitting || runningVisibleDocs.length === 0}
+              disabled={
+                dataUnavailable || submitting || runningVisibleDocs.length === 0
+              }
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 112 }}
               onClick={() => cancelLearning(runningVisibleDocs)}
             >
-              停止进行中 {runningVisibleDocs.length}
+              取消筛选内未提交
             </Button>
+            {user.role === 'admin' && (
+              <Button
+                size='small'
+                color='warning'
+                variant='outlined'
+                disabled={submitting}
+                sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+                onClick={confirmCancelPending}
+              >
+                取消未提交任务
+              </Button>
+            )}
             <Button
               size='small'
               variant='outlined'
-              disabled={submitting || pendingDocs.length === 0}
+              disabled={
+                dataUnavailable || submitting || pendingDocs.length === 0
+              }
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 132 }}
               onClick={() => submitRestudy(pendingDocs, '暂无需要学习的文档')}
             >
@@ -510,7 +601,9 @@ const LearningProgressPanel = ({
               <Button
                 size='small'
                 variant='outlined'
-                disabled={submitting || visibleDocs.length === 0}
+                disabled={
+                  dataUnavailable || submitting || visibleDocs.length === 0
+                }
                 sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 132 }}
                 onClick={() => {
                   setSelectionMode(true);
@@ -524,7 +617,9 @@ const LearningProgressPanel = ({
               size='small'
               color='primary'
               variant='contained'
-              disabled={submitting || visibleDocs.length === 0}
+              disabled={
+                dataUnavailable || submitting || visibleDocs.length === 0
+              }
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 120 }}
               onClick={confirmRebuildCurrentResult}
             >
@@ -533,7 +628,7 @@ const LearningProgressPanel = ({
           </Stack>
         </Stack>
 
-        {selectionMode && (
+        {selectionMode && !dataUnavailable && (
           <Stack
             direction='row'
             alignItems='center'
@@ -572,7 +667,7 @@ const LearningProgressPanel = ({
                 sx={{ whiteSpace: 'nowrap', minWidth: 104 }}
                 onClick={() => cancelLearning(selectedRunningDocs)}
               >
-                停止所选
+                取消所选未提交
               </Button>
               <Button
                 size='small'
@@ -619,7 +714,7 @@ const LearningProgressPanel = ({
                   size='small'
                   checked={isPagedAllSelected}
                   indeterminate={isPagedIndeterminate}
-                  disabled={pagedSelectableIds.length === 0}
+                  disabled={dataUnavailable || pagedSelectableIds.length === 0}
                   sx={{ p: 0.25 }}
                   onChange={toggleCurrentPageSelected}
                 />
@@ -632,8 +727,40 @@ const LearningProgressPanel = ({
             <Box sx={{ flex: 2, minWidth: 0 }}>进展 / 失败原因</Box>
           </Stack>
           <Divider />
-          <Stack sx={{ minHeight: 360, maxHeight: 420, overflowY: 'auto' }}>
-            {pagedDocs.length === 0 ? (
+          <Stack
+            aria-busy={initialLoading}
+            sx={{ minHeight: 360, maxHeight: 420, overflowY: 'auto' }}
+          >
+            {initialLoading ? (
+              <Stack
+                role='status'
+                alignItems='center'
+                justifyContent='center'
+                gap={1.5}
+                sx={{ minHeight: 360, color: 'text.secondary' }}
+              >
+                <CircularProgress size={32} aria-label='正在加载任务数据' />
+                <Typography fontSize={13}>正在加载任务数据…</Typography>
+              </Stack>
+            ) : loadError === 'initial' ? (
+              <Stack
+                role='alert'
+                alignItems='center'
+                justifyContent='center'
+                gap={1.5}
+                sx={{ minHeight: 360, color: 'text.secondary' }}
+              >
+                <Typography fontSize={13}>
+                  任务数据加载失败，请重试。
+                </Typography>
+                <Button
+                  size='small'
+                  onClick={() => setReloadKey(value => value + 1)}
+                >
+                  重新加载
+                </Button>
+              </Stack>
+            ) : pagedDocs.length === 0 ? (
               <Stack
                 alignItems='center'
                 justifyContent='center'
@@ -795,12 +922,13 @@ const LearningProgressPanel = ({
           justifyContent='space-between'
         >
           <Typography fontSize={12} color='text.secondary'>
-            共 {visibleDocs.length} 个文档
+            共 {dataUnavailable ? '—' : visibleDocs.length} 个文档
             {selectionMode ? `，已选择 ${selectedDocs.length} 个` : ''}
             ；页面每 5 秒刷新，后台状态通知即时更新，兜底查询每 5 分钟执行
           </Typography>
           <Pagination
             size='small'
+            disabled={dataUnavailable}
             page={page}
             count={totalPages}
             onChange={(_, value) => setPage(value)}

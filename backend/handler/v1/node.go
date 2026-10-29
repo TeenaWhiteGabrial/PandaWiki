@@ -64,6 +64,7 @@ func NewNodeHandler(
 	writeGroup.POST("/batch_move", h.BatchMoveNode)
 	writeGroup.POST("/restudy", h.NodeRestudy)
 	writeGroup.POST("/learning/cancel", h.NodeLearningCancel)
+	writeGroup.POST("/learning/cancel-pending", h.NodeLearningCancelPending)
 	writeGroup.PATCH("/permission/edit", h.NodePermissionEdit)
 	writeGroup.POST("/permission/audience", h.ReadingAudience)
 	writeGroup.PATCH("/management", h.EditNodeManagement)
@@ -687,6 +688,25 @@ func (h *NodeHandler) NodeLearningCancel(c echo.Context) error {
 	}
 
 	return h.NewResponseWithData(c, &v1.NodeLearningCancelResp{Count: count})
+}
+
+func (h *NodeHandler) NodeLearningCancelPending(c echo.Context) error {
+	var req v1.NodeLearningCancelPendingReq
+	if err := c.Bind(&req); err != nil {
+		return h.NewResponseWithError(c, "request params is invalid", err)
+	}
+	if err := c.Validate(req); err != nil {
+		return h.NewResponseWithError(c, "validate request params failed", err)
+	}
+	auth := domain.GetAuthInfoFromCtx(c.Request().Context())
+	if auth == nil || auth.UserId == "" {
+		return h.NewResponseWithError(c, "未登录", fmt.Errorf("missing user identity"))
+	}
+	result, err := h.usecase.CancelPendingLearning(c.Request().Context(), req.KbId, auth.UserId)
+	if err != nil {
+		return h.NewResponseWithError(c, err.Error(), err)
+	}
+	return h.NewResponseWithData(c, result)
 }
 
 func (h *NodeHandler) TreeNodeStatuses(c echo.Context) error {

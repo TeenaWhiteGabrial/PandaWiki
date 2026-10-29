@@ -22,13 +22,23 @@ func (SystemSetting) TableName() string {
 
 // ModelModeSetting 模型配置结构体
 type ModelModeSetting struct {
-	Mode                     consts.ModelSettingMode   `json:"mode"`                        // 模式: manual 或 auto
-	AutoProviderConfigs      []AutoProviderSettingItem `json:"auto_provider_configs"`       // 兼容上一版自动模式多供应商配置
-	ActiveAutoProvider       string                    `json:"active_auto_provider"`        // 兼容上一版自动模式当前供应商 ID
-	AutoProvider             *AutoModeProviderSetting  `json:"auto_provider"`               // 自动模式统一供应商配置
-	AutoModeAPIKey           string                    `json:"auto_mode_api_key"`           // 兼容旧百智云自动模式字段
-	ChatModel                string                    `json:"chat_model"`                  // 兼容旧自动模式字段
-	IsManualEmbeddingUpdated bool                      `json:"is_manual_embedding_updated"` // 手动模式下嵌入模型是否更新
+	EmbeddingIndexConfig     *EmbeddingIndexConfig     `json:"embedding_index_config,omitempty"` // Non-secret configuration last applied to the index
+	Mode                     consts.ModelSettingMode   `json:"mode"`                             // 模式: manual 或 auto
+	AutoProviderConfigs      []AutoProviderSettingItem `json:"auto_provider_configs"`            // 兼容上一版自动模式多供应商配置
+	ActiveAutoProvider       string                    `json:"active_auto_provider"`             // 兼容上一版自动模式当前供应商 ID
+	AutoProvider             *AutoModeProviderSetting  `json:"auto_provider"`                    // 自动模式统一供应商配置
+	AutoModeAPIKey           string                    `json:"auto_mode_api_key"`                // 兼容旧百智云自动模式字段
+	ChatModel                string                    `json:"chat_model"`                       // 兼容旧自动模式字段
+	IsManualEmbeddingUpdated bool                      `json:"is_manual_embedding_updated"`      // 手动模式下嵌入模型是否更新
+}
+
+// Credentials and endpoint addresses do not define a vector space. Keep only
+// model identity and supported parameters that affect indexed content here.
+type EmbeddingIndexConfig struct {
+	Provider      string `json:"provider"`
+	Model         string `json:"model"`
+	ContextWindow int    `json:"context_window"`
+	MaxTokens     int    `json:"max_tokens"`
 }
 
 type AutoProviderSettingItem struct {

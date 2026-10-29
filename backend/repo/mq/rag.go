@@ -3,6 +3,7 @@ package mq
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/mq"
@@ -10,6 +11,16 @@ import (
 
 type RAGRepository struct {
 	producer mq.MQProducer
+}
+
+func (r *RAGRepository) VectorQueueBoundary(ctx context.Context) (domain.VectorQueueBoundary, error) {
+	p, ok := r.producer.(interface {
+		VectorQueueBoundary(context.Context) (domain.VectorQueueBoundary, error)
+	})
+	if !ok {
+		return domain.VectorQueueBoundary{}, fmt.Errorf("当前消息队列不支持安全取消旧任务")
+	}
+	return p.VectorQueueBoundary(ctx)
 }
 
 func NewRAGRepository(producer mq.MQProducer) *RAGRepository {

@@ -81,6 +81,16 @@ type NodeLearningCancelResp struct {
 	Count int `json:"count"`
 }
 
+type NodeLearningCancelPendingReq struct {
+	KbId string `json:"kb_id" validate:"required"`
+}
+
+type NodeLearningCancelPendingResp struct {
+	Count          int    `json:"count"`
+	ProtectedCount int    `json:"protected_count"`
+	LegacyCutoff   uint64 `json:"legacy_cutoff"`
+}
+
 type NodeStatsReq struct {
 	KbId string `query:"kb_id" json:"kb_id" validate:"required"`
 }

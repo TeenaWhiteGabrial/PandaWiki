@@ -39,6 +39,9 @@ deploy/server/*
 !deploy/server/.env.example
 !deploy/server/README.md
 !deploy/server/deploy.sh
+!deploy/server/tests/
+deploy/server/tests/*
+!deploy/server/tests/upgrade-paused-consumer.sh
 !deploy/server/docker-compose.yml
 !deploy/server/postgres-init/
 !deploy/server/postgres-init/01-create-raglite-db.sql

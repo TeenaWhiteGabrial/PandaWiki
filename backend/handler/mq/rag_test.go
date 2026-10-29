@@ -2,6 +2,7 @@ package mq
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -18,6 +19,48 @@ import (
 	"github.com/chaitin/panda-wiki/repo/pg"
 	store "github.com/chaitin/panda-wiki/store/pg"
 )
+
+type canceledLegacyMessage struct {
+	data        []byte
+	sequence    uint64
+	publishedAt time.Time
+}
+
+func (m canceledLegacyMessage) GetData() []byte  { return m.data }
+func (m canceledLegacyMessage) GetTopic() string { return domain.VectorTaskTopic }
+func (m canceledLegacyMessage) VectorQueuePosition() (uint64, time.Time, error) {
+	return m.sequence, m.publishedAt, nil
+}
+
+func TestCanceledLegacyMessageIsAcknowledgableWithoutCallingRAG(t *testing.T) {
+	dsn := os.Getenv("PANDA_WIKI_TEST_PG_DSN")
+	if dsn == "" {
+		t.Skip("local PostgreSQL required")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, _ := db.DB()
+	defer conn.Close()
+	tx := db.Begin()
+	defer tx.Rollback()
+	l := log.NewLogger(&config.Config{})
+	repo := pg.NewNodeRepository(&store.DB{DB: tx}, l)
+	kbID := uuid.NewString()
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	if _, _, err := repo.CancelPendingLearning(t.Context(), kbID, domain.VectorQueueBoundary{Sequence: 100, PublishedAt: at}); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(domain.NodeReleaseVectorRequest{KBID: kbID, NodeReleaseID: uuid.NewString(), Action: "upsert"})
+	// Intentionally provide no KB repo, parser or RAG client: none may be called.
+	h := &RAGMQHandler{nodeRepo: pg.NewNodeRepository(&store.DB{DB: tx}, l), logger: l}
+	for i := 0; i < 2; i++ {
+		if err := h.HandleNodeContentVectorRequest(t.Context(), canceledLegacyMessage{data: body, sequence: 99, publishedAt: at}); err != nil {
+			t.Fatal("canceled message was not safely skipped/acknowledgeable", err)
+		}
+	}
+}
 
 func TestCanceledLearningTaskStopsParserContext(t *testing.T) {
 	dsn := os.Getenv("PANDA_WIKI_TEST_PG_DSN")

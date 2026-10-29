@@ -1155,6 +1155,11 @@ func (r *NodeRepository) UpdateNodeRagInfo(ctx context.Context, kbID, nodeID str
 			return err
 		}
 		if node.RagInfo.TaskID == ragInfo.TaskID {
+			// A dispatcher that raced with cancellation must not revive its UI state.
+			if node.RagInfo.TaskStatus == consts.NodeLearningTaskCanceled &&
+				(ragInfo.TaskStatus == consts.NodeLearningTaskRunning || ragInfo.TaskStatus == consts.NodeLearningTaskWaiting) {
+				return nil
+			}
 			ragInfo.LearningProgress = node.RagInfo.LearningProgress
 		} else {
 			ragInfo.LearningProgress = nil
@@ -1392,7 +1397,11 @@ func (r *NodeRepository) CancelActiveNodeLearningTasks(ctx context.Context, kbID
 	}
 	tasks := make([]*domain.NodeLearningTask, 0)
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockLearningSubmission(tx, kbID); err != nil {
+			return err
+		}
 		if err := tx.
+			Clauses(clause.Locking{Strength: "UPDATE"}).
 			Model(&domain.NodeLearningTask{}).
 			Where("kb_id = ? AND node_id IN ?", kbID, nodeIDs).
 			Where("status IN ?", []consts.NodeLearningTaskStatus{
@@ -1404,6 +1413,23 @@ func (r *NodeRepository) CancelActiveNodeLearningTasks(ctx context.Context, kbID
 			Find(&tasks).Error; err != nil {
 			return err
 		}
+		if len(tasks) == 0 {
+			return nil
+		}
+		pending := make([]*domain.NodeLearningTask, 0, len(tasks))
+		for _, task := range tasks {
+			var node domain.Node
+			if err := tx.Where("id = ? AND kb_id = ?", task.NodeID, kbID).First(&node).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					continue
+				}
+				return err
+			}
+			if !submissionHasStarted(*task, node) {
+				pending = append(pending, task)
+			}
+		}
+		tasks = pending
 		if len(tasks) == 0 {
 			return nil
 		}

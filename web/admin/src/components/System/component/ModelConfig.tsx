@@ -8,6 +8,11 @@ import {
 } from '@/request/Model';
 import { GithubComChaitinPandaWikiDomainModelListItem } from '@/request/types';
 import { addOpacityToColor } from '@/utils';
+import {
+  autoEmbeddingIndexConfig,
+  embeddingIndexNeedsRebuild,
+  type EmbeddingIndexConfig,
+} from '@/utils/embeddingIndex';
 import { message, Modal } from '@/components/ui';
 import { Box, Button, Stack, Switch, useTheme } from '@mui/material';
 import LottieIcon from '../../LottieIcon';
@@ -90,6 +95,8 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
     const [isSaving, setIsSaving] = useState(false);
     const [initialAutoProvider, setInitialAutoProvider] =
       useState<AutoModelConfigFormData | null>(null);
+    const [initialEmbeddingIndex, setInitialEmbeddingIndex] =
+      useState<EmbeddingIndexConfig | null>(null);
     const [hasConfigChanged, setHasConfigChanged] = useState(false);
 
     const [modelData, setModelData] = useState<ModelDataMap>({
@@ -139,6 +146,12 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
             setInitialAutoProvider(
               (setting.auto_provider as AutoModelConfigFormData | null) || null,
             );
+            setInitialEmbeddingIndex(
+              setting.embedding_index_config ||
+                (setting.auto_provider
+                  ? autoEmbeddingIndexConfig(setting.auto_provider)
+                  : null),
+            );
           }
         } catch (err) {
           console.error('获取模型配置失败:', err);
@@ -161,6 +174,9 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
             setTempMode('auto');
             setSavedMode('auto');
             setHasAutoSwitched(true);
+            setInitialEmbeddingIndex(
+              autoEmbeddingIndexConfig(currentSetting.auto_provider),
+            );
             getModelList();
           } catch (err) {
             console.error('切换到自动配置模式失败:', err);
@@ -224,16 +240,20 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
       }
 
       if (tempMode !== savedMode || hasConfigChanged) {
-        // 检测是否切换了模式
-        const isModeChanged = tempMode !== savedMode;
-        // 检测向量模型是否变更 (比较 provider + model 组合)
-        const isEmbeddingModelChanged = !!cacheModelData.current['embedding'];
+        const formData = autoConfigRef.current?.getFormData();
+        const isEmbeddingModelChanged =
+          !!formData &&
+          embeddingIndexNeedsRebuild(
+            initialEmbeddingIndex,
+            autoEmbeddingIndexConfig(formData),
+          );
 
-        // 如果切换了模式或修改了向量模型,需要确认
-        if (isModeChanged || isEmbeddingModelChanged) {
+        // 按实际向量配置判断，模式切换本身不要求重建。
+        if (isEmbeddingModelChanged) {
           Modal.confirm({
             title: '确认操作',
-            content: '此操作会在后台重建问答索引，请确认是否继续？',
+            content:
+              '向量模型或索引参数已变化，保存后将重建全部文档的问答索引，并优先复用已解析正文。是否继续？',
             onOk: async () => {
               await performSave();
             },
@@ -291,6 +311,10 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
         }
 
         await postApiV1ModelSwitchMode(requestData);
+        // Advance only after the server accepted the complete configuration.
+        setInitialEmbeddingIndex(
+          autoEmbeddingIndexConfig(requestData.auto_provider),
+        );
         setTempMode('auto');
         setSavedMode('auto');
         setAutoConfigMode(true);
@@ -427,7 +451,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                   >
                     提示：
                   </Box>
-                  修改向量模型会在后台重建问答索引
+                  仅向量模型或索引参数变化时重建；修改密钥、地址或其他模型不会自动全量重建
                 </Box>
               )}
             </Stack>

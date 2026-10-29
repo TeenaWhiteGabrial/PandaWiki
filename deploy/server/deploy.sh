@@ -123,6 +123,7 @@ usage() {
   bash deploy.sh upgrade admin    # 只升级管理端
   bash deploy.sh upgrade app      # 只升级用户端
   bash deploy.sh upgrade backend  # 升级 PDF 解析服务、API 和 Consumer
+  KEEP_CONSUMER_STOPPED=1 bash deploy.sh upgrade backend  # 升级后保持 Consumer 停止，供取消旧队列任务
   bash deploy.sh upgrade base     # 只重建基础服务容器，不删除数据卷
   bash deploy.sh upgrade all      # 完整升级（默认）
   bash deploy.sh fresh-db
@@ -448,6 +449,20 @@ rollback_upgrade() {
     echo "==> 此前没有已部署服务，已清理本次新增容器"
     return 0
   fi
+  if [[ "${KEEP_CONSUMER_STOPPED:-0}" == "1" ]]; then
+    local -a paused_restore_services=()
+    local restore_service
+    for restore_service in "${existing_services[@]}"; do
+      [[ "${restore_service}" == "consumer" ]] || paused_restore_services+=("${restore_service}")
+    done
+    existing_services=("${paused_restore_services[@]}")
+    if ! compose up --no-start --no-build --no-deps consumer; then
+      return 1
+    fi
+    if [[ "${#existing_services[@]}" -eq 0 ]]; then
+      return 0
+    fi
+  fi
   if ! compose up -d --no-build --no-deps "${existing_services[@]}" ||
     ! wait_for_services "${existing_services[@]}"; then
     echo "回滚容器启动失败，请执行：${COMPOSE_BIN[*]} --env-file ${ENV_FILE} -f ${COMPOSE_FILE} ps"
@@ -472,6 +487,10 @@ upgrade_services() {
   local target="$1"
   local -a services=()
   local -a build_services=()
+  if [[ "${KEEP_CONSUMER_STOPPED:-0}" == "1" && "${target}" != "backend" ]]; then
+    echo "KEEP_CONSUMER_STOPPED=1 仅支持 upgrade backend"
+    return 1
+  fi
 
   case "${target}" in
     admin)
@@ -506,6 +525,12 @@ upgrade_services() {
       ;;
   esac
 
+  local -a start_services=("${services[@]}")
+  if [[ "${KEEP_CONSUMER_STOPPED:-0}" == "1" ]]; then
+    start_services=(pdf-parser api)
+    echo "==> 本次升级及失败回滚均保持 Consumer 停止，不恢复旧任务提交"
+  fi
+
   if ! snapshot_for_rollback "${services[@]}"; then
     return 1
   fi
@@ -529,8 +554,9 @@ upgrade_services() {
 
   if [[ "${target}" != "all" ]]; then
     if ! compose rm -sf "${services[@]}" ||
-      ! compose up -d --no-build --no-deps "${services[@]}" ||
-      ! wait_for_services "${services[@]}"; then
+      { [[ "${KEEP_CONSUMER_STOPPED:-0}" == "1" ]] && ! compose up --no-start --no-build --no-deps consumer; } ||
+      ! compose up -d --no-build --no-deps "${start_services[@]}" ||
+      ! wait_for_services "${start_services[@]}"; then
       handle_upgrade_failure
       return 1
     fi
@@ -548,6 +574,9 @@ upgrade_services() {
   fi
 
   compose ps
+  if [[ "${KEEP_CONSUMER_STOPPED:-0}" == "1" ]]; then
+    echo "==> Consumer 已保持停止；请先在后台任务中取消未提交任务，确认成功后再手动启动 Consumer"
+  fi
   cleanup_rollback_backups
 }
 

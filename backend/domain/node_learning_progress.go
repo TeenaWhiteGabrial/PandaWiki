@@ -5,17 +5,18 @@ import "time"
 // LearningProgress is an observed timeline, not an estimated percentage.
 // Old tasks begin at the first observation after this feature is deployed.
 type LearningProgress struct {
-	Extraction     *FileExtraction `json:"extraction,omitempty"`
-	StartedAt      time.Time       `json:"started_at"`
-	FinishedAt     *time.Time      `json:"finished_at,omitempty"`
-	LastProgressAt time.Time       `json:"last_progress_at"`
-	LastCheckedAt  *time.Time      `json:"last_checked_at,omitempty"`
-	CheckError     string          `json:"check_error,omitempty"`
-	RAGStatus      string          `json:"rag_status,omitempty"`
-	Source         string          `json:"source,omitempty"`
-	DocID          string          `json:"doc_id,omitempty"`
-	DatasetID      string          `json:"dataset_id,omitempty"`
-	Stages         []LearningStage `json:"stages"`
+	SubmissionStartedAt *time.Time      `json:"submission_started_at,omitempty"`
+	Extraction          *FileExtraction `json:"extraction,omitempty"`
+	StartedAt           time.Time       `json:"started_at"`
+	FinishedAt          *time.Time      `json:"finished_at,omitempty"`
+	LastProgressAt      time.Time       `json:"last_progress_at"`
+	LastCheckedAt       *time.Time      `json:"last_checked_at,omitempty"`
+	CheckError          string          `json:"check_error,omitempty"`
+	RAGStatus           string          `json:"rag_status,omitempty"`
+	Source              string          `json:"source,omitempty"`
+	DocID               string          `json:"doc_id,omitempty"`
+	DatasetID           string          `json:"dataset_id,omitempty"`
+	Stages              []LearningStage `json:"stages"`
 }
 
 // FileExtraction describes what is actually indexed, independently of RAG status.

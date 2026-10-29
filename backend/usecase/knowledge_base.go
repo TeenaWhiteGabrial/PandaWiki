@@ -555,6 +555,22 @@ func ShouldRefreshFileContent(release *domain.NodeReleaseWithDirPath) bool {
 	return strings.Contains(release.Content, "这是一个文件型文档。系统当前已索引该文件的基础元信息，可用于按名称、路径、类型检索。")
 }
 
+// Model-only rebuilds can reuse full extracted text, including legacy PDFs
+// whose extraction metadata predates the parser. Manual rebuilds still retry
+// missing/partial/metadata-only extraction with the normal policy.
+func ShouldRefreshFileContentForIndex(release *domain.NodeReleaseWithDirPath, reuseParsedContent bool) bool {
+	if reuseParsedContent && release != nil && strings.TrimSpace(release.Content) != "" {
+		if extraction := release.Meta.Extraction; extraction != nil {
+			if extraction.Scope == "full" {
+				return false
+			}
+		} else if !strings.Contains(release.Content, "这是一个文件型文档。系统当前已索引该文件的基础元信息") {
+			return false
+		}
+	}
+	return ShouldRefreshFileContent(release)
+}
+
 func normalizeReleaseFileType(release *domain.NodeReleaseWithDirPath) string {
 	if release == nil {
 		return ""

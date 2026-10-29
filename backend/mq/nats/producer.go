@@ -8,6 +8,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/chaitin/panda-wiki/config"
+	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 )
 
@@ -15,6 +16,14 @@ type MQProducer struct {
 	conn   *nats.Conn
 	js     nats.JetStreamContext
 	logger *log.Logger
+}
+
+func (p *MQProducer) VectorQueueBoundary(ctx context.Context) (domain.VectorQueueBoundary, error) {
+	info, err := p.js.StreamInfo("task", nats.Context(ctx))
+	if err != nil {
+		return domain.VectorQueueBoundary{}, err
+	}
+	return domain.VectorQueueBoundary{Sequence: info.State.LastSeq, PublishedAt: info.State.LastTime}, nil
 }
 
 func (p *MQProducer) EnsureStreams() error {

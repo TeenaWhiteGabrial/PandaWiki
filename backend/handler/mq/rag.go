@@ -69,6 +69,27 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 
 	case "upsert":
 		h.logger.Debug("upsert node content vector request", "request", request)
+		var sequence uint64
+		var publishedAt time.Time
+		if request.TaskID == "" {
+			if positioned, ok := msg.(interface {
+				VectorQueuePosition() (uint64, time.Time, error)
+			}); ok {
+				var positionErr error
+				sequence, publishedAt, positionErr = positioned.VectorQueuePosition()
+				if positionErr != nil {
+					return positionErr
+				}
+			}
+			canceled, err := h.nodeRepo.LegacyLearningCanceled(ctx, request.KBID, sequence, publishedAt)
+			if err != nil {
+				return err
+			}
+			if canceled {
+				h.logger.Info("skip canceled legacy learning message", log.String("kb_id", request.KBID), log.String("node_release_id", request.NodeReleaseID), log.Any("sequence", sequence))
+				return nil
+			}
+		}
 		if request.TaskID != "" {
 			task, shouldRun, taskErr := h.nodeRepo.MarkNodeLearningTaskRunning(ctx, request.TaskID)
 			if taskErr != nil {
@@ -119,7 +140,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			h.logger.Error("get kb failed", log.Error(err), log.String("kb_id", request.KBID))
 			return err
 		}
-		if usecase.ShouldRefreshFileContent(nodeRelease) {
+		if usecase.ShouldRefreshFileContentForIndex(nodeRelease, request.ReuseParsedContent) {
 			ctx = usecase.WithFileExtractionReporter(ctx, func(result *domain.FileExtraction) { nodeRelease.Meta.Extraction = result })
 			content := ""
 			ok := false
@@ -174,6 +195,18 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			cancel()
 		}
 
+		var allowed bool
+		if request.TaskID != "" {
+			allowed, err = h.nodeRepo.BeginLearningSubmission(ctx, request.KBID, nodeRelease.NodeID, request.TaskID)
+		} else {
+			allowed, err = h.nodeRepo.BeginLegacyLearningSubmission(ctx, request.KBID, sequence, publishedAt)
+		}
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return nil
+		}
 		report("submit", fmt.Sprintf("提交文本至 RAGLite（%d 字符）；等待上传接口响应", utf8.RuneCountInString(nodeRelease.Content)))
 		// upsert node content chunks
 		docID, err := h.rag.UpsertRecords(ctx, &rag.UpsertRecordsRequest{

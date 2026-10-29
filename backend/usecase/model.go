@@ -25,11 +25,11 @@ type ModelUsecase struct {
 	modelRepo         *pg.ModelRepository
 	logger            *log.Logger
 	config            *config.Config
-	nodeRepo          *pg.NodeRepository
+	nodeRepo          modelIndexNodes
 	ragRepo           *mq.RAGRepository
 	ragStore          rag.RAGService
-	kbRepo            *pg.KnowledgeBaseRepository
-	systemSettingRepo *pg.SystemSettingRepo
+	kbRepo            modelIndexKnowledgeBases
+	systemSettingRepo modelSettingsStore
 	modelkit          *modelkit.ModelKit
 }
 
@@ -53,11 +53,19 @@ func (u *ModelUsecase) Create(ctx context.Context, model *domain.Model) error {
 	var updatedEmbeddingModel bool
 	if model.Type == domain.ModelTypeEmbedding {
 		updatedEmbeddingModel = true
+		setting, err := u.GetModelModeSetting(ctx)
+		if err != nil {
+			return err
+		}
+		// Preserve the baseline before creating the manual model record.
+		if err := u.saveModelModeSetting(ctx, setting); err != nil {
+			return err
+		}
 	}
 	if err := u.modelRepo.Create(ctx, model); err != nil {
 		return err
 	}
-	// 模型更新成功后，如果更新嵌入模型，则触发记录更新
+	// 标记手动向量配置变更，应用模式时再决定是否重建。
 	if updatedEmbeddingModel {
 		if _, err := u.updateModeSettingConfig(ctx, &domain.SwitchModeReq{}, true); err != nil {
 			return err
@@ -242,9 +250,10 @@ func (u *ModelUsecase) TriggerUpsertRecords(ctx context.Context) error {
 		// async upsert vector content via mq
 		nodeContentVectorRequests := []*domain.NodeReleaseVectorRequest{
 			{
-				KBID:          nodeRelease.KBID,
-				NodeReleaseID: nodeRelease.ID,
-				Action:        "upsert",
+				KBID:               nodeRelease.KBID,
+				NodeReleaseID:      nodeRelease.ID,
+				Action:             "upsert",
+				ReuseParsedContent: true,
 			},
 		}
 		if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, nodeContentVectorRequests); err != nil {
@@ -259,9 +268,19 @@ func (u *ModelUsecase) TriggerUpsertRecords(ctx context.Context) error {
 }
 
 func (u *ModelUsecase) Update(ctx context.Context, req *domain.UpdateModelReq) error {
-	var updatedEmbeddingModel bool
-	if req.Type == domain.ModelTypeEmbedding {
-		updatedEmbeddingModel = true
+	oldModel, err := u.modelRepo.GetByID(ctx, req.ID)
+	if err != nil {
+		return err
+	}
+	setting, err := u.GetModelModeSetting(ctx)
+	if err != nil {
+		return err
+	}
+	if req.Type == domain.ModelTypeEmbedding || oldModel.Type == domain.ModelTypeEmbedding {
+		// A later retry must still compare against the pre-edit index model.
+		if err := u.saveModelModeSetting(ctx, setting); err != nil {
+			return err
+		}
 	}
 	if err := u.modelRepo.Update(ctx, req); err != nil {
 		return err
@@ -274,6 +293,7 @@ func (u *ModelUsecase) Update(ctx context.Context, req *domain.UpdateModelReq) e
 		BaseURL:    req.BaseURL,
 		APIHeader:  req.APIHeader,
 		APIVersion: req.APIVersion,
+		IsActive:   oldModel.IsActive,
 	}
 	if req.IsActive != nil {
 		data.IsActive = *req.IsActive
@@ -281,12 +301,16 @@ func (u *ModelUsecase) Update(ctx context.Context, req *domain.UpdateModelReq) e
 	if req.Parameters != nil {
 		data.Parameters = *req.Parameters
 	}
-	if err := u.ragStore.UpsertModel(ctx, data); err != nil {
-		return err
+	// Manual model records must not replace the active automatic configuration.
+	if setting.Mode == consts.ModelSettingModeManual {
+		if err := u.ragStore.UpsertModel(ctx, data); err != nil {
+			return err
+		}
 	}
-	// 模型更新成功后，如果更新嵌入模型，则触发记录更新
-	if updatedEmbeddingModel {
-		if _, err := u.updateModeSettingConfig(ctx, &domain.SwitchModeReq{}, true); err != nil {
+	// 密钥和地址变更只同步连接配置，不标记为向量空间变更。
+	if req.Type == domain.ModelTypeEmbedding {
+		changed := *setting.EmbeddingIndexConfig != embeddingIndexConfig(data)
+		if _, err := u.updateModeSettingConfig(ctx, &domain.SwitchModeReq{}, changed); err != nil {
 			return err
 		}
 	}
@@ -388,14 +412,9 @@ func (u *ModelUsecase) SwitchMode(ctx context.Context, req *domain.SwitchModeReq
 // updateModeSettingConfig 读取当前设置并更新，然后持久化
 func (u *ModelUsecase) updateModeSettingConfig(ctx context.Context, req *domain.SwitchModeReq, isManualEmbeddingUpdated bool) (*domain.ModelModeSetting, error) {
 	// 读取当前设置
-	setting, err := u.systemSettingRepo.GetSystemSetting(ctx, consts.SystemSettingModelMode)
+	config, err := u.GetModelModeSetting(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current model setting: %w", err)
-	}
-
-	var config domain.ModelModeSetting
-	if err := json.Unmarshal(setting.Value, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse current model setting: %w", err)
 	}
 
 	// 更新设置
@@ -454,17 +473,21 @@ func (u *ModelUsecase) GetModelModeSetting(ctx context.Context) (domain.ModelMod
 	if config.Mode == "" {
 		return domain.ModelModeSetting{}, fmt.Errorf("model mode setting is invalid")
 	}
+	if err := u.ensureEmbeddingIndexConfig(ctx, &config); err != nil {
+		return domain.ModelModeSetting{}, fmt.Errorf("resolve embedding index baseline: %w", err)
+	}
 	return config, nil
 }
 
 // updateRAGModelsByMode 根据模式更新 RAG 模型
 func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, modelModeSetting, oldModelModeSetting domain.ModelModeSetting) error {
-	var isTriggerUpsertRecords = true
-
-	// 手动切换到手动模式, 根据IsManualEmbeddingUpdated字段决定
-	if oldModelModeSetting.Mode == consts.ModelSettingModeManual && mode == string(consts.ModelSettingModeManual) {
-		isTriggerUpsertRecords = oldModelModeSetting.IsManualEmbeddingUpdated
+	if modelModeSetting.EmbeddingIndexConfig == nil {
+		if err := u.ensureEmbeddingIndexConfig(ctx, &oldModelModeSetting); err != nil {
+			return err
+		}
+		modelModeSetting.EmbeddingIndexConfig = oldModelModeSetting.EmbeddingIndexConfig
 	}
+	var nextEmbeddingIndex *domain.EmbeddingIndexConfig
 
 	ragModelTypes := []domain.ModelType{
 		domain.ModelTypeEmbedding,
@@ -516,21 +539,36 @@ func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, m
 
 		// 更新RAG存储中的模型
 		if model != nil {
-			// rag store中更新失败不影响其他模型更新
+			// 任一模型同步失败时保留原索引基准，供下次保存重试。
 			if err := u.ragStore.UpsertModel(ctx, model); err != nil {
 				u.logger.Error("failed to update model in RAG store", log.String("model_id", model.ID), log.String("type", string(modelType)), log.Any("error", err))
 				return fmt.Errorf("failed to update model in RAG store: %s", model.Type)
 			}
 			u.logger.Info("successfully updated RAG model", log.String("model name: ", string(model.Model)))
+			if modelType == domain.ModelTypeEmbedding {
+				value := embeddingIndexConfig(model)
+				nextEmbeddingIndex = &value
+			}
 		}
 	}
 
 	// 触发记录更新
-	if isTriggerUpsertRecords {
-		u.logger.Info("embedding model updated, triggering upsert records")
-		return u.TriggerUpsertRecords(ctx)
+	if nextEmbeddingIndex == nil {
+		return fmt.Errorf("no active embedding model configured")
 	}
-	return nil
+	if modelModeSetting.EmbeddingIndexConfig == nil || *modelModeSetting.EmbeddingIndexConfig != *nextEmbeddingIndex {
+		u.logger.Info("embedding model updated, triggering upsert records")
+		if err := u.TriggerUpsertRecords(ctx); err != nil {
+			return err
+		}
+	} else {
+		u.logger.Info("embedding index configuration unchanged; skipped full reindex")
+	}
+	// Advance only after model synchronization and required enqueueing succeed.
+	// Failed saves retain their baseline so the next attempt cannot skip work.
+	modelModeSetting.EmbeddingIndexConfig = nextEmbeddingIndex
+	modelModeSetting.IsManualEmbeddingUpdated = false
+	return u.saveModelModeSetting(ctx, modelModeSetting)
 }
 
 func getAutoModeModelBaseURL(activeProvider *domain.AutoModeProviderSetting, modelType domain.ModelType) string {

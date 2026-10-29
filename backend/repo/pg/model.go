@@ -40,6 +40,14 @@ func (r *ModelRepository) GetList(ctx context.Context) ([]*domain.ModelListItem,
 	return models, nil
 }
 
+func (r *ModelRepository) GetByID(ctx context.Context, id string) (*domain.Model, error) {
+	var model domain.Model
+	if err := r.db.WithContext(ctx).First(&model, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &model, nil
+}
+
 func (r *ModelRepository) Update(ctx context.Context, req *domain.UpdateModelReq) error {
 	param := domain.ModelParam{}
 	if req.Parameters != nil {

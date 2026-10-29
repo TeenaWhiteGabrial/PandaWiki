@@ -1,5 +1,13 @@
 package domain
 
+import "time"
+
+// Timestamp also protects against accidentally matching a recreated stream.
+type VectorQueueBoundary struct {
+	Sequence    uint64    `json:"sequence"`
+	PublishedAt time.Time `json:"published_at"`
+}
+
 const (
 	VectorTaskTopic       = "apps.panda-wiki.vector.task"
 	AnydocTaskExportTopic = "anydoc.persistence.doc.task.export"
@@ -13,13 +21,14 @@ var TopicConsumerName = map[string]string{
 }
 
 type NodeReleaseVectorRequest struct {
-	KBID          string `json:"kb_id"`
-	NodeReleaseID string `json:"node_release_id"`
-	NodeID        string `json:"node_id"`
-	DocID         string `json:"doc_id"` // for delete
-	TaskID        string `json:"task_id"`
-	Action        string `json:"action"` // upsert, delete, summary
-	GroupIds      []int  `json:"group_ids"`
+	ReuseParsedContent bool   `json:"reuse_parsed_content,omitempty"`
+	KBID               string `json:"kb_id"`
+	NodeReleaseID      string `json:"node_release_id"`
+	NodeID             string `json:"node_id"`
+	DocID              string `json:"doc_id"` // for delete
+	TaskID             string `json:"task_id"`
+	Action             string `json:"action"` // upsert, delete, summary
+	GroupIds           []int  `json:"group_ids"`
 }
 
 // AnydocTaskExportEvent represents the task completion event from anydoc service
