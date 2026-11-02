@@ -18,12 +18,88 @@ import (
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/repo/pg"
 	store "github.com/chaitin/panda-wiki/store/pg"
+	"github.com/chaitin/panda-wiki/store/rag"
 )
 
 type canceledLegacyMessage struct {
 	data        []byte
 	sequence    uint64
 	publishedAt time.Time
+}
+
+type stagedIndexRAG struct {
+	rag.RAGService
+	dataset, document string
+	uploads, deletes  int
+	t                 *testing.T
+}
+
+func (r *stagedIndexRAG) ListKnowledgeBases(context.Context) ([]rag.Dataset, error) {
+	return []rag.Dataset{{ID: r.dataset}}, nil
+}
+func (r *stagedIndexRAG) UpsertRecords(_ context.Context, req *rag.UpsertRecordsRequest) (string, error) {
+	r.uploads++
+	if req.DocID != "" || req.IndexVersionID == "" {
+		r.t.Error("rebuild attempted to overwrite serving RAG document")
+	}
+	return r.document, nil
+}
+func (r *stagedIndexRAG) DeleteRecords(context.Context, string, []string) error {
+	r.deletes++
+	return nil
+}
+
+func TestRebuildSubmissionKeepsOldIndexAndDuplicateDeliveryDoesNotReupload(t *testing.T) {
+	dsn := os.Getenv("PANDA_WIKI_TEST_PG_DSN")
+	if dsn == "" {
+		t.Skip("local PostgreSQL required")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, _ := db.DB()
+	defer conn.Close()
+	tx := db.Begin()
+	defer tx.Rollback()
+	ensureSafeIndexSchema(t, tx)
+	l := log.NewLogger(&config.Config{})
+	storeDB := &store.DB{DB: tx}
+	kb := domain.KnowledgeBase{ID: uuid.NewString(), DatasetID: uuid.NewString()}
+	node := domain.Node{ID: uuid.NewString(), KBID: kb.ID, Type: domain.NodeTypeDocument, Status: domain.NodeStatusPublished}
+	release := domain.NodeRelease{ID: uuid.NewString(), KBID: kb.ID, NodeID: node.ID, Type: domain.NodeTypeDocument, Content: "original text", DocID: uuid.NewString()}
+	task := domain.NodeLearningTask{ID: uuid.NewString(), KBID: kb.ID, NodeID: node.ID, NodeReleaseID: release.ID, Action: consts.NodeLearningTaskActionRebuild, Status: consts.NodeLearningTaskRunning}
+	node.RagInfo = domain.RagInfo{Status: consts.NodeRagStatusSucceeded, ActiveDocID: release.DocID, ActiveReleaseID: release.ID, TaskID: task.ID, TaskStatus: task.Status}
+	for _, row := range []any{&kb, &node, &release, &task} {
+		if err := tx.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := &stagedIndexRAG{dataset: kb.DatasetID, document: uuid.NewString(), t: t}
+	repo := pg.NewNodeRepository(storeDB, l)
+	h := &RAGMQHandler{nodeRepo: repo, kbRepo: pg.NewKnowledgeBaseRepository(storeDB, &config.Config{}, l, r), rag: r, logger: l}
+	body, _ := json.Marshal(domain.NodeReleaseVectorRequest{KBID: kb.ID, NodeID: node.ID, NodeReleaseID: release.ID, TaskID: task.ID, Action: "upsert"})
+	for i := 0; i < 2; i++ {
+		if err := h.HandleNodeContentVectorRequest(t.Context(), canceledLegacyMessage{data: body}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if r.uploads != 1 || r.deletes != 0 {
+		t.Fatal("submission replaced old index or duplicated upload", r.uploads, r.deletes)
+	}
+	stored, _ := repo.GetNodeReleaseByID(t.Context(), release.ID)
+	if stored.DocID != release.DocID {
+		t.Fatal("RAG acceptance prematurely replaced serving doc ID")
+	}
+	update := &RagDocUpdateHandler{nodeRepo: repo, logger: l}
+	event, _ := json.Marshal(domain.RagDocInfoUpdateEvent{ID: r.document, Status: "SUCCEEDED"})
+	if err := update.HandleRagDocUpdate(t.Context(), canceledLegacyMessage{data: event}); err != nil {
+		t.Fatal(err)
+	}
+	stored, _ = repo.GetNodeReleaseByID(t.Context(), release.ID)
+	if stored.DocID != r.document || r.deletes != 0 {
+		t.Fatal("activation did not preserve old vectors for grace-period cleanup")
+	}
 }
 
 func (m canceledLegacyMessage) GetData() []byte  { return m.data }
@@ -45,6 +121,7 @@ func TestCanceledLegacyMessageIsAcknowledgableWithoutCallingRAG(t *testing.T) {
 	defer conn.Close()
 	tx := db.Begin()
 	defer tx.Rollback()
+	ensureSafeIndexSchema(t, tx)
 	l := log.NewLogger(&config.Config{})
 	repo := pg.NewNodeRepository(&store.DB{DB: tx}, l)
 	kbID := uuid.NewString()
@@ -75,6 +152,7 @@ func TestCanceledLearningTaskStopsParserContext(t *testing.T) {
 	defer sqlDB.Close()
 	tx := db.Begin()
 	defer tx.Rollback()
+	ensureSafeIndexSchema(t, tx)
 	task := &domain.NodeLearningTask{ID: uuid.NewString(), KBID: uuid.NewString(), NodeID: uuid.NewString(), NodeReleaseID: uuid.NewString(), Action: consts.NodeLearningTaskActionRebuild, Status: consts.NodeLearningTaskCanceled}
 	if err := tx.Create(task).Error; err != nil {
 		t.Fatal(err)
@@ -117,5 +195,18 @@ func TestCanceledLearningTaskStopsParserContext(t *testing.T) {
 	current, err := repo.GetNodeByID(t.Context(), node.ID)
 	if err != nil || current.RagInfo.LearningProgress.Extraction.Scope != "partial" {
 		t.Fatalf("RAG update lost extraction scope: %v", err)
+	}
+}
+
+func ensureSafeIndexSchema(t *testing.T, tx *gorm.DB) {
+	t.Helper()
+	if !tx.Migrator().HasTable(&domain.NodeIndexVersion{}) {
+		sql, err := os.ReadFile("../../store/pg/migration/000057_safe_index_versions.up.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Exec(string(sql)).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 }

@@ -917,6 +917,9 @@ func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermis
 }
 
 func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
+	if err := u.syncIndexCandidates(ctx); err != nil {
+		return err
+	}
 	kbs, err := u.kbRepo.GetKnowledgeBaseList(ctx)
 	if err != nil {
 		return err
@@ -968,6 +971,12 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 			}
 
 			for _, doc := range docs {
+				if handled, err := u.nodeRepo.ObserveNodeIndex(ctx, doc.ID, doc.Status, doc.ProgressMsg); err != nil {
+					u.logger.Error("observe candidate index failed", log.Error(err))
+					continue
+				} else if handled {
+					continue
+				}
 				release, exists := docToReleaseMap[doc.ID]
 				if !exists {
 					u.logger.Warn("doc_id not found in node_releases",
@@ -1027,6 +1036,14 @@ func (u *NodeUsecase) SyncRagNodeStatus(ctx context.Context) error {
 					}
 				}
 				ragInfo := node.RagInfo
+				if ragInfo.PendingIndexID != "" || (ragInfo.ActiveDocID != "" && ragInfo.ActiveDocID != doc.ID) {
+					continue
+				}
+				if ragInfo.TaskID != "" {
+					if current, e := u.nodeRepo.GetNodeLearningTaskByID(ctx, ragInfo.TaskID); e == nil && current.DatasetID != "" {
+						continue
+					}
+				}
 				if activeTask != nil {
 					ragInfo.TaskID = activeTask.ID
 					ragInfo.TaskAction = activeTask.Action
@@ -1183,11 +1200,14 @@ func (u *NodeUsecase) dispatchNodeLearningTask(ctx context.Context, task *domain
 	}
 	if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, []*domain.NodeReleaseVectorRequest{
 		{
-			KBID:          task.KBID,
-			NodeReleaseID: task.NodeReleaseID,
-			NodeID:        task.NodeID,
-			TaskID:        task.ID,
-			Action:        "upsert",
+			DatasetID:          task.DatasetID,
+			IndexBuildID:       task.IndexBuildID,
+			ReuseParsedContent: task.IndexBuildID != "",
+			KBID:               task.KBID,
+			NodeReleaseID:      task.NodeReleaseID,
+			NodeID:             task.NodeID,
+			TaskID:             task.ID,
+			Action:             "upsert",
 		},
 	}); err != nil {
 		ragInfo.TaskStatus = consts.NodeLearningTaskFailed
@@ -1346,7 +1366,7 @@ func (u *NodeUsecase) NodeLearningCancel(ctx context.Context, req *v1.NodeLearni
 }
 
 func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) error {
-	nodeReleases, err := u.nodeRepo.GetLatestNodeReleaseByNodeIDs(ctx, req.KbId, req.NodeIds)
+	nodeReleases, err := u.nodeRepo.GetPublishedIndexReleases(ctx, req.KbId, req.NodeIds)
 	if err != nil {
 		u.logger.Error("get latest node release failed", log.Error(err))
 		return fmt.Errorf("get latest node release failed")

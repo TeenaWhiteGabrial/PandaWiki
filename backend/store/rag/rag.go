@@ -13,6 +13,7 @@ import (
 )
 
 type QueryRecordsRequest struct {
+	TopK                int
 	DatasetID           string
 	Query               string
 	GroupIDs            []int
@@ -22,14 +23,22 @@ type QueryRecordsRequest struct {
 	MaxChunksPerDoc     int
 }
 
+// IndexDatasetService builds a separately bound vector space without mutating
+// the embedding model or dataset serving existing requests.
+type IndexDatasetService interface {
+	CreateIndexKnowledgeBase(context.Context, *domain.Model) (string, error)
+	SyncEmbeddingConnection(context.Context, *domain.Model) error
+}
+
 type UpsertRecordsRequest struct {
-	ID        string
-	DatasetID string
-	DocID     string
-	Title     string
-	Content   string
-	GroupIDs  []int
-	Tags      []string
+	IndexVersionID string
+	ID             string
+	DatasetID      string
+	DocID          string
+	Title          string
+	Content        string
+	GroupIDs       []int
+	Tags           []string
 }
 
 type DocumentMetadata struct {

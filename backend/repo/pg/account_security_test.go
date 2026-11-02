@@ -31,6 +31,15 @@ func securityTestDB(t *testing.T) *store.DB {
 		t.Fatal(tx.Error)
 	}
 	t.Cleanup(func() { tx.Rollback(); conn.Close() })
+	if !tx.Migrator().HasTable(&domain.NodeIndexVersion{}) {
+		sql, err := os.ReadFile("../../store/pg/migration/000057_safe_index_versions.up.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Exec(string(sql)).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
 	return &store.DB{DB: tx}
 }
 func TestAccountSessionAndPasswordRevocation(t *testing.T) {

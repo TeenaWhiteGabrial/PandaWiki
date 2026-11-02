@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"gorm.io/gorm"
 	"strings"
 	"testing"
 
@@ -61,6 +62,16 @@ func (s *indexSettings) UpdateSystemSetting(_ context.Context, _ string, value s
 	s.value = []byte(value)
 	return nil
 }
+func (s *indexSettings) SaveModelModeSetting(_ context.Context, config domain.ModelModeSetting) error {
+	var current domain.ModelModeSetting
+	_ = json.Unmarshal(s.value, &current)
+	if current.EmbeddingIndexConfig != nil {
+		config.EmbeddingIndexConfig = current.EmbeddingIndexConfig
+	}
+	value, err := json.Marshal(config)
+	s.value = value
+	return err
+}
 
 type indexKBs struct{ updates int }
 
@@ -69,7 +80,25 @@ func (k *indexKBs) GetKnowledgeBaseList(context.Context) ([]*domain.KnowledgeBas
 }
 func (k *indexKBs) UpdateDatasetID(context.Context, string, string) error { k.updates++; return nil }
 
-type indexNodes struct{}
+type indexNodes struct{ build *domain.KBIndexBuild }
+
+func (n *indexNodes) GetPendingIndexBuild(context.Context, string) (*domain.KBIndexBuild, error) {
+	if n.build != nil && n.build.Status == domain.IndexBuilding {
+		return n.build, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+func (n *indexNodes) GetLatestIndexBuild(context.Context, string) (*domain.KBIndexBuild, error) {
+	if n.build != nil {
+		return n.build, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+func (n *indexNodes) StartIndexBuild(_ context.Context, b *domain.KBIndexBuild) error {
+	b.Status = domain.IndexBuilding
+	n.build = b
+	return nil
+}
 
 func (indexNodes) TraverseNodesByCursor(_ context.Context, f func(*domain.NodeRelease) error) error {
 	return f(&domain.NodeRelease{ID: "release", NodeID: "node", KBID: "kb"})
@@ -110,6 +139,12 @@ func (r *indexRAG) CreateKnowledgeBase(context.Context) (string, error) {
 	}
 	return "new-dataset", nil
 }
+func (r *indexRAG) CreateIndexKnowledgeBase(ctx context.Context, _ *domain.Model) (string, error) {
+	return r.CreateKnowledgeBase(ctx)
+}
+func (r *indexRAG) SyncEmbeddingConnection(ctx context.Context, m *domain.Model) error {
+	return r.UpsertModel(ctx, m)
+}
 func (r *indexRAG) DeleteKnowledgeBase(context.Context, string) error { r.deleted++; return nil }
 
 func automaticIndexSetting() domain.ModelModeSetting {
@@ -125,7 +160,7 @@ func indexUsecase(t *testing.T, initial domain.ModelModeSetting) (*ModelUsecase,
 		t.Fatal(err)
 	}
 	r, p, k := &indexRAG{}, &indexProducer{}, &indexKBs{}
-	u := &ModelUsecase{ragStore: r, ragRepo: mq.NewRAGRepository(p), kbRepo: k, nodeRepo: indexNodes{}, systemSettingRepo: &indexSettings{value: value}, logger: log.NewLogger(&config.Config{})}
+	u := &ModelUsecase{ragStore: r, ragRepo: mq.NewRAGRepository(p), kbRepo: k, nodeRepo: &indexNodes{}, systemSettingRepo: &indexSettings{value: value}, logger: log.NewLogger(&config.Config{})}
 	return u, r, p, k
 }
 
@@ -183,21 +218,18 @@ func TestAutoModelSaveOnlyRebuildsChangedVectorSpace(t *testing.T) {
 			if tc.rebuild {
 				want = 1
 			}
-			if r.created != want || r.deleted != want || k.updates != want || len(p.messages) != want {
+			if r.created != want || r.deleted != 0 || k.updates != 0 || len(p.messages) != 0 {
 				t.Fatalf("unexpected rebuild: created=%d deleted=%d updated=%d messages=%d", r.created, r.deleted, k.updates, len(p.messages))
 			}
 			if len(r.models) != 5 {
 				t.Fatal("connection changes must still synchronize the RAG models")
-			}
-			if want == 1 && !p.messages[0].ReuseParsedContent {
-				t.Fatal("model rebuild must reuse parsed content")
 			}
 			// Saving again, including another credential rotation, must not repeat a completed enqueue.
 			next.AutoProvider.APIKey = "second-key"
 			if err := saveIndexSetting(u, next); err != nil {
 				t.Fatal(err)
 			}
-			if r.created != want || len(p.messages) != want {
+			if r.created != want || len(p.messages) != 0 {
 				t.Fatal("repeated save rebuilt unchanged vectors")
 			}
 		})

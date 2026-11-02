@@ -36,6 +36,7 @@ func TestReadingAudiencePostgres(t *testing.T) {
 		t.Fatal(tx.Error)
 	}
 	defer tx.Rollback()
+	ensureIndexTestSchema(t, tx)
 	kbID, navID, rootID, childID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	adminID, managerID, readerA, readerB, readerC := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	inherit := true

@@ -50,6 +50,7 @@ func TestDocumentTreeQueriesPostgres(t *testing.T) {
 		t.Fatal(tx.Error)
 	}
 	defer tx.Rollback()
+	ensureIndexTestSchema(t, tx)
 	kbID, navID, adminID, managerID, levelID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	grant := []domain.DocumentManagementGrant{{SubjectType: domain.ManagementSubjectUser, SubjectIDs: []string{managerID}, DirectoryScope: domain.ManagementScopeTree}}
 	for _, fixture := range []any{

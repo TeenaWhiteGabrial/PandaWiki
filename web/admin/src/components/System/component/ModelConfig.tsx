@@ -253,7 +253,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
           Modal.confirm({
             title: '确认操作',
             content:
-              '向量模型或索引参数已变化，保存后将重建全部文档的问答索引，并优先复用已解析正文。是否继续？',
+              '向量模型或索引参数已变化，将在后台构建新索引并优先复用已解析正文。期间继续使用旧索引；全部文档成功后整体切换，失败或取消则保留旧索引。可在“后台任务”查看进度。是否继续？',
             onOk: async () => {
               await performSave();
             },
@@ -451,7 +451,7 @@ const ModelConfig = forwardRef<ModelConfigRef, ModelConfigProps>(
                   >
                     提示：
                   </Box>
-                  仅向量模型或索引参数变化时重建；修改密钥、地址或其他模型不会自动全量重建
+                  仅向量模型或索引参数变化时重建；新索引全部成功后切换，期间保留旧索引。修改密钥、地址或其他模型不会自动全量重建
                 </Box>
               )}
             </Stack>

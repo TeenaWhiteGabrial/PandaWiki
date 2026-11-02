@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -175,12 +176,8 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			}
 			report("save_content", "保存已提取的正文或文件元信息")
 			nodeRelease.Content = content
-			if err := h.nodeRepo.UpdateNodeReleaseExtractedContent(ctx, nodeRelease.ID, content, nodeRelease.Meta); err != nil {
-				h.logger.Error("update node release extracted content failed",
-					log.String("node_release_id", nodeRelease.ID),
-					log.Error(err))
-				return err
-			}
+			// Parsed text is stored with the candidate below. The serving release
+			// (including local-search fallback content) remains unchanged until success.
 		}
 
 		if nodeRelease.Meta.FileKey != "" && !usecase.ShouldExtractReleaseFileContent(nodeRelease) {
@@ -207,18 +204,37 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 		if !allowed {
 			return nil
 		}
+		datasetID := request.DatasetID
+		if datasetID == "" {
+			datasetID = kb.DatasetID
+		}
+		versionID := request.TaskID
+		if versionID == "" {
+			versionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("%s:%s:%d:%s", request.KBID, request.NodeReleaseID, sequence, publishedAt.UTC().Format(time.RFC3339Nano)))).String()
+		}
+		version, err := h.nodeRepo.PrepareNodeIndex(ctx, &domain.NodeIndexVersion{ID: versionID, KBID: request.KBID, NodeID: nodeRelease.NodeID, NodeReleaseID: nodeRelease.ID, DatasetID: datasetID, TaskID: request.TaskID, BuildID: request.IndexBuildID})
+		if err != nil {
+			return err
+		}
+		if version.Status != domain.IndexBuilding || version.DocID != "" {
+			return nil
+		}
+		if err := h.nodeRepo.SaveNodeIndexExtraction(ctx, version.ID, nodeRelease.Content, nodeRelease.Meta); err != nil {
+			return err
+		}
 		report("submit", fmt.Sprintf("提交文本至 RAGLite（%d 字符）；等待上传接口响应", utf8.RuneCountInString(nodeRelease.Content)))
 		// upsert node content chunks
 		docID, err := h.rag.UpsertRecords(ctx, &rag.UpsertRecordsRequest{
-			ID:        nodeRelease.ID,
-			Title:     nodeRelease.Name,
-			DatasetID: kb.DatasetID,
-			DocID:     nodeRelease.DocID,
-			Content:   nodeRelease.Content,
-			GroupIDs:  nil,
+			ID:             version.ID,
+			IndexVersionID: version.ID,
+			Title:          nodeRelease.Name,
+			DatasetID:      datasetID,
+			Content:        nodeRelease.Content,
+			GroupIDs:       nil,
 		})
 		if err != nil {
 			h.logger.Error("upsert node content vector failed", log.Error(err))
+			_ = h.nodeRepo.FailPendingNodeIndex(ctx, request.KBID, nodeRelease.NodeID, version.ID, err.Error())
 			if request.TaskID != "" {
 				_ = h.nodeRepo.FinishNodeLearningTask(ctx, request.TaskID, consts.NodeLearningTaskFailed, "", err.Error())
 				if node, nodeErr := h.nodeRepo.GetNodeByID(ctx, nodeRelease.NodeID); nodeErr == nil {
@@ -238,7 +254,7 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 		}
 		report("bind_doc", "RAGLite 已接收文本，保存文档 ID")
 		// update node doc_id
-		if err := h.nodeRepo.UpdateNodeReleaseDocID(ctx, request.NodeReleaseID, docID); err != nil {
+		if err := h.nodeRepo.BindNodeIndexDocument(ctx, version.ID, docID); err != nil {
 			h.logger.Error("update node doc_id failed", log.String("node_id", request.NodeReleaseID), log.Error(err))
 			if request.TaskID != "" {
 				_ = h.nodeRepo.FinishNodeLearningTask(ctx, request.TaskID, consts.NodeLearningTaskFailed, docID, err.Error())
@@ -253,24 +269,12 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 					log.Error(err))
 			}
 		}
-		if err := h.nodeRepo.ObserveNodeLearningRAG(ctx, request.KBID, nodeRelease.NodeID, request.TaskID, kb.DatasetID, docID, "", "", "upload", ""); err != nil {
+		if err := h.nodeRepo.ObserveNodeLearningRAG(ctx, request.KBID, nodeRelease.NodeID, request.TaskID, datasetID, docID, "", "", "upload", ""); err != nil {
 			h.logger.Error("record uploaded RAG document failed", log.Error(err))
 		}
 		report("rag_pending", "RAGLite 已接收文本，等待索引状态；等待的是文本向量任务，不是源文件上传")
-		// delete old RAG records
-		// get old doc_ids by node_id
-		oldDocIDs, err := h.nodeRepo.GetOldNodeDocIDsByNodeID(ctx, nodeRelease.ID, nodeRelease.NodeID)
-		if err != nil {
-			h.logger.Error("get old doc_ids by node_id failed", log.String("node_id", nodeRelease.NodeID), log.Error(err))
-			return nil
-		}
-		if len(oldDocIDs) > 0 {
-			// delete old RAG records
-			if err := h.rag.DeleteRecords(ctx, kb.DatasetID, oldDocIDs); err != nil {
-				h.logger.Error("delete old RAG records failed", log.String("kb_id", kb.ID), log.Error(err))
-				return nil
-			}
-		}
+		// The previous serving document remains intact until a SUCCEEDED event
+		// atomically activates this candidate. Cleanup runs after a grace period.
 
 		h.logger.Info("upsert node content vector success", log.Any("updated_ids", request.NodeReleaseID))
 	case "delete":

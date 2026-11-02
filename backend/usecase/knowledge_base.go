@@ -36,8 +36,9 @@ type KnowledgeBaseUsecase struct {
 }
 
 type learnedRelease struct {
-	release *domain.NodeReleaseWithDirPath
-	docID   string
+	release   *domain.NodeReleaseWithDirPath
+	docID     string
+	versionID string
 }
 
 const learningProgressQueryChunkSize = 10
@@ -302,12 +303,13 @@ func (u *KnowledgeBaseUsecase) startReleaseLearning(kbID, releaseID string, rele
 		learnCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 		u.logger.Info("publication learning queued", log.String("kb_id", kbID), log.String("release_id", releaseID), log.String("stage", "learning"), log.Int("document_count", len(ids)))
-		learned, datasetID, err := u.learnPendingReleases(learnCtx, kbID, ids)
+		learned, _, err := u.learnPendingReleases(learnCtx, kbID, ids)
 		if err != nil {
 			u.logger.Error("publication learning async failed", log.String("kb_id", kbID), log.String("release_id", releaseID), log.String("stage", "learning"), log.Error(err))
 			return
 		}
-		u.cleanupOldPublicationRecords(datasetID, learned)
+		// Old indexes are retired by the successful activation transaction and
+		// cleaned after a grace period, never merely because upload succeeded.
 		u.logger.Info("publication learning finished", log.String("kb_id", kbID), log.String("release_id", releaseID), log.String("stage", "learning"), log.Int("document_count", len(learned)))
 	}()
 }
@@ -390,9 +392,6 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 				u.logger.Warn("publication content extraction fallback to file metadata", log.String("kb_id", kbID), log.String("node_id", release.NodeID), log.String("node_release_id", release.ID), log.String("stage", "learning"), log.String("document", release.Name), log.String("reason", contentMessage))
 			}
 			release.Content = content
-			if err := u.nodeRepo.UpdateNodeReleaseExtractedContent(ctx, release.ID, content, release.Meta); err != nil {
-				return learned, kb.DatasetID, fmt.Errorf("保存文档“%s”解析内容失败: %w", release.Name, err)
-			}
 		}
 		u.logger.Info("publication learning started", log.String("kb_id", kbID), log.String("node_release_id", release.ID), log.String("stage", "learning"))
 		node, nodeErr := u.nodeRepo.GetNodeByID(ctx, release.NodeID)
@@ -405,26 +404,48 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 			ragInfo.Message = ""
 		}
 		ragInfo.TaskStatus = consts.NodeLearningTaskRunning
+		ragInfo.TaskID = "" // Publication has its own candidate, not a previous rebuild task.
 		ragInfo.TaskAction = consts.NodeLearningTaskActionPublish
 		ragInfo.TaskMessage = ""
 		ragInfo.SyncedAt = time.Now()
 		if err := u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, release.NodeID, ragInfo); err != nil {
 			return learned, kb.DatasetID, fmt.Errorf("更新学习状态失败: %w", err)
 		}
-		docID, err := u.rag.UpsertRecords(ctx, &rag.UpsertRecordsRequest{
-			ID:        release.ID,
-			Title:     release.Name,
-			DatasetID: kb.DatasetID,
-			Content:   release.Content,
-			GroupIDs:  nil,
-		})
+		versionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("publication:"+kb.DatasetID+":"+release.ID)).String()
+		version, err := u.nodeRepo.PrepareNodeIndex(ctx, &domain.NodeIndexVersion{ID: versionID, KBID: kbID, NodeID: release.NodeID, NodeReleaseID: release.ID, DatasetID: kb.DatasetID})
 		if err != nil {
-			u.markLearningFailed(kbID, release.NodeID, err.Error())
+			return learned, kb.DatasetID, err
+		}
+		docID := version.DocID
+		if version.Status == domain.IndexFailed || version.Status == domain.IndexCanceled || version.Status == domain.IndexRetired {
+			continue
+		}
+		if version.Status == domain.IndexActive {
+			ragInfo.TaskStatus = consts.NodeLearningTaskSucceeded
+			ragInfo.TaskMessage = "索引已生效"
+			_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, release.NodeID, ragInfo)
+			continue
+		}
+		if err := u.nodeRepo.SaveNodeIndexExtraction(ctx, version.ID, release.Content, release.Meta); err != nil {
+			return learned, kb.DatasetID, err
+		}
+		if docID == "" {
+			docID, err = u.rag.UpsertRecords(ctx, &rag.UpsertRecordsRequest{
+				ID:             version.ID,
+				IndexVersionID: version.ID,
+				Title:          release.Name,
+				DatasetID:      kb.DatasetID,
+				Content:        release.Content,
+				GroupIDs:       nil,
+			})
+		}
+		if err != nil {
+			u.markLearningFailed(kbID, release.NodeID, err.Error(), version.ID)
 			u.logger.Error("publication learning submit failed", log.String("kb_id", kbID), log.String("node_id", release.NodeID), log.String("node_release_id", release.ID), log.String("stage", "learning"), log.String("document", release.Name), log.Error(err))
 			continue
 		}
-		learned = append(learned, learnedRelease{release: release, docID: docID})
-		if err := u.nodeRepo.UpdateNodeReleaseDocID(ctx, release.ID, docID); err != nil {
+		learned = append(learned, learnedRelease{release: release, docID: docID, versionID: version.ID})
+		if err := u.nodeRepo.BindNodeIndexDocument(ctx, version.ID, docID); err != nil {
 			return learned, kb.DatasetID, fmt.Errorf("保存学习任务标识失败: %w", err)
 		}
 	}
@@ -462,22 +483,16 @@ func (u *KnowledgeBaseUsecase) learnPendingReleases(ctx context.Context, kbID st
 				if !exists {
 					continue
 				}
+				if _, err := u.nodeRepo.ObserveNodeIndex(ctx, document.ID, document.Status, document.ProgressMsg); err != nil {
+					u.logger.Error("publication index activation failed", log.Error(err))
+					continue
+				}
 				switch strings.ToUpper(document.Status) {
 				case string(consts.NodeRagStatusSucceeded):
 					delete(pending, document.ID)
-					_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, item.release.NodeID, domain.RagInfo{
-						Status:          consts.NodeRagStatusSucceeded,
-						Message:         document.ProgressMsg,
-						SyncedAt:        time.Now(),
-						TaskStatus:      consts.NodeLearningTaskSucceeded,
-						TaskAction:      consts.NodeLearningTaskActionPublish,
-						TaskMessage:     document.ProgressMsg,
-						ActiveDocID:     document.ID,
-						ActiveReleaseID: item.release.ID,
-					})
 					u.logger.Info("publication learning succeeded", log.String("kb_id", kbID), log.String("node_release_id", item.release.ID), log.String("stage", "learning"))
 				case string(consts.NodeRagStatusFailed):
-					u.markLearningFailed(kbID, item.release.NodeID, document.ProgressMsg)
+					u.markLearningFailed(kbID, item.release.NodeID, document.ProgressMsg, item.versionID)
 					u.logger.Error("publication learning failed", log.String("kb_id", kbID), log.String("node_release_id", item.release.ID), log.String("stage", "learning"), log.String("reason", document.ProgressMsg))
 					delete(pending, document.ID)
 				}
@@ -638,7 +653,7 @@ func sanitizeLearningFallbackReason(reason string) string {
 
 func (u *KnowledgeBaseUsecase) markPendingLearningFailed(kbID string, pending map[string]learnedRelease, message string) {
 	for _, item := range pending {
-		u.markLearningFailed(kbID, item.release.NodeID, message)
+		u.markLearningFailed(kbID, item.release.NodeID, message, item.versionID)
 	}
 }
 
@@ -647,7 +662,7 @@ func (u *KnowledgeBaseUsecase) cleanupPendingPublication(datasetID string, relea
 	defer cancel()
 	docIDs := make([]string, 0, len(learned))
 	for _, item := range learned {
-		u.markLearningFailed(item.release.KBID, item.release.NodeID, reason)
+		u.markLearningFailed(item.release.KBID, item.release.NodeID, reason, item.versionID)
 		if item.docID != "" {
 			docIDs = append(docIDs, item.docID)
 		}
@@ -662,46 +677,12 @@ func (u *KnowledgeBaseUsecase) cleanupPendingPublication(datasetID string, relea
 	}
 }
 
-func (u *KnowledgeBaseUsecase) cleanupOldPublicationRecords(datasetID string, learned []learnedRelease) {
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	for _, item := range learned {
-		oldDocIDs, err := u.nodeRepo.ListOldNodeDocIDsByNodeID(cleanupCtx, item.release.ID, item.release.NodeID)
-		if err != nil {
-			u.logger.Error("publication list old vectors failed", log.String("node_id", item.release.NodeID), log.Error(err))
-			continue
-		}
-		if len(oldDocIDs) == 0 {
-			continue
-		}
-		if err := u.rag.DeleteRecords(cleanupCtx, datasetID, oldDocIDs); err != nil {
-			u.logger.Error("publication delete old vectors failed", log.String("node_id", item.release.NodeID), log.Int("document_count", len(oldDocIDs)), log.Error(err))
-			continue
-		}
-		if err := u.nodeRepo.ClearNodeReleaseDocIDs(cleanupCtx, oldDocIDs); err != nil {
-			u.logger.Error("publication clear old vector references failed", log.String("node_id", item.release.NodeID), log.Int("document_count", len(oldDocIDs)), log.Error(err))
-		}
-	}
-}
-
-func (u *KnowledgeBaseUsecase) markLearningFailed(kbID, nodeID, message string) {
+func (u *KnowledgeBaseUsecase) markLearningFailed(kbID, nodeID, message, versionID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	node, err := u.nodeRepo.GetNodeByID(ctx, nodeID)
-	if err != nil {
-		_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, nodeID, domain.RagInfo{Status: consts.NodeRagStatusFailed, Message: message, SyncedAt: time.Now()})
-		return
+	if err := u.nodeRepo.FailPendingNodeIndex(ctx, kbID, nodeID, versionID, message); err != nil {
+		u.logger.Error("mark candidate learning failed", log.String("index_version", versionID), log.Error(err))
 	}
-	ragInfo := node.RagInfo
-	if !ragInfo.HasAvailableIndex() {
-		ragInfo.Status = consts.NodeRagStatusFailed
-		ragInfo.Message = message
-	}
-	ragInfo.TaskStatus = consts.NodeLearningTaskFailed
-	ragInfo.TaskAction = consts.NodeLearningTaskActionPublish
-	ragInfo.TaskMessage = message
-	ragInfo.SyncedAt = time.Now()
-	_ = u.nodeRepo.UpdateNodeRagInfo(ctx, kbID, nodeID, ragInfo)
 }
 
 func (u *KnowledgeBaseUsecase) GetKBReleaseList(ctx context.Context, req *domain.GetKBReleaseListReq) (*domain.GetKBReleaseListResp, error) {

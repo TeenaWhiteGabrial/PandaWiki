@@ -35,7 +35,7 @@ func TestManualModelEditsUseIndexBaselinePostgres(t *testing.T) {
 	// Avoid binding the production runtime-log sink to a single rollback
 	// transaction: its asynchronous writes cannot share that connection.
 	settings := &indexSettings{value: initial}
-	u := &ModelUsecase{modelRepo: pg.NewModelRepository(db, l), systemSettingRepo: settings, ragStore: r, ragRepo: mq.NewRAGRepository(p), kbRepo: k, nodeRepo: indexNodes{}, logger: l}
+	u := &ModelUsecase{modelRepo: pg.NewModelRepository(db, l), systemSettingRepo: settings, ragStore: r, ragRepo: mq.NewRAGRepository(p), kbRepo: k, nodeRepo: &indexNodes{}, logger: l}
 	request := &domain.UpdateModelReq{ID: modelID, BaseModelInfo: domain.BaseModelInfo{Type: domain.ModelTypeEmbedding, Provider: "CompatiblePlatform", Model: "embed-v1", APIKey: "rotated-key", BaseURL: "http://new-endpoint/v1"}}
 	if err := u.Update(ctx, request); err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestManualModelEditsUseIndexBaselinePostgres(t *testing.T) {
 	if err := u.SwitchMode(ctx, &domain.SwitchModeReq{Mode: "manual"}); err != nil {
 		t.Fatal(err)
 	}
-	if r.created != 1 || len(p.messages) != 1 {
+	if r.created != 1 || len(p.messages) != 0 {
 		t.Fatal("manual model change did not enqueue rebuild")
 	}
 	if err := u.SwitchMode(ctx, &domain.SwitchModeReq{Mode: "manual"}); err != nil {

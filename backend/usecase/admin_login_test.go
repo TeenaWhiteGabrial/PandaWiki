@@ -37,6 +37,7 @@ func TestAdministratorLoginPostgres(t *testing.T) {
 		t.Fatal(tx.Error)
 	}
 	defer tx.Rollback()
+	ensureIndexTestSchema(t, tx)
 	cfg := &config.Config{}
 	cfg.Auth.JWT.Secret = "administrator-login-test"
 	u := &UserUsecase{repo: pg.NewUserRepository(&store.DB{DB: tx}, log.NewLogger(cfg)), config: cfg}

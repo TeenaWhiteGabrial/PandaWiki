@@ -228,43 +228,15 @@ func (u *ModelUsecase) GetList(ctx context.Context) ([]*domain.ModelListItem, er
 
 // trigger upsert records after embedding model is updated or created
 func (u *ModelUsecase) TriggerUpsertRecords(ctx context.Context) error {
-	// update to new dataset
-	kbList, err := u.kbRepo.GetKnowledgeBaseList(ctx)
-	if err != nil {
-		return fmt.Errorf("get knowledge base list failed: %w", err)
-	}
-	for _, kb := range kbList {
-		newDatasetID, err := u.ragStore.CreateKnowledgeBase(ctx)
-		if err != nil {
-			return fmt.Errorf("create new dataset failed: %w", err)
-		}
-		if err := u.ragStore.DeleteKnowledgeBase(ctx, kb.DatasetID); err != nil {
-			return fmt.Errorf("delete old dataset failed: %w", err)
-		}
-		if err := u.kbRepo.UpdateDatasetID(ctx, kb.ID, newDatasetID); err != nil {
-			return fmt.Errorf("update knowledge base dataset id failed: %w", err)
-		}
-	}
-	// traverse all nodes
-	err = u.nodeRepo.TraverseNodesByCursor(ctx, func(nodeRelease *domain.NodeRelease) error {
-		// async upsert vector content via mq
-		nodeContentVectorRequests := []*domain.NodeReleaseVectorRequest{
-			{
-				KBID:               nodeRelease.KBID,
-				NodeReleaseID:      nodeRelease.ID,
-				Action:             "upsert",
-				ReuseParsedContent: true,
-			},
-		}
-		if err := u.ragRepo.AsyncUpdateNodeReleaseVector(ctx, nodeContentVectorRequests); err != nil {
-			return err
-		}
-		return nil
-	})
+	setting, err := u.GetModelModeSetting(ctx)
 	if err != nil {
 		return err
 	}
-	return nil
+	model, err := u.modelForMode(ctx, setting, domain.ModelTypeEmbedding)
+	if err != nil {
+		return err
+	}
+	return u.stageEmbeddingIndexBuild(ctx, model)
 }
 
 func (u *ModelUsecase) Update(ctx context.Context, req *domain.UpdateModelReq) error {
@@ -302,8 +274,8 @@ func (u *ModelUsecase) Update(ctx context.Context, req *domain.UpdateModelReq) e
 		data.Parameters = *req.Parameters
 	}
 	// Manual model records must not replace the active automatic configuration.
-	if setting.Mode == consts.ModelSettingModeManual {
-		if err := u.ragStore.UpsertModel(ctx, data); err != nil {
+	if setting.Mode == consts.ModelSettingModeManual && (data.Type != domain.ModelTypeEmbedding || *setting.EmbeddingIndexConfig == embeddingIndexConfig(data)) {
+		if err := u.syncRAGModel(ctx, data); err != nil {
 			return err
 		}
 	}
@@ -449,11 +421,7 @@ func (u *ModelUsecase) updateModeSettingConfig(ctx context.Context, req *domain.
 	u.normalizeModelModeSetting(&config)
 
 	// 持久化设置
-	updatedValue, err := json.Marshal(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal updated model setting: %w", err)
-	}
-	if err := u.systemSettingRepo.UpdateSystemSetting(ctx, string(consts.SystemSettingModelMode), string(updatedValue)); err != nil {
+	if err := u.saveModelModeSetting(ctx, config); err != nil {
 		return nil, fmt.Errorf("failed to update model setting: %w", err)
 	}
 	return &config, nil
@@ -488,6 +456,7 @@ func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, m
 		modelModeSetting.EmbeddingIndexConfig = oldModelModeSetting.EmbeddingIndexConfig
 	}
 	var nextEmbeddingIndex *domain.EmbeddingIndexConfig
+	var nextEmbeddingModel *domain.Model
 
 	ragModelTypes := []domain.ModelType{
 		domain.ModelTypeEmbedding,
@@ -537,17 +506,16 @@ func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, m
 			}
 		}
 
-		// 更新RAG存储中的模型
 		if model != nil {
-			// 任一模型同步失败时保留原索引基准，供下次保存重试。
-			if err := u.ragStore.UpsertModel(ctx, model); err != nil {
-				u.logger.Error("failed to update model in RAG store", log.String("model_id", model.ID), log.String("type", string(modelType)), log.Any("error", err))
-				return fmt.Errorf("failed to update model in RAG store: %s", model.Type)
-			}
-			u.logger.Info("successfully updated RAG model", log.String("model name: ", string(model.Model)))
 			if modelType == domain.ModelTypeEmbedding {
 				value := embeddingIndexConfig(model)
 				nextEmbeddingIndex = &value
+				nextEmbeddingModel = model
+				// Pin existing serving models. A changed vector space is built
+				// with a new immutable model ID instead of updating the old ID.
+			}
+			if err := u.syncRAGModel(ctx, model); err != nil {
+				return fmt.Errorf("同步 %s 模型失败: %w", model.Type, err)
 			}
 		}
 	}
@@ -558,16 +526,17 @@ func (u *ModelUsecase) updateRAGModelsByMode(ctx context.Context, mode string, m
 	}
 	if modelModeSetting.EmbeddingIndexConfig == nil || *modelModeSetting.EmbeddingIndexConfig != *nextEmbeddingIndex {
 		u.logger.Info("embedding model updated, triggering upsert records")
-		if err := u.TriggerUpsertRecords(ctx); err != nil {
+		if err := u.stageEmbeddingIndexBuild(ctx, nextEmbeddingModel); err != nil {
 			return err
 		}
 	} else {
 		u.logger.Info("embedding index configuration unchanged; skipped full reindex")
 	}
-	// Advance only after model synchronization and required enqueueing succeed.
-	// Failed saves retain their baseline so the next attempt cannot skip work.
-	modelModeSetting.EmbeddingIndexConfig = nextEmbeddingIndex
-	modelModeSetting.IsManualEmbeddingUpdated = false
+	// A queued build is not an applied index. The successful cutover transaction
+	// advances this baseline; failed/canceled builds remain explicit changes.
+	if *modelModeSetting.EmbeddingIndexConfig == *nextEmbeddingIndex {
+		modelModeSetting.IsManualEmbeddingUpdated = false
+	}
 	return u.saveModelModeSetting(ctx, modelModeSetting)
 }
 

@@ -33,6 +33,7 @@ func TestCommentIdentityAndKnowledgeBaseGuard(t *testing.T) {
 	defer sqlDB.Close()
 	tx := db.Begin()
 	defer tx.Rollback()
+	ensureIndexTestSchema(t, tx)
 	userID, nodeID, kbID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	fixtures := []any{&domain.User{ID: userID, Account: "comment_test_" + userID, Name: "真实身份", Password: "unused", Role: consts.UserRoleUser}, &domain.KnowledgeBase{ID: kbID, Name: "temporary comment security"}, &domain.Node{ID: nodeID, KBID: kbID, Name: "temporary comment security", Type: domain.NodeTypeDocument}}
 	for _, f := range fixtures {

@@ -759,12 +759,14 @@ func (r *NodeRepository) GetLatestDocumentReleasesWithPathsByKBID(ctx context.Co
 	var nodeReleases []*domain.NodeRelease
 	if err := r.db.WithContext(ctx).
 		Model(&domain.NodeRelease{}).
-		Where("kb_id = ?", kbID).
-		Where("type = ?", domain.NodeTypeDocument).
-		Where("trim(coalesce(content, '')) <> ''").
-		Order("node_id, updated_at DESC").
+		Joins("JOIN nodes ON nodes.id=node_releases.node_id AND nodes.kb_id=node_releases.kb_id").
+		Where("node_releases.kb_id = ?", kbID).
+		Where("node_releases.type = ?", domain.NodeTypeDocument).
+		Where(`(nodes.rag_info->>'active_release_id'=node_releases.id OR (COALESCE(nodes.rag_info->>'active_release_id','')='' AND NOT EXISTS (SELECT 1 FROM node_index_versions v WHERE v.node_id=nodes.id)))`).
+		Where("trim(coalesce(node_releases.content, '')) <> ''").
+		Order("node_releases.node_id, node_releases.updated_at DESC").
 		Limit(limit).
-		Distinct("ON (node_id) *").
+		Distinct("ON (node_releases.node_id) node_releases.*").
 		Find(&nodeReleases).Error; err != nil {
 		return nil, err
 	}
@@ -1154,6 +1156,15 @@ func (r *NodeRepository) UpdateNodeRagInfo(ctx context.Context, kbID, nodeID str
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("kb_id = ? AND id = ?", kbID, nodeID).First(&node).Error; err != nil {
 			return err
 		}
+		// Only the index-version transaction may replace an established serving
+		// pointer. Dispatchers and late legacy status snapshots must preserve it.
+		ragInfo.PendingIndexID = node.RagInfo.PendingIndexID
+		if node.RagInfo.ActiveDocID != "" && node.RagInfo.ActiveDocID != ragInfo.ActiveDocID {
+			ragInfo.ActiveDocID = node.RagInfo.ActiveDocID
+			ragInfo.ActiveReleaseID = node.RagInfo.ActiveReleaseID
+			ragInfo.Status = node.RagInfo.Status
+			ragInfo.Message = node.RagInfo.Message
+		}
 		if node.RagInfo.TaskID == ragInfo.TaskID {
 			// A dispatcher that raced with cancellation must not revive its UI state.
 			if node.RagInfo.TaskStatus == consts.NodeLearningTaskCanceled &&
@@ -1506,6 +1517,9 @@ func (r *NodeRepository) CreatePendingNodeReleases(ctx context.Context, kbID, us
 func (r *NodeRepository) createNodeReleases(ctx context.Context, kbID, userId string, nodeIDs []string, publish bool) ([]string, error) {
 	releaseIDs := make([]string, 0)
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockLearningSubmission(tx, kbID); err != nil {
+			return err
+		}
 		var updatedNodes []*domain.Node
 		query := tx.Model(&domain.Node{}).
 			Where("kb_id = ?", kbID).

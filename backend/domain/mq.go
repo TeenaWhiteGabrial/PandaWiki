@@ -21,6 +21,8 @@ var TopicConsumerName = map[string]string{
 }
 
 type NodeReleaseVectorRequest struct {
+	DatasetID          string `json:"dataset_id,omitempty"`
+	IndexBuildID       string `json:"index_build_id,omitempty"`
 	ReuseParsedContent bool   `json:"reuse_parsed_content,omitempty"`
 	KBID               string `json:"kb_id"`
 	NodeReleaseID      string `json:"node_release_id"`

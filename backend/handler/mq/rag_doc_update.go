@@ -46,6 +46,11 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 		log.String("doc_id", event.ID),
 		log.String("status", event.Status),
 		log.String("message", event.Message))
+	if handled, err := h.nodeRepo.ObserveNodeIndex(ctx, event.ID, event.Status, event.Message); err != nil {
+		return err
+	} else if handled {
+		return nil
+	}
 
 	release, err := h.nodeRepo.GetNodeReleaseByDocID(ctx, event.ID)
 	if err != nil {
@@ -67,6 +72,14 @@ func (h *RagDocUpdateHandler) HandleRagDocUpdate(ctx context.Context, msg types.
 			log.String("doc_id", event.ID),
 			log.Error(err))
 		return err
+	}
+	if node.RagInfo.PendingIndexID != "" || (node.RagInfo.ActiveDocID != "" && node.RagInfo.ActiveDocID != event.ID) {
+		return nil
+	}
+	if node.RagInfo.TaskID != "" {
+		if task, err := h.nodeRepo.GetNodeLearningTaskByID(ctx, node.RagInfo.TaskID); err == nil && task.DatasetID != "" {
+			return nil
+		}
 	}
 
 	var latestTask *domain.NodeLearningTask

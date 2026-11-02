@@ -587,6 +587,13 @@ func (r *KnowledgeBaseRepository) resolveSingleKnowledgeBaseDatasetID(ctx contex
 	if kb == nil {
 		return fmt.Errorf("knowledge base is nil")
 	}
+	var managed int64
+	if err := r.db.WithContext(ctx).Model(&domain.KBIndexBuild{}).Where("kb_id = ?", kb.ID).Count(&managed).Error; err != nil {
+		return err
+	}
+	if managed > 0 {
+		return nil
+	} // Dataset transitions now belong to the atomic build transaction.
 	datasets, err := r.rag.ListKnowledgeBases(ctx)
 	if err != nil {
 		return fmt.Errorf("list rag datasets failed: %w", err)
@@ -720,6 +727,9 @@ func (r *KnowledgeBaseRepository) CreateKBRelease(ctx context.Context, release *
 // this transaction commits.
 func (r *KnowledgeBaseRepository) PublishKBRelease(ctx context.Context, release *domain.KBRelease, nodeIDs []string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockLearningSubmission(tx, release.KBID); err != nil {
+			return err
+		}
 		if len(nodeIDs) > 0 {
 			if err := tx.Model(&domain.Node{}).
 				Where("kb_id = ? AND id IN ?", release.KBID, nodeIDs).

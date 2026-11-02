@@ -37,6 +37,7 @@ func TestPublicAppBrandPostgres(t *testing.T) {
 		t.Fatal(tx.Error)
 	}
 	defer tx.Rollback()
+	ensureIndexTestSchema(t, tx)
 	kbID := uuid.NewString()
 	if err := tx.Create(&domain.KnowledgeBase{ID: kbID, Name: "private knowledge base"}).Error; err != nil {
 		t.Fatal(err)

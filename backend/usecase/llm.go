@@ -724,6 +724,7 @@ func (u *LLMUsecase) getRankNodes(ctx context.Context, req GetRankNodesRequest, 
 	// get related documents from raglite
 	retrievalStarted := time.Now()
 	rewrittenQuery, records, err := u.rag.QueryRecords(ctx, &rag.QueryRecordsRequest{
+		TopK:                50, // Over-fetch before filtering serving versions.
 		DatasetID:           req.DatasetID,
 		Query:               req.Question,
 		GroupIDs:            req.GroupIDs,
@@ -731,12 +732,36 @@ func (u *LLMUsecase) getRankNodes(ctx context.Context, req GetRankNodesRequest, 
 		HistoryMsgs:         req.HistoryMessages,
 		MaxChunksPerDoc:     req.MaxChunksPerDoc,
 	})
+	if err == nil && len(records) > 0 {
+		ids := make([]string, 0, len(records))
+		for _, record := range records {
+			ids = append(ids, record.DocID)
+		}
+		serving, filterErr := u.nodeRepo.FilterServingIndexDocuments(ctx, ids)
+		if filterErr != nil {
+			return "", nil, fmt.Errorf("resolve serving index versions: %w", filterErr)
+		}
+		allowed := make(map[string]bool, len(serving))
+		for _, id := range serving {
+			allowed[id] = true
+		}
+		filtered := make([]*domain.NodeContentChunk, 0, len(records))
+		for _, record := range records {
+			if allowed[record.DocID] {
+				filtered = append(filtered, record)
+				if len(filtered) >= 10 {
+					break
+				}
+			}
+		}
+		records = filtered
+	}
 	if trace != nil {
 		chunks := make([]map[string]any, 0, len(records))
 		for _, record := range records {
 			chunks = append(chunks, map[string]any{"chunk_id": record.ID, "document_id": record.DocID, "name": record.Name, "excerpt": record.Content})
 		}
-		trace.add("vector_retrieval", statusForError(err), map[string]any{"query": req.Question, "group_ids": req.GroupIDs, "similarity_threshold": req.SimilarityThreshold, "top_k": 10, "history_messages": traceMessagesForDiagnostics(req.HistoryMessages)}, map[string]any{
+		trace.add("vector_retrieval", statusForError(err), map[string]any{"query": req.Question, "group_ids": req.GroupIDs, "similarity_threshold": req.SimilarityThreshold, "top_k": 50, "max_used_chunks": 10, "history_messages": traceMessagesForDiagnostics(req.HistoryMessages)}, map[string]any{
 			"rewritten_query": rewrittenQuery, "returned_count": len(records), "chunks": chunks,
 		}, err)
 		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(retrievalStarted).Milliseconds()

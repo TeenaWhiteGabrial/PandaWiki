@@ -89,6 +89,7 @@ func (Node) TableName() string {
 }
 
 type RagInfo struct {
+	PendingIndexID   string                        `json:"pending_index_id,omitempty"`
 	LearningProgress *LearningProgress             `json:"learning_progress,omitempty"`
 	Status           consts.NodeRagInfoStatus      `json:"status"`
 	Message          string                        `json:"message"`
@@ -457,6 +458,8 @@ func (NodeRelease) TableName() string {
 
 // table: node_learning_tasks
 type NodeLearningTask struct {
+	DatasetID     string                        `json:"dataset_id,omitempty"`
+	IndexBuildID  string                        `json:"index_build_id,omitempty"`
 	ID            string                        `json:"id" gorm:"primaryKey"`
 	KBID          string                        `json:"kb_id" gorm:"index"`
 	NodeID        string                        `json:"node_id" gorm:"index"`

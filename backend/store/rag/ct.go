@@ -47,9 +47,24 @@ func NewCTRAG(config *config.Config, logger *log.Logger) (*CTRAG, error) {
 }
 
 func (s *CTRAG) CreateKnowledgeBase(ctx context.Context) (string, error) {
-	dataset, err := s.client.Datasets.Create(ctx, &raglite.CreateDatasetRequest{
-		Name: uuid.New().String(),
-	})
+	request := &raglite.CreateDatasetRequest{Name: uuid.NewString()}
+	// New KBs bind the latest separately created embedding snapshot explicitly;
+	// existing dataset bindings/default models are not mutated by a model build.
+	models, err := s.client.Models.List(ctx, &raglite.ListModelsRequest{ModelType: string(domain.ModelTypeEmbedding)})
+	if err != nil {
+		return "", err
+	}
+	var newest *raglite.AIModel
+	for i := range models.Models {
+		m := &models.Models[i]
+		if strings.HasPrefix(m.Name, "pandawiki-index-") && (newest == nil || m.CreatedAt.After(newest.CreatedAt)) {
+			newest = m
+		}
+	}
+	if newest != nil {
+		request.DenseModelID = &newest.ID
+	}
+	dataset, err := s.client.Datasets.Create(ctx, request)
 	if err != nil {
 		return "", err
 	}
@@ -72,6 +87,10 @@ func (s *CTRAG) ListKnowledgeBases(ctx context.Context) ([]Dataset, error) {
 }
 
 func (s *CTRAG) QueryRecords(ctx context.Context, req *QueryRecordsRequest) (string, []*domain.NodeContentChunk, error) {
+	topK := req.TopK
+	if topK <= 0 {
+		topK = 10
+	}
 	var chatMsgs []raglite.ChatMessage
 	for _, msg := range req.HistoryMsgs {
 		switch msg.Role {
@@ -93,7 +112,7 @@ func (s *CTRAG) QueryRecords(ctx context.Context, req *QueryRecordsRequest) (str
 	data := &raglite.RetrieveRequest{
 		DatasetID: req.DatasetID,
 		Query:     req.Query,
-		TopK:      10,
+		TopK:      topK,
 		Metadata: map[string]interface{}{
 			"group_ids": req.GroupIDs,
 		},
@@ -119,6 +138,9 @@ func (s *CTRAG) QueryRecords(ctx context.Context, req *QueryRecordsRequest) (str
 }
 
 func (s *CTRAG) UpsertRecords(ctx context.Context, req *UpsertRecordsRequest) (string, error) {
+	if req.IndexVersionID != "" && req.DocID != "" {
+		return "", fmt.Errorf("新索引版本不能覆盖已有 RAG 文档")
+	}
 	markdown := req.Content
 	// if the content is html, convert it to markdown first
 	if utils.IsLikelyHTML(req.Content) {
@@ -129,6 +151,9 @@ func (s *CTRAG) UpsertRecords(ctx context.Context, req *UpsertRecordsRequest) (s
 		}
 	}
 	markdown = buildSearchableMarkdown(req.Title, markdown)
+	if req.IndexVersionID != "" {
+		markdown = "<!-- pandawiki-index-version:" + req.IndexVersionID + " -->\n" + markdown
+	}
 	data := &raglite.UploadDocumentRequest{
 		DatasetID:  req.DatasetID,
 		DocumentID: req.DocID,
@@ -136,6 +161,9 @@ func (s *CTRAG) UpsertRecords(ctx context.Context, req *UpsertRecordsRequest) (s
 		File:       strings.NewReader(markdown),
 		Filename:   fmt.Sprintf("%s.md", req.ID),
 		Metadata:   make(map[string]interface{}),
+	}
+	if req.IndexVersionID != "" {
+		data.Metadata["pandawiki_index_version"] = req.IndexVersionID
 	}
 	if req.GroupIDs != nil {
 		data.Metadata["group_ids"] = req.GroupIDs

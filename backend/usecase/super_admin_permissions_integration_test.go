@@ -37,6 +37,7 @@ func TestSuperAdminDocumentFallbackPostgres(t *testing.T) {
 		t.Fatal(tx.Error)
 	}
 	defer tx.Rollback()
+	ensureIndexTestSchema(t, tx)
 	ctx := context.Background()
 	kbID, navID, folderID, docID, releaseID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	emptyNavID := uuid.NewString()

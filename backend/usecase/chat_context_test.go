@@ -41,7 +41,21 @@ func chatContextDB(t *testing.T) (*store.DB, *log.Logger) {
 		t.Fatal(tx.Error)
 	}
 	t.Cleanup(func() { tx.Rollback() })
+	ensureIndexTestSchema(t, tx)
 	return &store.DB{DB: tx}, log.NewLogger(&config.Config{})
+}
+
+func ensureIndexTestSchema(t *testing.T, tx *gorm.DB) {
+	t.Helper()
+	if !tx.Migrator().HasTable(&domain.NodeIndexVersion{}) {
+		sql, err := os.ReadFile("../store/pg/migration/000057_safe_index_versions.up.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Exec(string(sql)).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // Opt-in: sends only synthetic conversation content to the locally configured model.

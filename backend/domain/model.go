@@ -4,11 +4,24 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"github.com/chaitin/panda-wiki/consts"
+	"strings"
 	"time"
 
 	modelkitConsts "github.com/chaitin/ModelKit/v2/consts"
 	modelkitDomain "github.com/chaitin/ModelKit/v2/domain"
 )
+
+func (m *Model) EmbeddingIndexIdentity() EmbeddingIndexConfig {
+	if m == nil || strings.TrimSpace(m.Model) == "" {
+		return EmbeddingIndexConfig{}
+	}
+	max := m.Parameters.MaxTokens
+	if max == 0 {
+		max = 8192
+	}
+	return EmbeddingIndexConfig{Provider: consts.NormalizeAutoModeProvider(strings.TrimSpace(string(m.Provider))), Model: strings.TrimSpace(m.Model), ContextWindow: m.Parameters.ContextWindow, MaxTokens: max}
+}
 
 type ModelProvider string
 
