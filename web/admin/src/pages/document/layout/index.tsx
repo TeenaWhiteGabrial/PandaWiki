@@ -482,7 +482,6 @@ const Content = () => {
       />
       <LearningProgressPanel
         open={learningProgressOpen}
-        groups={groups}
         onClose={() => setLearningProgressOpen(false)}
         refresh={refresh}
       />

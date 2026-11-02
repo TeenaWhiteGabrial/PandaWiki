@@ -5,14 +5,21 @@ import {
   stageElapsedMs,
 } from '../utils/learningProgress';
 import { Modal, message } from '@/components/ui';
-import { cancelPendingLearning } from '@/request/nodeLearning';
+import {
+  cancelPendingLearning,
+  getLearningTaskTargets,
+  getLearningTaskDetail,
+  type LearningFilter,
+  type LearningTaskItem,
+  type LearningTaskQuery,
+} from '@/request/nodeLearning';
+import { useLearningTasks } from '../hooks/useLearningTasks';
 import {
   getRagStatusMeta,
   hasAvailableRagIndex,
   isLearningTaskActive,
 } from '@/pages/document/utils/ragStatus';
 import {
-  getApiV1NodeListGroupNav,
   postApiV1NodeLearningCancel,
   postApiV1NodeRestudy,
 } from '@/request/Node';
@@ -20,8 +27,6 @@ import {
   ConstsNodeLearningTaskStatus,
   ConstsNodeRagInfoStatus,
   DomainNodeListItemResp,
-  DomainNodeStatus,
-  GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp,
 } from '@/request/types';
 import { useAppSelector } from '@/store';
 import {
@@ -40,232 +45,110 @@ import {
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 
-type FilterKey =
-  | 'attention'
-  | 'running'
-  | 'failed'
-  | 'unavailable'
-  | 'answerable'
-  | 'all';
-
+type FilterKey = Exclude<LearningFilter, 'needs_learning'>;
 interface LearningProgressPanelProps {
   open: boolean;
-  groups: GithubComChaitinPandaWikiApiNodeV1NodeListGroupNavResp[];
   onClose: () => void;
   refresh: () => void;
 }
 
 type LearningDoc = DomainNodeListItemResp & {
-  navName: string;
   folderPath: string;
   statusKey: ConstsNodeRagInfoStatus | 'NONE';
   taskStatus?: ConstsNodeLearningTaskStatus;
   available: boolean;
 };
-
 const pageSize = 10;
-
-const isRagRunningStatus = (status: LearningDoc['statusKey']) =>
-  status === ConstsNodeRagInfoStatus.NodeRagStatusPending ||
-  status === ConstsNodeRagInfoStatus.NodeRagStatusRunning ||
-  status === ConstsNodeRagInfoStatus.NodeRagStatusReindexing;
-
+const asLearningDoc = (item: LearningTaskItem): LearningDoc => ({
+  ...item,
+  folderPath: item.folder_path,
+  statusKey: item.rag_info?.status || 'NONE',
+  taskStatus: item.rag_info?.task_status,
+  available: hasAvailableRagIndex(item),
+});
 const isDocRunning = (item: LearningDoc) =>
   item.taskStatus
     ? isLearningTaskActive(item.taskStatus)
-    : !item.available && isRagRunningStatus(item.statusKey);
-
+    : !item.available &&
+      [
+        ConstsNodeRagInfoStatus.NodeRagStatusPending,
+        ConstsNodeRagInfoStatus.NodeRagStatusRunning,
+        ConstsNodeRagInfoStatus.NodeRagStatusReindexing,
+      ].includes(item.statusKey as ConstsNodeRagInfoStatus);
 const isDocFailed = (item: LearningDoc) =>
   item.taskStatus === ConstsNodeLearningTaskStatus.NodeLearningTaskFailed ||
   (!item.available &&
     item.statusKey === ConstsNodeRagInfoStatus.NodeRagStatusFailed);
 
-const needsAttention = (item: LearningDoc) =>
-  !item.available ||
-  item.taskStatus === ConstsNodeLearningTaskStatus.NodeLearningTaskFailed ||
-  item.taskStatus === ConstsNodeLearningTaskStatus.NodeLearningTaskCanceled;
-
 const LearningProgressPanel = ({
   open,
-  groups: initialGroups,
   onClose,
   refresh,
 }: LearningProgressPanelProps) => {
   const { kb_id, user } = useAppSelector(state => state.config);
-  const [groups, setGroups] = useState(initialGroups);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [loadError, setLoadError] = useState<'initial' | 'refresh' | null>(
-    null,
-  );
-  const [reloadKey, setReloadKey] = useState(0);
-  const dataUnavailable = initialLoading || loadError === 'initial';
-  useEffect(() => {
-    if (!open) {
-      setInitialLoading(true);
-      return;
-    }
-    if (!kb_id) {
-      setInitialLoading(false);
-      setLoadError('initial');
-      return;
-    }
-    setInitialLoading(true);
-    setLoadError(null);
-    let stopped = false;
-    let loaded = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const load = async () => {
-      try {
-        const result = await getApiV1NodeListGroupNav({ kb_id });
-        if (!stopped) {
-          loaded = true;
-          setGroups(result || []);
-          setLoadError(null);
-        }
-      } catch {
-        if (!stopped) setLoadError(loaded ? 'refresh' : 'initial');
-      } finally {
-        if (!stopped) {
-          setInitialLoading(false);
-          timer = setTimeout(load, 5000);
-        }
-      }
-    };
-    void load();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [open, kb_id, reloadKey]);
+  const identity = `${user?.id || ''}:${kb_id || ''}`;
   const [detailId, setDetailId] = useState<string>();
   const [filter, setFilter] = useState<FilterKey>('attention');
   const [keyword, setKeyword] = useState('');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Map<string, LearningDoc>>(new Map());
   const [pendingCancelMessage, setPendingCancelMessage] = useState('');
-
-  const docs = useMemo<LearningDoc[]>(() => {
-    const result: LearningDoc[] = [];
-    groups.forEach(group => {
-      const list = (group.list || []) as DomainNodeListItemResp[];
-      const nodeMap = new Map(list.map(item => [item.id || '', item]));
-      const navName = group.nav_name || '未命名目录';
-
-      const getFolderPath = (item: DomainNodeListItemResp) => {
-        const folders: string[] = [];
-        let current = item.parent_id ? nodeMap.get(item.parent_id) : undefined;
-        const visited = new Set<string>();
-        while (current?.id && !visited.has(current.id)) {
-          visited.add(current.id);
-          if (current.name) folders.unshift(current.name);
-          current = current.parent_id
-            ? nodeMap.get(current.parent_id)
-            : undefined;
-        }
-        return [navName, ...folders].filter(Boolean).join(' / ');
-      };
-
-      list.forEach(item => {
-        if (
-          item.type !== 2 ||
-          item.status !== DomainNodeStatus.NodeStatusPublished
-        ) {
-          return;
-        }
-        result.push({
-          ...item,
-          navName,
-          folderPath: getFolderPath(item),
-          statusKey: item.rag_info?.status || 'NONE',
-          taskStatus: item.rag_info?.task_status,
-          available: hasAvailableRagIndex(item),
-        });
-      });
-    });
-
-    return result.sort((a, b) => {
-      const getOrder = (item: LearningDoc) => {
-        if (isDocFailed(item)) return 0;
-        if (isDocRunning(item)) return 1;
-        if (!item.available) return 2;
-        return 3;
-      };
-      const statusDiff = getOrder(a) - getOrder(b);
-      if (statusDiff !== 0) return statusDiff;
-      return dayjs(b.updated_at).valueOf() - dayjs(a.updated_at).valueOf();
-    });
-  }, [groups]);
-
-  const counts = useMemo(() => {
-    const answerable = docs.filter(item => item.available).length;
-    const unavailable = docs.filter(item => !item.available).length;
-    const failed = docs.filter(item => isDocFailed(item)).length;
-    const running = docs.filter(item => isDocRunning(item)).length;
-    return {
-      total: docs.length,
-      attention: docs.filter(item => needsAttention(item)).length,
-      running,
-      failed,
-      unavailable,
-      answerable,
-    };
-  }, [docs]);
-
-  const visibleDocs = useMemo(() => {
-    const normalizedKeyword = keyword.trim().toLowerCase();
-    return docs.filter(item => {
-      if (filter === 'attention') {
-        if (!needsAttention(item)) {
-          return false;
-        }
-      } else if (filter === 'running') {
-        if (!isDocRunning(item)) return false;
-      } else if (filter === 'failed') {
-        if (!isDocFailed(item)) return false;
-      } else if (filter === 'unavailable') {
-        if (item.available) return false;
-      } else if (filter === 'answerable') {
-        if (!item.available) return false;
-      }
-
-      if (!normalizedKeyword) return true;
-      return `${item.name || ''} ${item.folderPath || ''} ${
-        item.rag_info?.message || ''
-      } ${item.rag_info?.task_message || ''} ${
-        item.rag_info?.learning_progress?.stages?.at(-1)?.message || ''
-      }`
-        .toLowerCase()
-        .includes(normalizedKeyword);
-    });
-  }, [docs, filter, keyword]);
-
-  const totalPages = Math.max(1, Math.ceil(visibleDocs.length / pageSize));
-  const pagedDocs = visibleDocs.slice((page - 1) * pageSize, page * pageSize);
-  const shouldAutoRefresh =
-    !dataUnavailable && docs.some(item => isDocRunning(item));
-  const pendingDocs = docs.filter(
-    item =>
-      !isDocRunning(item) &&
-      (!item.available ||
-        item.taskStatus ===
-          ConstsNodeLearningTaskStatus.NodeLearningTaskFailed ||
-        item.taskStatus ===
-          ConstsNodeLearningTaskStatus.NodeLearningTaskCanceled),
-  );
-  const runningVisibleDocs = visibleDocs.filter(item => isDocRunning(item));
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const selectedDocs = useMemo(
-    () => docs.filter(item => item.id && selectedIdSet.has(item.id)),
-    [docs, selectedIdSet],
-  );
-  const selectedRunningDocs = selectedDocs.filter(item => isDocRunning(item));
-  const pagedSelectableIds = pagedDocs
+  const [detail, setDetail] = useState<{
+    identity: string;
+    id: string;
+    doc: LearningTaskItem;
+  }>();
+  const [detailError, setDetailError] = useState(false);
+  const [detailReload, setDetailReload] = useState(0);
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(keyword.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [keyword]);
+  const query = {
+    kb_id: kb_id || '',
+    filter,
+    keyword: search,
+    page,
+    page_size: pageSize,
+  };
+  const {
+    data,
+    counts: loadedCounts,
+    initialLoading,
+    loadError,
+    summaryError,
+    fetching,
+    reload,
+    invalidate,
+  } = useLearningTasks(open, user?.id || '', query);
+  const counts = loadedCounts || {
+    total: 0,
+    attention: 0,
+    running: 0,
+    failed: 0,
+    unavailable: 0,
+    answerable: 0,
+    needs_learning: 0,
+  };
+  const dataUnavailable = !data;
+  const searchPending = keyword.trim() !== search;
+  const actionUnavailable = dataUnavailable || submitting || searchPending;
+  const docs = useMemo(() => (data?.list || []).map(asLearningDoc), [data]);
+  const pagedDocs = docs;
+  const total = data?.total || 0;
+  const runningVisibleCount = data?.running || 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const selectedIdSet = new Set(selected.keys());
+  const selectedDocs = Array.from(selected.values());
+  const selectedRunningDocs = selectedDocs.filter(isDocRunning);
+  const pagedSelectableIds = docs
     .map(item => item.id)
     .filter(Boolean) as string[];
   const selectedPagedCount = pagedSelectableIds.filter(id =>
-    selectedIdSet.has(id),
+    selected.has(id),
   ).length;
   const isPagedAllSelected =
     pagedSelectableIds.length > 0 &&
@@ -273,81 +156,146 @@ const LearningProgressPanel = ({
   const isPagedIndeterminate =
     selectedPagedCount > 0 && selectedPagedCount < pagedSelectableIds.length;
 
-  const toggleSelected = (id?: string) => {
-    if (!id) return;
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id],
-    );
-  };
+  useEffect(() => {
+    setSelected(new Map());
+    setDetailId(undefined);
+    setSelectionMode(false);
+    setPendingCancelMessage('');
+    setPage(1);
+  }, [identity]);
+  useEffect(() => {
+    if (data && page !== data.page) setPage(data.page);
+  }, [data, page]);
+  useEffect(() => {
+    if (open) return;
+    setDetailId(undefined);
+    setSelected(new Map());
+    setSelectionMode(false);
+  }, [open]);
+  // Keep selections across pages, but refresh their status when their page is read.
+  useEffect(() => {
+    setSelected(previous => {
+      const next = new Map(previous);
+      for (const item of docs)
+        if (item.id && next.has(item.id)) next.set(item.id, item);
+      return next;
+    });
+  }, [docs]);
 
-  const toggleCurrentPageSelected = () => {
-    if (pagedSelectableIds.length === 0) return;
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (isPagedAllSelected) {
-        pagedSelectableIds.forEach(id => next.delete(id));
-      } else {
-        pagedSelectableIds.forEach(id => next.add(id));
+  useEffect(() => {
+    if (!open || !detailId || !kb_id) return;
+    const controller = new AbortController();
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    setDetailError(false);
+    const load = async () => {
+      try {
+        const doc = await getLearningTaskDetail(
+          kb_id,
+          detailId,
+          controller.signal,
+        );
+        if (stopped) return;
+        setDetail({ identity, id: detailId, doc });
+        setDetailError(false);
+        if (isDocRunning(asLearningDoc(doc))) timer = setTimeout(load, 5000);
+      } catch (error) {
+        if (!stopped) {
+          if ([401, 403].includes((error as { status?: number })?.status || 0))
+            setDetail(undefined);
+          setDetailError(true);
+        }
       }
-      return Array.from(next);
+    };
+    void load();
+    return () => {
+      stopped = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [open, detailId, kb_id, identity, detailReload]);
+  const detailDoc =
+    detail?.identity === identity && detail.id === detailId
+      ? detail.doc
+      : undefined;
+
+  const toggleSelected = (id?: string) => {
+    const doc = docs.find(item => item.id === id);
+    if (!id || !doc) return;
+    setSelected(previous => {
+      const next = new Map(previous);
+      if (next.has(id)) next.delete(id);
+      else next.set(id, doc);
+      return next;
     });
   };
-
+  const toggleCurrentPageSelected = () =>
+    setSelected(previous => {
+      const next = new Map(previous);
+      docs.forEach(doc => {
+        if (!doc.id) return;
+        if (isPagedAllSelected) next.delete(doc.id);
+        else next.set(doc.id, doc);
+      });
+      return next;
+    });
   const exitSelectionMode = () => {
     setSelectionMode(false);
-    setSelectedIds([]);
+    setSelected(new Map());
   };
-
-  const submitRestudy = (
-    items: LearningDoc[],
+  const afterMutation = () => {
+    invalidate();
+    refresh();
+  };
+  const targets = async (override: Partial<LearningTaskQuery> = {}) => {
+    const result = await getLearningTaskTargets({ ...query, ...override });
+    return result.ids || [];
+  };
+  const submitRestudy = async (
+    resolve: () => Promise<string[]>,
     emptyMessage: string,
     priority = 10,
   ) => {
     if (!kb_id) return;
-    const ids = Array.from(
-      new Set(items.map(item => item.id).filter(Boolean) as string[]),
-    );
-    if (ids.length === 0) {
-      message.warning(emptyMessage);
-      return;
-    }
     setSubmitting(true);
-    postApiV1NodeRestudy({
-      kb_id,
-      node_ids: ids,
-      priority,
-    })
-      .then(() => {
-        message.success(`已提交 ${ids.length} 个文档，后台正在学习/重建索引`);
-        refresh();
-      })
-      .finally(() => setSubmitting(false));
+    try {
+      const ids = [...new Set(await resolve())];
+      if (!ids.length) {
+        message.warning(emptyMessage);
+        return;
+      }
+      await postApiV1NodeRestudy({ kb_id, node_ids: ids, priority });
+      message.success(`已提交 ${ids.length} 个文档，后台正在学习/重建索引`);
+      afterMutation();
+    } catch {
+      // The shared request client displays the server error.
+    } finally {
+      setSubmitting(false);
+    }
   };
-
-  const cancelLearning = (items: LearningDoc[]) => {
+  const cancelLearning = async (resolve: () => Promise<string[]>) => {
     if (!kb_id) return;
-    const ids = Array.from(
-      new Set(items.map(item => item.id).filter(Boolean) as string[]),
-    );
-    if (ids.length === 0) {
-      message.warning('当前筛选结果没有进行中的学习任务');
-      return;
-    }
     setSubmitting(true);
-    postApiV1NodeLearningCancel({
-      kb_id,
-      node_ids: ids,
-    })
-      .then(res => {
-        const count = res.count ?? ids.length;
-        message.success(
-          `已取消 ${count} 个未提交任务；已提交或正在提交的任务继续处理`,
-        );
-        refresh();
-      })
-      .finally(() => setSubmitting(false));
+    try {
+      const ids = [...new Set(await resolve())];
+      if (!ids.length) {
+        message.warning('当前筛选结果没有进行中的学习任务');
+        return;
+      }
+      const result = await postApiV1NodeLearningCancel({
+        kb_id,
+        node_ids: ids,
+      });
+      message.success(
+        `已取消 ${result.count ?? 0} 个未提交任务；已提交或正在提交的任务继续处理`,
+      );
+      afterMutation();
+    } catch {
+      // The shared request client displays the server error.
+    } finally {
+      setSubmitting(false);
+    }
   };
-
   const confirmCancelPending = () => {
     if (!kb_id) return;
     const requestedKB = kb_id;
@@ -361,59 +309,32 @@ const LearningProgressPanel = ({
         setSubmitting(true);
         try {
           const result = await cancelPendingLearning(requestedKB);
-          const text = `已取消 ${result.count ?? 0} 个已登记的未提交任务；旧版队列也已设置取消标记，恢复 Consumer 后将跳过旧任务。已提交或正在提交的任务继续处理。`;
-          setPendingCancelMessage(text);
+          setPendingCancelMessage(
+            `已取消 ${result.count ?? 0} 个已登记的未提交任务；旧版队列也已设置取消标记，恢复 Consumer 后将跳过旧任务。已提交或正在提交的任务继续处理。`,
+          );
           message.success('取消标记已保存');
-          refresh();
-          setReloadKey(value => value + 1);
+          afterMutation();
         } finally {
           setSubmitting(false);
         }
       },
     });
   };
-
   const confirmRebuildSelected = () => {
-    if (selectedDocs.length === 0) {
+    const ids = selectedDocs.map(item => item.id!).filter(Boolean);
+    if (!ids.length) {
       message.warning('请先勾选需要重建索引的文档');
       return;
     }
     Modal.confirm({
       title: '确认重建所选文档？',
-      content: `将对已选中的 ${selectedDocs.length} 个文档提交后台重建任务。已有可用索引会保留，重建期间仍可继续问答。`,
+      content: `将对已选中的 ${ids.length} 个文档提交后台重建任务。已有可用索引会保留，重建期间仍可继续问答。`,
       okText: '确认重建',
       cancelText: '取消',
-      onOk: () => {
-        submitRestudy(selectedDocs, '请先勾选需要重建索引的文档', 100);
-      },
+      onOk: () =>
+        submitRestudy(async () => ids, '请先勾选需要重建索引的文档', 100),
     });
   };
-
-  useEffect(() => {
-    if (!open) return;
-    setPendingCancelMessage('');
-    setPage(1);
-    setSelectionMode(false);
-    setSelectedIds([]);
-    refresh();
-  }, [open, refresh]);
-
-  useEffect(() => {
-    if (!open || !shouldAutoRefresh) return;
-    const timer = window.setInterval(() => {
-      refresh();
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [open, refresh, shouldAutoRefresh]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  useEffect(() => {
-    const validIds = new Set(docs.map(item => item.id).filter(Boolean));
-    setSelectedIds(prev => prev.filter(id => validIds.has(id)));
-  }, [docs]);
 
   const filterOptions: Array<{
     key: FilterKey;
@@ -433,12 +354,11 @@ const LearningProgressPanel = ({
       filterOptions.find(item => item.key === filter)?.label || '当前';
     Modal.confirm({
       title: '确认重建当前结果？',
-      content: `将对“${currentFilterLabel}”筛选结果中的 ${visibleDocs.length} 个文档提交后台重建任务。已有可用索引会保留，重建期间仍可继续问答。`,
+      content: `将对“${currentFilterLabel}”筛选结果中的 ${total} 个文档提交后台重建任务。已有可用索引会保留，重建期间仍可继续问答。`,
       okText: '确认重建',
       cancelText: '取消',
-      onOk: () => {
-        submitRestudy(visibleDocs, '当前筛选结果没有可重建的文档');
-      },
+      onOk: () =>
+        submitRestudy(() => targets(), '当前筛选结果没有可重建的文档'),
     });
   };
 
@@ -486,7 +406,7 @@ const LearningProgressPanel = ({
                 {item.label}
               </Typography>
               <Typography fontSize={22} fontWeight={700} color={item.color}>
-                {dataUnavailable ? '—' : item.value}
+                {loadedCounts ? item.value : '—'}
               </Typography>
             </Box>
           ))}
@@ -496,6 +416,22 @@ const LearningProgressPanel = ({
           可问答表示当前已有可用索引；本次异常表示最近一次学习/重建任务失败，通常不影响已有旧索引继续问答。
         </Typography>
 
+        {summaryError && (
+          <Typography role='status' fontSize={12} color='warning.main'>
+            分类统计刷新失败，列表仍可使用。
+            <Button size='small' onClick={reload}>
+              重试
+            </Button>
+          </Typography>
+        )}
+        {fetching && !initialLoading && (
+          <Stack direction='row' alignItems='center' gap={1} role='status'>
+            <CircularProgress size={14} />
+            <Typography fontSize={12} color='text.secondary'>
+              正在更新任务数据…
+            </Typography>
+          </Stack>
+        )}
         {loadError === 'refresh' && (
           <Typography role='status' fontSize={12} color='warning.main'>
             刷新失败，当前保留上次加载的数据，稍后将自动重试。
@@ -520,7 +456,7 @@ const LearningProgressPanel = ({
               <Button
                 key={item.key}
                 size='small'
-                disabled={dataUnavailable}
+                disabled={actionUnavailable}
                 variant={filter === item.key ? 'contained' : 'outlined'}
                 sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 72 }}
                 onClick={() => {
@@ -528,7 +464,7 @@ const LearningProgressPanel = ({
                   setPage(1);
                 }}
               >
-                {item.label} {dataUnavailable ? '—' : item.count}
+                {item.label} {loadedCounts ? item.count : '—'}
               </Button>
             ))}
           </Stack>
@@ -543,7 +479,7 @@ const LearningProgressPanel = ({
             <TextField
               size='small'
               placeholder='搜索文档 / 目录 / 原因'
-              disabled={dataUnavailable}
+              disabled={dataUnavailable || submitting}
               value={keyword}
               onChange={event => {
                 setKeyword(event.target.value);
@@ -554,10 +490,9 @@ const LearningProgressPanel = ({
             <Button
               size='small'
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 64 }}
-              disabled={initialLoading}
+              disabled={fetching}
               onClick={() => {
-                refresh();
-                setReloadKey(value => value + 1);
+                reload();
               }}
             >
               刷新
@@ -566,11 +501,11 @@ const LearningProgressPanel = ({
               size='small'
               color='warning'
               variant='outlined'
-              disabled={
-                dataUnavailable || submitting || runningVisibleDocs.length === 0
-              }
+              disabled={actionUnavailable || runningVisibleCount === 0}
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 112 }}
-              onClick={() => cancelLearning(runningVisibleDocs)}
+              onClick={() =>
+                cancelLearning(() => targets({ only_running: true }))
+              }
             >
               取消筛选内未提交
             </Button>
@@ -590,24 +525,29 @@ const LearningProgressPanel = ({
               size='small'
               variant='outlined'
               disabled={
-                dataUnavailable || submitting || pendingDocs.length === 0
+                actionUnavailable ||
+                !loadedCounts ||
+                counts.needs_learning === 0
               }
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 132 }}
-              onClick={() => submitRestudy(pendingDocs, '暂无需要学习的文档')}
+              onClick={() =>
+                submitRestudy(
+                  () => targets({ filter: 'needs_learning', keyword: '' }),
+                  '暂无需要学习的文档',
+                )
+              }
             >
-              学习需处理 {pendingDocs.length}
+              学习需处理 {loadedCounts ? counts.needs_learning : '—'}
             </Button>
             {!selectionMode && (
               <Button
                 size='small'
                 variant='outlined'
-                disabled={
-                  dataUnavailable || submitting || visibleDocs.length === 0
-                }
+                disabled={actionUnavailable || total === 0}
                 sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 132 }}
                 onClick={() => {
                   setSelectionMode(true);
-                  setSelectedIds([]);
+                  setSelected(new Map());
                 }}
               >
                 重建指定文档
@@ -617,9 +557,7 @@ const LearningProgressPanel = ({
               size='small'
               color='primary'
               variant='contained'
-              disabled={
-                dataUnavailable || submitting || visibleDocs.length === 0
-              }
+              disabled={actionUnavailable || total === 0}
               sx={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 120 }}
               onClick={confirmRebuildCurrentResult}
             >
@@ -653,7 +591,7 @@ const LearningProgressPanel = ({
               <Button
                 size='small'
                 variant='contained'
-                disabled={submitting || selectedDocs.length === 0}
+                disabled={actionUnavailable || selectedDocs.length === 0}
                 sx={{ whiteSpace: 'nowrap', minWidth: 104 }}
                 onClick={confirmRebuildSelected}
               >
@@ -663,9 +601,13 @@ const LearningProgressPanel = ({
                 size='small'
                 color='warning'
                 variant='outlined'
-                disabled={submitting || selectedRunningDocs.length === 0}
+                disabled={actionUnavailable || selectedRunningDocs.length === 0}
                 sx={{ whiteSpace: 'nowrap', minWidth: 104 }}
-                onClick={() => cancelLearning(selectedRunningDocs)}
+                onClick={() =>
+                  cancelLearning(async () =>
+                    selectedDocs.map(item => item.id!).filter(Boolean),
+                  )
+                }
               >
                 取消所选未提交
               </Button>
@@ -673,7 +615,7 @@ const LearningProgressPanel = ({
                 size='small'
                 disabled={submitting}
                 sx={{ whiteSpace: 'nowrap', minWidth: 72 }}
-                onClick={() => setSelectedIds([])}
+                onClick={() => setSelected(new Map())}
               >
                 清空
               </Button>
@@ -753,10 +695,7 @@ const LearningProgressPanel = ({
                 <Typography fontSize={13}>
                   任务数据加载失败，请重试。
                 </Typography>
-                <Button
-                  size='small'
-                  onClick={() => setReloadKey(value => value + 1)}
-                >
+                <Button size='small' onClick={reload}>
                   重新加载
                 </Button>
               </Stack>
@@ -904,7 +843,11 @@ const LearningProgressPanel = ({
                       <Button
                         size='small'
                         sx={{ alignSelf: 'flex-start', p: 0, minWidth: 0 }}
-                        onClick={() => setDetailId(item.id)}
+                        onClick={() => {
+                          setDetail(undefined);
+                          setDetailError(false);
+                          setDetailId(item.id);
+                        }}
                       >
                         步骤与耗时
                       </Button>
@@ -922,13 +865,13 @@ const LearningProgressPanel = ({
           justifyContent='space-between'
         >
           <Typography fontSize={12} color='text.secondary'>
-            共 {dataUnavailable ? '—' : visibleDocs.length} 个文档
+            共 {dataUnavailable ? '—' : total} 个文档
             {selectionMode ? `，已选择 ${selectedDocs.length} 个` : ''}
-            ；页面每 5 秒刷新，后台状态通知即时更新，兜底查询每 5 分钟执行
+            ；有进行中任务时每 5 秒刷新，无进行中任务时每 30 秒刷新
           </Typography>
           <Pagination
             size='small'
-            disabled={dataUnavailable}
+            disabled={actionUnavailable}
             page={page}
             count={totalPages}
             onChange={(_, value) => setPage(value)}
@@ -936,7 +879,11 @@ const LearningProgressPanel = ({
         </Stack>
       </Stack>
       <LearningProgressDetail
-        doc={open ? docs.find(item => item.id === detailId) : undefined}
+        doc={open ? detailDoc : undefined}
+        open={open && !!detailId}
+        loading={!detailDoc && !detailError}
+        loadError={detailError}
+        onRetry={() => setDetailReload(value => value + 1)}
         onClose={() => setDetailId(undefined)}
       />
     </Modal>
