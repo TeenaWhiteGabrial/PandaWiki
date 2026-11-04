@@ -13,9 +13,12 @@ import (
 	"github.com/chaitin/panda-wiki/repo/cache"
 	"github.com/chaitin/panda-wiki/repo/ipdb"
 	"github.com/chaitin/panda-wiki/repo/pg"
+	dbstore "github.com/chaitin/panda-wiki/store/pg"
 )
 
 type ConversationUsecase struct {
+	sourceAccess *AssistantUsecase
+
 	repo         *pg.ConversationRepository
 	nodeRepo     *pg.NodeRepository
 	geoCacheRepo *cache.GeoRepo
@@ -25,6 +28,7 @@ type ConversationUsecase struct {
 }
 
 func NewConversationUsecase(
+	db *dbstore.DB, enterprise *EnterpriseUsecase,
 	repo *pg.ConversationRepository,
 	nodeRepo *pg.NodeRepository,
 	geoCacheRepo *cache.GeoRepo,
@@ -33,6 +37,7 @@ func NewConversationUsecase(
 	userRepo *pg.UserRepository,
 ) *ConversationUsecase {
 	return &ConversationUsecase{
+		sourceAccess: &AssistantUsecase{db: db.DB, chat: &ChatUsecase{nodeRepo: nodeRepo, enterpriseUsecase: enterprise}},
 		repo:         repo,
 		nodeRepo:     nodeRepo,
 		geoCacheRepo: geoCacheRepo,
@@ -175,10 +180,13 @@ func (u *ConversationUsecase) ValidateConversationNonce(ctx context.Context, con
 	return u.repo.ValidateConversationNonce(ctx, conversationID, nonce)
 }
 
-func (u *ConversationUsecase) ValidateChatConversation(ctx context.Context, kbID, id, nonce string) error {
+func (u *ConversationUsecase) ValidateChatConversation(ctx context.Context, kbID, id, nonce string, users ...string) error {
 	conversation, err := u.repo.GetChatConversation(ctx, kbID, id)
 	if err != nil {
 		return err
+	}
+	if len(users) > 0 && conversation.Info.UserInfo.UserID != users[0] {
+		return fmt.Errorf("无权访问该会话")
 	}
 	if nonce == "" || subtle.ConstantTimeCompare([]byte(conversation.Nonce), []byte(nonce)) != 1 {
 		return fmt.Errorf("invalid conversation nonce")
@@ -193,14 +201,11 @@ func (u *ConversationUsecase) ResumeShareConversation(ctx context.Context, kbID,
 	}
 	owned := userID != "" && conversation.Info.UserInfo.UserID == userID
 	validNonce := nonce != "" && subtle.ConstantTimeCompare([]byte(conversation.Nonce), []byte(nonce)) == 1
-	forked := !owned && !validNonce
-	if forked {
-		conversation, err = u.repo.ForkConversation(ctx, conversation, userID, remoteIP)
-		if err != nil {
-			return nil, err
-		}
+	// A nonce never grants access to another account's private history.
+	if !owned && !(conversation.Info.UserInfo.UserID == "" && validNonce) {
+		return nil, fmt.Errorf("无权访问该会话")
 	}
-	return &domain.ChatSession{ConversationID: conversation.ID, Nonce: conversation.Nonce, Forked: forked}, nil
+	return &domain.ChatSession{ConversationID: conversation.ID, Nonce: conversation.Nonce, Forked: false}, nil
 }
 
 func (u *ConversationUsecase) GetShareConversationHistory(ctx context.Context, kbID, userID string, req *domain.ShareConversationHistoryRequest) (*domain.PaginatedResult[[]*domain.ShareConversationHistoryItem], error) {
@@ -303,7 +308,11 @@ func (u *ConversationUsecase) GetMessageDetail(ctx context.Context, kbId, messag
 	return message, nil
 }
 
-func (u *ConversationUsecase) GetShareConversationDetail(ctx context.Context, kbID, conversationID string) (*domain.ShareConversationDetailResp, error) {
+func (u *ConversationUsecase) GetShareConversationDetail(ctx context.Context, kbID, conversationID string, users ...string) (*domain.ShareConversationDetailResp, error) {
+	owner, err := u.repo.GetChatConversation(ctx, kbID, conversationID)
+	if err != nil || len(users) == 0 || users[0] == "" || owner.Info.UserInfo.UserID != users[0] {
+		return nil, fmt.Errorf("无权访问该会话")
+	}
 	conversation, err := u.repo.GetConversationDetail(ctx, kbID, conversationID)
 	if err != nil {
 		return nil, err
@@ -315,6 +324,11 @@ func (u *ConversationUsecase) GetShareConversationDetail(ctx context.Context, kb
 	}
 	var shareMessages []*domain.ShareConversationMessage
 	for _, message := range messages {
+		if len(sourceList(message.AssistantSources)) > 0 {
+			if u.sourceAccess == nil || u.sourceAccess.checkSources(ctx, kbID, users[0], message.AssistantSources) != nil {
+				message.Content = "来源权限已变化，无法继续展示该回答。请按当前权限重新提问。"
+			}
+		}
 		shareMessages = append(shareMessages, &domain.ShareConversationMessage{
 			Role:       message.Role,
 			Content:    message.Content,
@@ -331,4 +345,14 @@ func (u *ConversationUsecase) GetShareConversationDetail(ctx context.Context, kb
 	}
 	conversation.Messages = messages
 	return &shareConversationDetail, nil
+}
+
+func (u *ConversationUsecase) ValidateMessageSources(ctx context.Context, kb, user string, m *domain.ConversationMessage) error {
+	if len(sourceList(m.AssistantSources)) == 0 {
+		return nil
+	}
+	if u.sourceAccess == nil {
+		return ErrAssistantAccess
+	}
+	return u.sourceAccess.checkSources(ctx, kb, user, m.AssistantSources)
 }

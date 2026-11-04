@@ -90,6 +90,22 @@ type modelIndexKnowledgeBases interface {
 	UpdateDatasetID(context.Context, string, string) error
 }
 
+func (u *ModelUsecase) EnsureLearningDataset(ctx context.Context, kbID string) (string, error) {
+	store, ok := u.kbRepo.(interface {
+		EnsureLearningDataset(context.Context, string, func(context.Context) (*domain.Model, error)) (string, error)
+	})
+	if !ok {
+		return "", fmt.Errorf("知识库索引初始化服务不可用")
+	}
+	return store.EnsureLearningDataset(ctx, kbID, func(ctx context.Context) (*domain.Model, error) {
+		setting, err := u.GetModelModeSetting(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return u.modelForMode(ctx, setting, domain.ModelTypeEmbedding)
+	})
+}
+
 type modelSettingsStore interface {
 	GetSystemSetting(context.Context, consts.SystemSettingKey) (*domain.SystemSetting, error)
 	SaveModelModeSetting(context.Context, domain.ModelModeSetting) error

@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	Assistant     AssistantConfig   `mapstructure:"assistant"`
 	Permissions   PermissionsConfig `mapstructure:"permissions"`
 	Log           LogConfig         `mapstructure:"log"`
 	HTTP          HTTPConfig        `mapstructure:"http"`
@@ -198,6 +199,7 @@ func NewConfig() (*Config, error) {
 
 // overrideWithEnv override sensitive info with env variables
 func overrideWithEnv(c *Config) {
+	c.Assistant.ApplyEnvironment()
 	if value, err := strconv.Atoi(os.Getenv("AUTH_SESSION_MAX_AGE_SECONDS")); err == nil && value > 0 {
 		c.Auth.JWT.SessionMaxAgeSeconds = value
 	}

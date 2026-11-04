@@ -66,8 +66,6 @@ func createApp() (*App, error) {
 	}
 	knowledgeBaseRepository := pg2.NewKnowledgeBaseRepository(db, configConfig, logger, ragService)
 	nodeRepository := pg2.NewNodeRepository(db, logger)
-	folderDownloadRepository := pg2.NewFolderDownloadRepository(db, logger)
-	zipUploadRepository := pg2.NewZipUploadRepository(db, logger)
 	navRepository := pg2.NewNavRepository(db, logger)
 	mqProducer, err := mq.NewMQProducer(configConfig, logger)
 	if err != nil {
@@ -116,7 +114,7 @@ func createApp() (*App, error) {
 		return nil, err
 	}
 	ipAddressRepo := ipdb2.NewIPAddressRepo(ipdbIPDB, logger)
-	conversationUsecase := usecase.NewConversationUsecase(conversationRepository, nodeRepository, geoRepo, logger, ipAddressRepo, userRepository)
+	conversationUsecase := usecase.NewConversationUsecase(db, enterpriseUsecase, conversationRepository, nodeRepository, geoRepo, logger, ipAddressRepo, userRepository)
 	blockWordRepo := pg2.NewBlockWordRepo(db, logger)
 	chatUsecase, err := usecase.NewChatUsecase(llmUsecase, knowledgeBaseRepository, conversationUsecase, modelUsecase, appRepository, blockWordRepo, nodeRepository, authRepo, enterpriseUsecase, logger)
 	if err != nil {
@@ -130,7 +128,6 @@ func createApp() (*App, error) {
 		return nil, err
 	}
 	fileUsecase := usecase.NewFileUsecase(logger, minioClient, imageOSSClient, configConfig, systemSettingRepo)
-	knowledgeBaseUsecase.SetFileUsecase(fileUsecase)
 	mqConsumer, err := mq.NewMQConsumer(configConfig, logger)
 	if err != nil {
 		return nil, err
@@ -144,9 +141,10 @@ func createApp() (*App, error) {
 	apiTokenUsecase := usecase.NewAPITokenUsecase(apiTokenRepo, knowledgeBaseUsecase, logger)
 	apiTokenHandler := v1.NewAPITokenHandler(baseHandler, echo, apiTokenUsecase, authMiddleware, logger)
 	batchImportUsecase := usecase.NewBatchImportUsecase(logger, fileUsecase, crawlerUsecase, nodeRepository)
+	folderDownloadRepository := pg2.NewFolderDownloadRepository(db, logger)
 	folderDownloadUsecase := usecase.NewFolderDownloadUsecase(folderDownloadRepository, nodeRepository, navRepository, minioClient, logger)
+	zipUploadRepository := pg2.NewZipUploadRepository(db, logger)
 	zipUploadUsecase := usecase.NewZipUploadUsecase(zipUploadRepository, nodeRepository, minioClient, logger)
-	knowledgeBaseUsecase.SetBatchImportUsecase(batchImportUsecase)
 	fileHandler := v1.NewFileHandler(echo, baseHandler, logger, authMiddleware, minioClient, configConfig, fileUsecase, batchImportUsecase, folderDownloadUsecase, zipUploadUsecase)
 	modelHandler := v1.NewModelHandler(echo, baseHandler, logger, authMiddleware, modelUsecase, llmUsecase)
 	conversationHandler := v1.NewConversationHandler(echo, baseHandler, logger, authMiddleware, conversationUsecase)
@@ -191,6 +189,8 @@ func createApp() (*App, error) {
 		NavHandler:                navHandler,
 		EnterpriseHandler:         enterpriseHandler,
 	}
+	assistantUsecase := usecase.NewAssistantUsecase(db, configConfig, minioClient, chatUsecase, logger)
+	assistantHandler := share.NewAssistantHandler(echo, baseHandler, assistantUsecase, configConfig)
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)
 	shareAppHandler := share.NewShareAppHandler(echo, baseHandler, logger, appUsecase, shareAuthMiddleware, fileUsecase)
@@ -211,6 +211,7 @@ func createApp() (*App, error) {
 	openapiV1Handler := share.NewOpenapiV1Handler(echo, baseHandler, logger, appUsecase)
 	shareCommonHandler := share.NewShareCommonHandler(echo, baseHandler, logger, fileUsecase, nodeUsecase)
 	shareHandler := &share.ShareHandler{
+		AssistantHandler:         assistantHandler,
 		ShareNodeHandler:         shareNodeHandler,
 		ShareNavHandler:          shareNavHandler,
 		ShareAppHandler:          shareAppHandler,

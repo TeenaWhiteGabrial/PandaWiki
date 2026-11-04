@@ -55,6 +55,7 @@ echo
 echo "==> 本机命令进程"
 print_process_status "backend-api" "cmd/api/main.go"
 print_process_status "backend-consumer" "cmd/consumer/main.go"
+print_process_status "assistant-worker" "cmd/assistant-worker/main.go"
 print_process_status "web-dev" "pnpm --parallel --filter panda-wiki-admin --filter panda-wiki-app dev"
 
 echo
@@ -62,6 +63,7 @@ echo "==> 关键端口"
 print_port_status "backend-api" 8000
 print_port_status "admin-web" 5173
 print_port_status "app-web" 3010
+print_port_status "document-generator" 18091
 print_port_status "postgres" 15432
 print_port_status "redis" 16379
 print_port_status "nats" 4222
@@ -75,4 +77,5 @@ echo "==> 常用启动命令"
 echo "  ./scripts/dev-deps.sh"
 echo "  ./scripts/dev-api.sh"
 echo "  ./scripts/dev-consumer.sh"
+echo "  ./scripts/dev-assistant.sh"
 echo "  ./scripts/dev-web.sh"

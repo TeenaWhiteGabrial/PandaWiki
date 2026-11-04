@@ -25,10 +25,11 @@ type Conversation struct {
 }
 
 type ConversationMessage struct {
-	ID             string `json:"id" gorm:"primaryKey"`
-	ConversationID string `json:"conversation_id" gorm:"index"`
-	AppID          string `json:"app_id" gorm:"index"`
-	KBID           string `json:"kb_id"`
+	AssistantSources JSONB  `json:"-" gorm:"type:jsonb;not null;default:'{}'"`
+	ID               string `json:"id" gorm:"primaryKey"`
+	ConversationID   string `json:"conversation_id" gorm:"index"`
+	AppID            string `json:"app_id" gorm:"index"`
+	KBID             string `json:"kb_id"`
 
 	Role       schema.RoleType `json:"role"`
 	Content    string          `json:"content"`

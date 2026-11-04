@@ -14,6 +14,9 @@ import (
 const learningAvailable = `COALESCE(n.rag_info->>'status', '') = 'SUCCEEDED'`
 const learningRunning = `(COALESCE(n.rag_info->>'task_status', '') IN ('waiting','running','cancel_requested') OR (COALESCE(n.rag_info->>'task_status','') = '' AND NOT (` + learningAvailable + `) AND COALESCE(n.rag_info->>'status','') IN ('PENDING','RUNNING','REINDEX')))`
 const learningFailed = `(COALESCE(n.rag_info->>'task_status','') = 'failed' OR (NOT (` + learningAvailable + `) AND COALESCE(n.rag_info->>'status','') = 'FAILED'))`
+
+// A usable previous index is not proof that the latest attempt completed.
+const learningCompleted = `COALESCE(n.rag_info->>'task_status','') = 'succeeded'`
 const learningAttention = `(NOT (` + learningAvailable + `) OR COALESCE(n.rag_info->>'task_status','') IN ('failed','canceled'))`
 const learningNeeds = `(NOT (` + learningRunning + `) AND ` + learningAttention + `)`
 
@@ -59,6 +62,7 @@ func (r *NodeRepository) LearningTaskSummary(ctx context.Context, kbID string, s
 	selectSQL := `COUNT(*) AS total,
 	 COUNT(*) FILTER (WHERE ` + learningAttention + `) AS attention,
 	 COUNT(*) FILTER (WHERE ` + learningRunning + `) AS running,
+	 COUNT(*) FILTER (WHERE ` + learningCompleted + `) AS completed,
 	 COUNT(*) FILTER (WHERE ` + learningFailed + `) AS failed,
 	 COUNT(*) FILTER (WHERE NOT (` + learningAvailable + `)) AS unavailable,
 	 COUNT(*) FILTER (WHERE ` + learningAvailable + `) AS answerable,

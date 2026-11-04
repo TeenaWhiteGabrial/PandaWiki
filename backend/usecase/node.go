@@ -1375,6 +1375,11 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 	if len(nodeReleases) == 0 {
 		return fmt.Errorf("文档未首次发布，无法重新学习")
 	}
+	// Validate the destination before creating a batch of doomed queue tasks.
+	datasetID, err := u.modelUsecase.EnsureLearningDataset(ctx, req.KbId)
+	if err != nil {
+		return err
+	}
 
 	priority := req.Priority
 	if priority <= 0 {
@@ -1397,6 +1402,7 @@ func (u *NodeUsecase) NodeRestudy(ctx context.Context, req *v1.NodeRestudyReq) e
 			continue
 		}
 		task, created, taskErr := u.nodeRepo.CreateNodeLearningTaskIfNotActive(ctx, &domain.NodeLearningTask{
+			DatasetID:     datasetID,
 			KBID:          nodeRelease.KBID,
 			NodeID:        nodeRelease.NodeID,
 			NodeReleaseID: nodeRelease.ID,

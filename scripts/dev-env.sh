@@ -7,6 +7,7 @@ PANDA_WIKI_SSL_DIR="${PANDA_WIKI_LOCAL_DATA_DIR}/ssl"
 
 PANDA_WIKI_DEPENDENCY_SERVICES=(
   pdf-parser
+  document-generator
   postgres
   redis
   nats
@@ -21,6 +22,7 @@ PANDA_WIKI_DEPENDENCY_SERVICES=(
 
 PANDA_WIKI_DEPENDENCY_PORTS=(
   18090
+  18091
   15432
   16379
   4222
@@ -81,6 +83,13 @@ load_external_oss_env() {
     export "${key}=${value}"
   done
 
+  for key in ASSISTANT_SEARCH_API_KEY ASSISTANT_RETENTION_DAYS; do
+    if [[ -z "${!key:-}" ]]; then
+      value="$(read_env_value "${env_file}" "${key}")"
+      [[ -z "${value}" ]] || export "${key}=${value}"
+    fi
+  done
+
   case "${OSS_ENDPOINT}" in
     https://*)
       export OSS_USE_SSL=true
@@ -135,12 +144,13 @@ load_local_security_env() {
     )
   fi
   local internal_key
-  for internal_key in NATS_MONITOR_PASSWORD PREVIEW_PASSWORD; do
+  for internal_key in NATS_MONITOR_PASSWORD PREVIEW_PASSWORD DOCUMENT_GENERATOR_TOKEN; do
     if [[ -z "$(read_env_value "${security_file}" "${internal_key}")" ]]; then
       ( umask 077; printf '%s=%s\n' "${internal_key}" "$(openssl rand -hex 24)" >> "${security_file}" )
     fi
     export "${internal_key}=$(read_env_value "${security_file}" "${internal_key}")"
   done
+  export DOCUMENT_GENERATOR_URL=http://127.0.0.1:18091
   export PREVIEW_USERNAME=panda-wiki
   export PREVIEW_BASE_URL=http://127.0.0.1:13000
   chmod 600 "${security_file}"

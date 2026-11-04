@@ -1,0 +1,82 @@
+[
+  {
+    "message": "帮我做个PPT，介绍巡检产品",
+    "format": "pptx"
+  },
+  {
+    "message": "把上面的介绍转成PPT",
+    "format": "pptx"
+  },
+  {
+    "message": "整理成Excel，列出文件名称和大小",
+    "format": "xlsx"
+  },
+  {
+    "message": "给我写份Word文档",
+    "format": "docx"
+  },
+  {
+    "message": "输出为DOCX格式",
+    "format": "docx"
+  },
+  {
+    "message": "请帮我准备一份PowerPoint演示",
+    "format": "pptx"
+  },
+  {
+    "message": "做成六页幻灯片",
+    "format": "pptx"
+  },
+  {
+    "message": "创建一个xlsx文件",
+    "format": "xlsx"
+  },
+  {
+    "message": "把这个PPT导出成Word",
+    "format": "docx"
+  },
+  {
+    "message": "帮我生成password密码",
+    "format": ""
+  },
+  {
+    "message": "如何生成PPT？",
+    "format": ""
+  },
+  {
+    "message": "请问怎么制作Word文档？",
+    "format": ""
+  },
+  {
+    "message": "教我如何导出Excel",
+    "format": ""
+  },
+  {
+    "message": "Excel有什么用？",
+    "format": ""
+  },
+  {
+    "message": "帮我介绍一下数字孪生",
+    "format": ""
+  },
+  {
+    "message": "帮我生成一个文档",
+    "format": "docx"
+  },
+  {
+    "message": "写一份产品说明方案",
+    "format": "docx"
+  },
+  {
+    "message": "创建一个文档",
+    "format": "docx"
+  },
+  {
+    "message": "生成一份可下载的表格",
+    "format": "xlsx"
+  },
+  {
+    "message": "把表格导出成报告",
+    "format": "docx"
+  }
+]

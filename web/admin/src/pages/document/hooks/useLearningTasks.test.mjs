@@ -221,3 +221,30 @@ test('hidden tabs pause requests and resume immediately when visible', async t =
   );
   assert.equal(f.list.length, 2);
 });
+
+test('refresh and mutation invalidation retain the visible page until new results arrive', async t => {
+  const f = await fixture(t);
+  await act(async () => {
+    f.list[0].resolve(page('visible'));
+    f.summary[0].resolve(counts(1));
+  });
+  const visible = f.state.data;
+  await act(async () => f.state.reload());
+  assert.equal(f.state.data, visible);
+  assert.equal(f.state.initialLoading, false);
+  assert.equal(f.state.fetching, true);
+  await act(async () => {
+    f.list[1].resolve(page('refreshed'));
+    f.summary[1].resolve(counts(1));
+  });
+  const refreshed = f.state.data;
+  await act(async () => f.state.invalidate());
+  assert.equal(f.state.data, refreshed);
+  assert.equal(f.state.initialLoading, false);
+  await act(async () => {
+    f.list[2].reject({ status: 500 });
+    f.summary[2].reject({ status: 500 });
+  });
+  assert.equal(f.state.data, refreshed);
+  assert.equal(f.state.loadError, 'refresh');
+});

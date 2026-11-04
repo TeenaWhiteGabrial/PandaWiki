@@ -2,6 +2,29 @@ x-pandawiki-log-labels: &pandawiki-log-labels
   com.pandawiki.logs: 'true'
 
 services:
+  document-generator:
+    build:
+      context: ./services/document-generator
+      args:
+        DOCUMENT_GENERATOR_BASE_IMAGE: ${DOCUMENT_GENERATOR_BASE_IMAGE:-registry.cn-hangzhou.aliyuncs.com/misaka-images/python:3.12-slim-bookworm}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    container_name: panda-wiki-document-generator
+    restart: unless-stopped
+    labels: *pandawiki-log-labels
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,noexec,nosuid
+    environment:
+      DOCUMENT_GENERATOR_TOKEN: ${DOCUMENT_GENERATOR_TOKEN:-}
+      PYTHONDONTWRITEBYTECODE: '1'
+    ports:
+      - '127.0.0.1:18091:8091'
+    networks:
+      - default
+
   pdf-parser:
     build:
       context: ./services/pdf-parser
@@ -225,3 +248,7 @@ volumes:
   panda_wiki_qdrant:
   panda_wiki_raglite:
   panda_wiki_loki:
+
+networks:
+  assistant-isolated:
+    internal: true

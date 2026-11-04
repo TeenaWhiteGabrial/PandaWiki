@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/cloudwego/eino/schema"
@@ -11,6 +12,8 @@ import (
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 )
+
+var ErrEmbeddingModelNotConfigured = errors.New("尚未配置向量模型，请先在模型设置中配置并应用向量模型")
 
 type QueryRecordsRequest struct {
 	TopK                int

@@ -108,7 +108,7 @@ func (h *ShareConversationHandler) GetConversationDetail(c echo.Context) error {
 		return h.NewResponseWithError(c, "id is required", nil)
 	}
 
-	node, err := h.usecase.GetShareConversationDetail(c.Request().Context(), kbID, id)
+	node, err := h.usecase.GetShareConversationDetail(c.Request().Context(), kbID, id, domain.GetShareUserID(c))
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to get node detail", err)
 	}

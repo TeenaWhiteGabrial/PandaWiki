@@ -54,6 +54,9 @@ func (s *CTRAG) CreateKnowledgeBase(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(models.Models) == 0 {
+		return "", ErrEmbeddingModelNotConfigured
+	}
 	var newest *raglite.AIModel
 	for i := range models.Models {
 		m := &models.Models[i]
@@ -87,6 +90,9 @@ func (s *CTRAG) ListKnowledgeBases(ctx context.Context) ([]Dataset, error) {
 }
 
 func (s *CTRAG) QueryRecords(ctx context.Context, req *QueryRecordsRequest) (string, []*domain.NodeContentChunk, error) {
+	if req.DatasetID == "" {
+		return "", nil, ErrEmbeddingModelNotConfigured
+	}
 	topK := req.TopK
 	if topK <= 0 {
 		topK = 10
@@ -138,6 +144,9 @@ func (s *CTRAG) QueryRecords(ctx context.Context, req *QueryRecordsRequest) (str
 }
 
 func (s *CTRAG) UpsertRecords(ctx context.Context, req *UpsertRecordsRequest) (string, error) {
+	if req.DatasetID == "" {
+		return "", ErrEmbeddingModelNotConfigured
+	}
 	if req.IndexVersionID != "" && req.DocID != "" {
 		return "", fmt.Errorf("新索引版本不能覆盖已有 RAG 文档")
 	}

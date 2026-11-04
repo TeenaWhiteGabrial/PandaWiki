@@ -66,6 +66,7 @@ func createApp() (*App, error) {
 	}
 	ragRepository := mq2.NewRAGRepository(mqProducer)
 	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
+	modelUsecase := usecase.NewModelUsecase(modelRepository, nodeRepository, ragRepository, ragService, logger, configConfig, knowledgeBaseRepository, systemSettingRepo)
 	minioClient, err := s3.NewMinioClient(configConfig)
 	if err != nil {
 		return nil, err
@@ -80,7 +81,6 @@ func createApp() (*App, error) {
 		return nil, err
 	}
 	batchImportUsecase := usecase.NewBatchImportUsecase(logger, fileUsecase, crawlerUsecase, nodeRepository)
-	modelUsecase := usecase.NewModelUsecase(modelRepository, nodeRepository, ragRepository, ragService, logger, configConfig, knowledgeBaseRepository, systemSettingRepo)
 	ragmqHandler, err := mq3.NewRAGMQHandler(mqConsumer, logger, ragService, nodeRepository, knowledgeBaseRepository, llmUsecase, modelUsecase, batchImportUsecase)
 	if err != nil {
 		return nil, err

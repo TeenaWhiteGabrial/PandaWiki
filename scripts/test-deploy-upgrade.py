@@ -27,6 +27,9 @@ docker() {
     inspect)
       local container="${@: -1}"
       [[ "$container" != pandawiki-pdf-parser ]] || return 1
+      if [[ "${NEW_ASSISTANT:-0}" == 1 && ( "$container" == pandawiki-document-generator || "$container" == pandawiki-assistant-worker ) ]]; then
+        return 1
+      fi
       if [[ "${2:-}" == --format ]]; then
         if [[ "$3" == '{{.Image}}' ]]; then
           echo "sha256:old-${container}"
@@ -64,6 +67,8 @@ wait_for_services() {
   echo "wait $*" >> "$CALL_LOG"
   [[ "${FAIL_HEALTH:-0}" != 1 ]]
 }
+run_frontend_builds() { echo "frontend-builds" >> "$CALL_LOG"; }
+verify_frontend_artifacts() { return 0; }
 upgrade_services "${TEST_TARGET:-backend}"
 '''
 
@@ -81,24 +86,48 @@ class UpgradeTest(unittest.TestCase):
     def test_build_failure_keeps_old_containers(self):
         result, calls = self.run_upgrade(FAIL_BUILD="1")
         self.assertNotEqual(result.returncode, 0, result.stderr)
-        self.assertIn("compose build pdf-parser api consumer", calls)
+        self.assertIn("compose build pdf-parser document-generator api consumer assistant-worker", calls)
         self.assertFalse(any(line.startswith(("compose rm", "compose up")) for line in calls))
         self.assertTrue(any("server_api:latest" in line and "rollback" in line for line in calls))
 
     def test_success_builds_before_stopping_and_disables_implicit_build(self):
         result, calls = self.run_upgrade()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertLess(calls.index("compose build pdf-parser api consumer"),
-                        calls.index("compose rm -sf pdf-parser api consumer"))
-        self.assertIn("compose up -d --no-build --no-deps pdf-parser api consumer", calls)
+        self.assertLess(calls.index("compose build pdf-parser document-generator api consumer assistant-worker"),
+                        calls.index("compose rm -sf pdf-parser document-generator api consumer assistant-worker"))
+        self.assertIn("compose up -d --no-build --no-deps pdf-parser document-generator api consumer assistant-worker", calls)
 
     def test_rollback_excludes_new_parser_and_checks_original_services(self):
         result, calls = self.run_upgrade(FAIL_UP="1")
         self.assertNotEqual(result.returncode, 0, result.stderr)
-        self.assertIn("compose up -d --no-build --no-deps api consumer", calls)
-        self.assertIn("wait api consumer", calls)
+        self.assertIn("compose up -d --no-build --no-deps document-generator api consumer assistant-worker", calls)
+        self.assertIn("wait document-generator api consumer assistant-worker", calls)
         self.assertEqual(sum(line.startswith("compose build") for line in calls), 1)
         self.assertTrue(any(line.startswith("docker rmi") for line in calls))
+
+    def test_first_assistant_upgrade_rolls_back_only_existing_services(self):
+        result, calls = self.run_upgrade(FAIL_UP="1", NEW_ASSISTANT="1")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("compose up -d --no-build --no-deps api consumer", calls)
+        self.assertIn("wait api consumer", calls)
+        self.assertNotIn("wait document-generator api consumer assistant-worker", calls)
+
+    def test_full_upgrade_starts_new_assistant_services(self):
+        result, calls = self.run_upgrade(TEST_TARGET="all")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("compose up -d --no-build --no-deps pdf-parser document-generator api consumer assistant-worker", calls)
+        self.assertIn("compose rm -sf pdf-parser document-generator api consumer assistant-worker admin app", calls)
+
+    def test_keep_consumer_stopped_on_success_and_rollback(self):
+        for flags in ({}, {"FAIL_UP": "1"}):
+            with self.subTest(flags=flags):
+                result, calls = self.run_upgrade(KEEP_CONSUMER_STOPPED="1", **flags)
+                self.assertEqual(result.returncode == 0, not flags, result.stderr)
+                self.assertIn("compose up --no-start --no-build --no-deps consumer", calls)
+                expected = "document-generator api assistant-worker" if flags else "pdf-parser document-generator api assistant-worker"
+                self.assertIn("compose up -d --no-build --no-deps " + expected, calls)
+                starts = [line.split() for line in calls if line.startswith("compose up -d") or line.startswith("wait ")]
+                self.assertTrue(all("consumer" not in line for line in starts))
 
     def test_failed_rollback_preserves_backup_tags(self):
         result, calls = self.run_upgrade(FAIL_UP="1", FAIL_ROLLBACK="1")
@@ -109,13 +138,13 @@ class UpgradeTest(unittest.TestCase):
     def test_unhealthy_rollback_preserves_backup_tags(self):
         result, calls = self.run_upgrade(FAIL_HEALTH="1")
         self.assertNotEqual(result.returncode, 0, result.stderr)
-        self.assertIn("wait api consumer", calls)
+        self.assertIn("wait document-generator api consumer assistant-worker", calls)
         self.assertFalse(any(line.startswith("docker rmi") for line in calls))
 
     def test_failed_tag_restore_does_not_remove_containers_again(self):
         result, calls = self.run_upgrade(FAIL_UP="1", FAIL_RETAG="1")
         self.assertNotEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls.count("compose rm -sf pdf-parser api consumer"), 1)
+        self.assertEqual(calls.count("compose rm -sf pdf-parser document-generator api consumer assistant-worker"), 1)
         self.assertFalse(any(line.startswith("docker rmi") for line in calls))
 
     def test_base_upgrade_builds_only_monitor_proxy(self):
@@ -126,13 +155,13 @@ class UpgradeTest(unittest.TestCase):
     def test_security_migration_blocks_binary_only_rollback(self):
         result, calls = self.run_upgrade(FAIL_UP="1", SCHEMA_AFTER="56")
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("compose up -d --no-build --no-deps api consumer", calls)
+        self.assertNotIn("compose up -d --no-build --no-deps document-generator api consumer assistant-worker", calls)
         self.assertFalse(any(line.startswith("docker rmi") for line in calls))
 
     def test_unknown_schema_blocks_automatic_rollback(self):
         result, calls = self.run_upgrade(FAIL_UP="1", SCHEMA_AFTER="unknown")
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("compose up -d --no-build --no-deps api consumer", calls)
+        self.assertNotIn("compose up -d --no-build --no-deps document-generator api consumer assistant-worker", calls)
         self.assertFalse(any(line.startswith("docker rmi") for line in calls))
 
     def test_internal_credentials_generated_once_without_printing_secrets(self):
@@ -146,7 +175,7 @@ class UpgradeTest(unittest.TestCase):
             contents = env_path.read_text()
             values = dict(line.split("=", 1) for line in contents.splitlines() if "=" in line)
             self.assertEqual(values["EXISTING"], "value")
-            for key in ["PREVIEW_PASSWORD", "NATS_MONITOR_PASSWORD"]:
+            for key in ["PREVIEW_PASSWORD", "NATS_MONITOR_PASSWORD", "DOCUMENT_GENERATOR_TOKEN"]:
                 self.assertRegex(values[key], r"^[0-9a-f]{48}$")
                 self.assertNotIn(values[key], first.stdout + first.stderr)
             second = subprocess.run(["bash", "-c", command], env=env, capture_output=True, text=True)

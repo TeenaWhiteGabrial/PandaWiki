@@ -1,0 +1,25 @@
+FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/golang:1.24.3-alpine AS builder
+
+WORKDIR /src
+ARG GO_BUILD_JOBS=4
+ENV CGO_ENABLED=0 \
+    GOMAXPROCS=${GO_BUILD_JOBS} \
+    GOPROXY=https://goproxy.cn,direct \
+    GOSUMDB=sum.golang.google.cn
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG TARGETOS TARGETARCH
+RUN go build -p ${GO_BUILD_JOBS} -ldflags "-s -w -extldflags '-static'" -o /build/panda-wiki-assistant-worker cmd/assistant-worker/main.go cmd/assistant-worker/wire_gen.go
+
+FROM registry.cn-hangzhou.aliyuncs.com/misaka-images/golang:1.24.3-alpine AS consumer
+
+WORKDIR /app
+ENV TZ=Asia/Shanghai
+COPY --from=builder /build/panda-wiki-assistant-worker /app/panda-wiki-assistant-worker
+COPY --from=builder /src/store/pg/migration /app/migration
+
+CMD ["./panda-wiki-assistant-worker"]

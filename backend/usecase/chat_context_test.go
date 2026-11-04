@@ -42,6 +42,16 @@ func chatContextDB(t *testing.T) (*store.DB, *log.Logger) {
 	}
 	t.Cleanup(func() { tx.Rollback() })
 	ensureIndexTestSchema(t, tx)
+	if !tx.Migrator().HasTable(&domain.AssistantRun{}) {
+		migration, err := os.ReadFile("../store/pg/migration/000058_assistant.up.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Exec(string(migration)).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	return &store.DB{DB: tx}, log.NewLogger(&config.Config{})
 }
 
@@ -157,7 +167,7 @@ func TestResumeConversationPostgres(t *testing.T) {
 	u := &ConversationUsecase{repo: repo}
 	ctx := context.Background()
 	source := seedChatHistory(t, db, uuid.NewString())
-	for _, creds := range [][2]string{{source.Nonce, ""}, {"", source.Info.UserInfo.UserID}} {
+	for _, creds := range [][2]string{{source.Nonce, source.Info.UserInfo.UserID}, {"", source.Info.UserInfo.UserID}} {
 		session, err := u.ResumeShareConversation(ctx, source.KBID, source.ID, creds[0], creds[1], "test")
 		if err != nil || session.Forked || session.ConversationID != source.ID || session.Nonce != source.Nonce {
 			t.Fatalf("owner resume failed: %#v %v", session, err)
@@ -173,26 +183,13 @@ func TestResumeConversationPostgres(t *testing.T) {
 		t.Fatal("cross-KB history copied")
 	}
 	for _, viewer := range []string{"", uuid.NewString()} {
-		session, err := u.ResumeShareConversation(ctx, source.KBID, source.ID, "wrong", viewer, "test")
-		if err != nil || !session.Forked || session.ConversationID == source.ID || session.Nonce == source.Nonce {
-			t.Fatalf("shared conversation not isolated: %#v %v", session, err)
-		}
-		messages, err := repo.GetConversationMessagesByID(ctx, session.ConversationID)
-		if err != nil || len(messages) != 2 || messages[1].ParentID != messages[0].ID || messages[1].Content != "1. 备份\n2. 测试\n3. 恢复" {
-			t.Fatal("fork lost ordered history or parent links")
-		}
-		if err := u.ValidateChatConversation(ctx, source.KBID, session.ConversationID, session.Nonce); err != nil {
-			t.Fatal(err)
-		}
-		followup := &domain.ConversationMessage{ID: uuid.NewString(), ConversationID: session.ConversationID, KBID: source.KBID, AppID: source.AppID, Role: schema.User, Content: "解释第二条"}
-		if err := repo.CreateConversationMessage(ctx, followup, nil); err != nil {
-			t.Fatal(err)
-		}
-		original, _ := repo.GetConversationMessagesByID(ctx, source.ID)
-		if len(original) != 2 {
-			t.Fatal("shared follow-up modified original")
+		for _, nonce := range []string{"wrong", source.Nonce} {
+			if _, err := u.ResumeShareConversation(ctx, source.KBID, source.ID, nonce, viewer, "test"); err == nil {
+				t.Fatal("another account's private history was resumed or copied")
+			}
 		}
 	}
+
 }
 
 type contextRAG struct {

@@ -128,6 +128,7 @@ const LearningProgressPanel = ({
     total: 0,
     attention: 0,
     running: 0,
+    completed: 0,
     failed: 0,
     unavailable: 0,
     answerable: 0,
@@ -141,6 +142,14 @@ const LearningProgressPanel = ({
   const total = data?.total || 0;
   const runningVisibleCount = data?.running || 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const refreshNotice =
+    loadError === 'refresh'
+      ? '刷新失败，保留上次数据，稍后自动重试。'
+      : summaryError
+        ? '分类统计刷新失败，列表仍可使用。'
+        : fetching && !initialLoading
+          ? '正在更新任务数据…'
+          : '';
   const selectedIdSet = new Set(selected.keys());
   const selectedDocs = Array.from(selected.values());
   const selectedRunningDocs = selectedDocs.filter(isDocRunning);
@@ -374,9 +383,17 @@ const LearningProgressPanel = ({
         <Stack direction='row' gap={1.5}>
           {[
             {
+              label: '本次完成数',
+              value: counts.completed,
+              color: 'success.main',
+              description:
+                '各文档最近一次学习或重建任务成功的数量，与“本次异常”统计口径一致；旧索引仍可问答但本次未成功的不计入。',
+            },
+            {
               label: '可问答',
               value: counts.answerable,
               color: 'success.main',
+              description: '当前有可用索引的文档数，包括仍在使用的旧索引。',
             },
             {
               label: '不可问答',
@@ -402,41 +419,52 @@ const LearningProgressPanel = ({
                 bgcolor: 'background.paper',
               }}
             >
-              <Typography fontSize={12} color='text.secondary'>
-                {item.label}
-              </Typography>
-              <Typography fontSize={22} fontWeight={700} color={item.color}>
-                {loadedCounts ? item.value : '—'}
+              <Tooltip title={item.description || item.label}>
+                <Typography fontSize={12} color='text.secondary'>
+                  {item.label}
+                </Typography>
+              </Tooltip>
+              <Typography
+                fontSize={22}
+                fontWeight={700}
+                color={item.color}
+                sx={{ fontVariantNumeric: 'tabular-nums' }}
+              >
+                {loadedCounts ? (item.value ?? '—') : '—'}
               </Typography>
             </Box>
           ))}
         </Stack>
 
         <Typography fontSize={12} color='text.secondary'>
-          可问答表示当前已有可用索引；本次异常表示最近一次学习/重建任务失败，通常不影响已有旧索引继续问答。
+          本次完成数 / 本次异常分别统计各文档最近一次学习或重建成功 /
+          失败的数量；可问答表示已有可用索引，可能仍是旧索引。
         </Typography>
 
-        {summaryError && (
-          <Typography role='status' fontSize={12} color='warning.main'>
-            分类统计刷新失败，列表仍可使用。
-            <Button size='small' onClick={reload}>
+        <Stack
+          direction='row'
+          alignItems='center'
+          gap={1}
+          role='status'
+          aria-live='polite'
+          sx={{ height: 28, flexShrink: 0, overflow: 'hidden' }}
+        >
+          {fetching && !initialLoading && <CircularProgress size={14} />}
+          <Typography
+            noWrap
+            fontSize={12}
+            color={
+              summaryError || loadError ? 'warning.main' : 'text.secondary'
+            }
+          >
+            {refreshNotice}
+          </Typography>
+          {(summaryError || loadError === 'refresh') && (
+            <Button size='small' disabled={fetching} onClick={reload}>
               重试
             </Button>
-          </Typography>
-        )}
-        {fetching && !initialLoading && (
-          <Stack direction='row' alignItems='center' gap={1} role='status'>
-            <CircularProgress size={14} />
-            <Typography fontSize={12} color='text.secondary'>
-              正在更新任务数据…
-            </Typography>
-          </Stack>
-        )}
-        {loadError === 'refresh' && (
-          <Typography role='status' fontSize={12} color='warning.main'>
-            刷新失败，当前保留上次加载的数据，稍后将自动重试。
-          </Typography>
-        )}
+          )}
+        </Stack>
 
         {pendingCancelMessage && (
           <Typography role='status' fontSize={12} color='success.main'>
@@ -670,8 +698,13 @@ const LearningProgressPanel = ({
           </Stack>
           <Divider />
           <Stack
-            aria-busy={initialLoading}
-            sx={{ minHeight: 360, maxHeight: 420, overflowY: 'auto' }}
+            aria-busy={fetching || initialLoading}
+            sx={{
+              height: 420,
+              overflowY: 'auto',
+              scrollbarGutter: 'stable',
+              overflowAnchor: 'none',
+            }}
           >
             {initialLoading ? (
               <Stack

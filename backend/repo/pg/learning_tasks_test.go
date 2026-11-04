@@ -59,7 +59,7 @@ func TestLearningTaskPagesCountsTargetsAndDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantCounts := domain.LearningTaskCounts{Total: 13, Attention: 11, Running: 6, Failed: 2, Unavailable: 9, Answerable: 4, NeedsLearning: 6}
+	wantCounts := domain.LearningTaskCounts{Total: 13, Attention: 11, Running: 6, Completed: 1, Failed: 2, Unavailable: 9, Answerable: 4, NeedsLearning: 6}
 	if *counts != wantCounts {
 		t.Fatalf("wrong status semantics: %+v want %+v", counts, wantCounts)
 	}
@@ -107,6 +107,14 @@ func TestLearningTaskPagesCountsTargetsAndDetails(t *testing.T) {
 		}
 	}
 	scope := []string{nodes[4].ID}
+	scopedCounts, err := r.LearningTaskSummary(ctx, kb, scope)
+	if err != nil || scopedCounts.Answerable != 1 || scopedCounts.Completed != 0 {
+		t.Fatalf("old usable index was counted as a completed latest attempt: %+v %v", scopedCounts, err)
+	}
+	scopedCounts, err = r.LearningTaskSummary(ctx, kb, []string{nodes[10].ID})
+	if err != nil || scopedCounts.Completed != 1 {
+		t.Fatalf("completed attempt count missing or leaked across scope: %+v %v", scopedCounts, err)
+	}
 	ids, err := r.LearningTaskTargets(ctx, domain.LearningTaskQuery{KBID: kb}, scope)
 	if err != nil || !slices.Equal(ids, scope) {
 		t.Fatalf("scope leaked: %v %v", ids, err)

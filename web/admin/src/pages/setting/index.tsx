@@ -4,6 +4,7 @@ import MCPAccess from '@/components/System/component/MCPAccess';
 import ModelConfig from '@/components/System/component/ModelConfig';
 import EnterpriseAccess from '@/components/System/component/EnterpriseAccess';
 import CardPermissions from './component/CardPermissions';
+import CardAssistantTemplates from './component/CardAssistantTemplates';
 import CardRuntimeLogs from './component/CardRuntimeLogs';
 import { useURLSearchParams } from '@/hooks';
 import { getApiV1KnowledgeBaseDetail } from '@/request/KnowledgeBase';
@@ -31,6 +32,7 @@ const SettingTabs: { label: string; id: string }[] = [
   { label: '组织和权限', id: 'enterprise-access' },
   { label: '权限功能', id: 'permission-settings' },
   { label: '运行日志', id: 'runtime-logs' },
+  { label: '智能助手设置', id: 'assistant-settings' },
 ];
 
 const Setting = () => {
@@ -163,6 +165,10 @@ const Setting = () => {
           user?.role === ConstsUserRole.UserRoleAdmin && <CardPermissions />}
         {activeTab === 'runtime-logs' &&
           user?.role === ConstsUserRole.UserRoleAdmin && <CardRuntimeLogs />}
+        {activeTab === 'assistant-settings' &&
+          user?.role === ConstsUserRole.UserRoleAdmin && (
+            <CardAssistantTemplates />
+          )}
         {activeTab === 'model-config' && (
           <ModelConfig
             onCloseModal={() => undefined}

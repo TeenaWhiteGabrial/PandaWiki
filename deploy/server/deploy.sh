@@ -28,6 +28,8 @@ SERVICES_BASE=(
 )
 
 SERVICES_BACKEND=(
+  document-generator
+  assistant-worker
   pdf-parser
   api
   consumer
@@ -39,6 +41,8 @@ SERVICES_FRONTEND=(
 )
 
 SERVICES_RUNTIME=(
+  document-generator
+  assistant-worker
   pdf-parser
   api
   consumer
@@ -122,7 +126,7 @@ usage() {
   bash deploy.sh restart
   bash deploy.sh upgrade admin    # 只升级管理端
   bash deploy.sh upgrade app      # 只升级用户端
-  bash deploy.sh upgrade backend  # 升级 PDF 解析服务、API 和 Consumer
+  bash deploy.sh upgrade backend  # 升级 PDF / 文件处理服务、API、Consumer 和助手 Worker
   KEEP_CONSUMER_STOPPED=1 bash deploy.sh upgrade backend  # 升级后保持 Consumer 停止，供取消旧队列任务
   bash deploy.sh upgrade base     # 只重建基础服务容器，不删除数据卷
   bash deploy.sh upgrade all      # 完整升级（默认）
@@ -169,7 +173,7 @@ check_docker() {
 # Generate separate internal-service secrets once, preserving existing values.
 ensure_internal_credentials() {
   local internal_key internal_value
-  for internal_key in NATS_MONITOR_PASSWORD PREVIEW_PASSWORD; do
+  for internal_key in NATS_MONITOR_PASSWORD PREVIEW_PASSWORD DOCUMENT_GENERATOR_TOKEN; do
     internal_value="$(grep -E "^${internal_key}=" "${ENV_FILE}" | tail -n 1 | cut -d= -f2- || true)"
     if [[ -z "${internal_value}" || "${internal_value}" == CHANGE_ME_* ]]; then
       # Remove a blank/example entry before appending the generated value.
@@ -280,7 +284,7 @@ run_restart() {
   echo "==> 仅重启服务"
   # Docker Compose V1.29.2 在重建旧镜像容器时可能因缺少
   # ContainerConfig 字段失败。先移除应用容器再重建，不删除任何数据卷。
-  compose rm -sf pdf-parser api consumer admin app raglite qdrant loki alloy preview \
+  compose rm -sf pdf-parser document-generator assistant-worker api consumer admin app raglite qdrant loki alloy preview \
     admin-build app-build >/dev/null 2>&1 || true
   compose up -d "${SERVICES_BASE[@]}"
   compose up -d --build "${SERVICES_BACKEND[@]}"
@@ -504,8 +508,8 @@ upgrade_services() {
       build_services=(app)
       ;;
     backend)
-      services=(pdf-parser api consumer)
-      echo "==> 升级 PDF 解析服务、API 和 Consumer"
+      services=(pdf-parser document-generator api consumer assistant-worker)
+      echo "==> 升级 PDF / 文件处理服务、API、Consumer 和助手 Worker"
       build_services=("${services[@]}")
       ;;
     base)
@@ -514,9 +518,9 @@ upgrade_services() {
       echo "==> 仅重建基础服务容器（不删除数据卷）"
       ;;
     all)
-      services=("${SERVICES_BASE[@]}" pdf-parser api consumer admin app)
+      services=("${SERVICES_BASE[@]}" pdf-parser document-generator api consumer assistant-worker admin app)
       echo "==> 完整无损升级"
-      build_services=(nats-monitor pdf-parser api consumer admin app)
+      build_services=(nats-monitor pdf-parser document-generator api consumer assistant-worker admin app)
       ;;
     *)
       echo "不支持的升级目标：${target}"
@@ -527,7 +531,7 @@ upgrade_services() {
 
   local -a start_services=("${services[@]}")
   if [[ "${KEEP_CONSUMER_STOPPED:-0}" == "1" ]]; then
-    start_services=(pdf-parser api)
+    start_services=(pdf-parser document-generator api assistant-worker)
     echo "==> 本次升级及失败回滚均保持 Consumer 停止，不恢复旧任务提交"
   fi
 
@@ -564,8 +568,8 @@ upgrade_services() {
     # Base services are restarted without deleting their named volumes.
     if ! compose rm -sf "${SERVICES_BASE[@]}" >/dev/null 2>&1 ||
       ! compose up -d "${SERVICES_BASE[@]}" ||
-      ! compose rm -sf pdf-parser api consumer admin app >/dev/null 2>&1 ||
-      ! compose up -d --no-build --no-deps pdf-parser api consumer ||
+      ! compose rm -sf pdf-parser document-generator api consumer assistant-worker admin app >/dev/null 2>&1 ||
+      ! compose up -d --no-build --no-deps pdf-parser document-generator api consumer assistant-worker ||
       ! compose up -d --no-build --no-deps admin app ||
       ! wait_for_services "${services[@]}"; then
       handle_upgrade_failure

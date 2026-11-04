@@ -141,19 +141,28 @@ const homeProxy = async (
 
     // 页面上报
     const pages = Object.keys(StatPage);
-    if (pages.includes(page) || pages.includes(id)) {
-      postShareV1StatPage(
+    if (
+      page !== 'auth' &&
+      request.cookies.has('pw_reader_session') &&
+      (pages.includes(page) || pages.includes(id))
+    ) {
+      void postShareV1StatPage(
         {
           scene: StatPage[page as keyof typeof StatPage],
           node_id: id || '',
         },
         {
+          isAlert: false,
           headers: {
             'x-pw-session-id': session,
             ...headers,
           },
         },
-      );
+      ).catch(error => {
+        // Page analytics must never reject outside the navigation lifecycle
+        // or turn an otherwise usable page into an unhandled auth error.
+        console.warn('Page statistics unavailable', { code: error?.code });
+      });
     }
 
     if (pathname && pathname !== request.nextUrl.pathname) {
@@ -219,11 +228,18 @@ async function appProxy(request: NextRequest) {
   const url = request.nextUrl.clone();
   const pathname = url.pathname;
   let basePath = '';
-  try {
-    const kbDetail = await getFreshWebAppInfo();
-    basePath = getBasePath(kbDetail?.base_url || '');
-  } catch {
-    // Allow the request flow to continue even when app info is temporarily unavailable.
+  // Direct API paths already identify their backend route. Loading app info
+  // first doubled every task poll/upload request and could emit an unrelated
+  // login error. Prefixed paths still resolve the configured portal base path.
+  const directAPI =
+    pathname.startsWith('/share/') || pathname.startsWith('/api/');
+  if (!directAPI) {
+    try {
+      const kbDetail = await getFreshWebAppInfo();
+      basePath = getBasePath(kbDetail?.base_url || '');
+    } catch {
+      // Continue the normal route/authentication flow if app info is unavailable.
+    }
   }
   const appPathname = stripBasePath(pathname, basePath);
   const apiRequest =

@@ -587,6 +587,11 @@ func (r *KnowledgeBaseRepository) resolveSingleKnowledgeBaseDatasetID(ctx contex
 	if kb == nil {
 		return fmt.Errorf("knowledge base is nil")
 	}
+	// A newly initialized installation may manage documents before configuring
+	// embeddings. Only an explicit model/index build may bind its first dataset.
+	if kb.DatasetID == "" {
+		return nil
+	}
 	var managed int64
 	if err := r.db.WithContext(ctx).Model(&domain.KBIndexBuild{}).Where("kb_id = ?", kb.ID).Count(&managed).Error; err != nil {
 		return err
@@ -610,6 +615,12 @@ func (r *KnowledgeBaseRepository) resolveSingleKnowledgeBaseDatasetID(ctx contex
 		}
 		datasetID, err := r.rag.CreateKnowledgeBase(ctx)
 		if err != nil {
+			// Restoring document metadata does not restore RAGLite's database.
+			// Keep the old binding until an explicit index build replaces it;
+			// an unconfigured model must not block document browsing.
+			if errors.Is(err, rag.ErrEmbeddingModelNotConfigured) {
+				return nil
+			}
 			return fmt.Errorf("create rag dataset failed: %w", err)
 		}
 		kb.DatasetID = datasetID

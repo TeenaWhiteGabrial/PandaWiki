@@ -2,6 +2,27 @@ x-pandawiki-log-labels: &pandawiki-log-labels
   com.pandawiki.logs: 'true'
 
 services:
+  document-generator:
+    build:
+      context: ../../services/document-generator
+      args:
+        DOCUMENT_GENERATOR_BASE_IMAGE: ${DOCUMENT_GENERATOR_BASE_IMAGE:-registry.cn-hangzhou.aliyuncs.com/misaka-images/python:3.12-slim-bookworm}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    container_name: ${PROJECT_NAME}-document-generator
+    restart: unless-stopped
+    labels: *pandawiki-log-labels
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,noexec,nosuid
+    environment:
+      DOCUMENT_GENERATOR_TOKEN: ${DOCUMENT_GENERATOR_TOKEN:-}
+      PYTHONDONTWRITEBYTECODE: '1'
+    networks:
+      - assistant-isolated
+
   postgres:
     image: ${POSTGRES_IMAGE}
     container_name: ${PROJECT_NAME}-postgres
@@ -178,6 +199,10 @@ services:
       ENV: production
       SECURITY_ALLOWED_HOSTS: ${SECURITY_ALLOWED_HOSTS:-}
       SECURITY_ALLOWED_ORIGINS: ${SECURITY_ALLOWED_ORIGINS:-}
+      DOCUMENT_GENERATOR_URL: http://document-generator:8091
+      DOCUMENT_GENERATOR_TOKEN: ${DOCUMENT_GENERATOR_TOKEN:-}
+      ASSISTANT_SEARCH_API_KEY: ${ASSISTANT_SEARCH_API_KEY:-}
+      ASSISTANT_RETENTION_DAYS: ${ASSISTANT_RETENTION_DAYS:-30}
       SERVICE_NAME: api
       PDF_PARSER_URL: http://pdf-parser:8090
       PDF_PARSER_TOKEN: ${PDF_PARSER_TOKEN:-}
@@ -224,6 +249,61 @@ services:
         condition: service_started
       loki:
         condition: service_started
+
+  assistant-worker:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.assistant-worker
+    container_name: ${PROJECT_NAME}-assistant-worker
+    restart: unless-stopped
+    labels: *pandawiki-log-labels
+    mem_limit: 1g
+    pids_limit: 128
+    environment:
+      ENV: production
+      SECURITY_ALLOWED_HOSTS: ${SECURITY_ALLOWED_HOSTS:-}
+      SECURITY_ALLOWED_ORIGINS: ${SECURITY_ALLOWED_ORIGINS:-}
+      DOCUMENT_GENERATOR_URL: http://document-generator:8091
+      DOCUMENT_GENERATOR_TOKEN: ${DOCUMENT_GENERATOR_TOKEN:-}
+      ASSISTANT_SEARCH_API_KEY: ${ASSISTANT_SEARCH_API_KEY:-}
+      ASSISTANT_RETENTION_DAYS: ${ASSISTANT_RETENTION_DAYS:-30}
+      SERVICE_NAME: assistant-worker
+      PDF_PARSER_URL: http://pdf-parser:8090
+      PDF_PARSER_TOKEN: ${PDF_PARSER_TOKEN:-}
+      ANYDOC_CRAWLER_BASE_URL: ${ANYDOC_CRAWLER_BASE_URL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_SESSION_MAX_AGE_SECONDS: ${AUTH_SESSION_MAX_AGE_SECONDS:-28800}
+      AUTH_SESSION_IDLE_SECONDS: ${AUTH_SESSION_IDLE_SECONDS:-1800}
+      PG_DSN: host=${PROJECT_NAME}-postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable TimeZone=Asia/Shanghai
+      MQ_NATS_SERVER: nats://panda-wiki:${NATS_PASSWORD:?required}@${PROJECT_NAME}-nats:4222
+      REDIS_ADDR: ${PROJECT_NAME}-redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+      OSS_ENDPOINT: ${OSS_ENDPOINT}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY}
+      OSS_BUCKET_NAME: ${OSS_BUCKET_NAME}
+      OSS_DOWNLOAD_URL: ${OSS_DOWNLOAD_URL}
+      OSS_REGION: ${OSS_REGION}
+      RAG_CT_RAG_BASE_URL: http://${PROJECT_NAME}-raglite:5050
+      SENTRY_ENABLED: ${SENTRY_ENABLED}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_STORE_URL: http://${PROJECT_NAME}-loki:3100
+      CADDY_API: ''
+      FILE_BASE_URL: ${OSS_DOWNLOAD_URL}/static-file
+      ANYDOC_STATIC_FILE_BASE_URL: ${OSS_DOWNLOAD_URL}/static-file
+      PREVIEW_BASE_URL: http://${PROJECT_NAME}-preview:3000
+      PREVIEW_USERNAME: panda-wiki
+      PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:-}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+    depends_on:
+      api:
+        condition: service_started
+      document-generator:
+        condition: service_healthy
+    networks:
+      - default
+      - assistant-isolated
 
   consumer:
     build:
@@ -384,3 +464,7 @@ volumes:
   pandawiki_pnpm_store:
   pandawiki_loki:
   pandawiki_alloy:
+
+networks:
+  assistant-isolated:
+    internal: true

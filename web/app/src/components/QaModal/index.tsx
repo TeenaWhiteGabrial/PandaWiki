@@ -264,6 +264,7 @@ const QaModal: React.FC<QaModalProps> = () => {
             hotSearch={hotSearch}
             placeholder={placeholder}
             inputRef={aiQaInputRef}
+            onOpenFile={() => setFullScreen(true)}
           />
         </Box>
         <Box

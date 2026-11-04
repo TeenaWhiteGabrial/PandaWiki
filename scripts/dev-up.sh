@@ -11,7 +11,8 @@ echo
 echo "1. 基础依赖：Docker 后台运行"
 echo "2. API：      ./scripts/dev-api.sh"
 echo "3. Consumer： ./scripts/dev-consumer.sh"
-echo "4. 前端：     ./scripts/dev-web.sh"
+echo "4. 助手：     ./scripts/dev-assistant.sh"
+echo "5. 前端：     ./scripts/dev-web.sh"
 echo
 echo "访问地址："
 echo "  管理台: http://localhost:5173"

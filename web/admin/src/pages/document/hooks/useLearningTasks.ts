@@ -159,7 +159,11 @@ export function useLearningTasks(
       setRevision(value => value + 1);
     },
     invalidate: () => {
+      // Revalidate after a mutation without replacing the visible page with a
+      // loading screen. Other cached pages must still be discarded as stale.
+      const visiblePage = cache.current.pages.get(key);
       cache.current.pages.clear();
+      if (visiblePage) cache.current.pages.set(key, visiblePage);
       forceSummary.current = true;
       setRevision(value => value + 1);
     },

@@ -19,6 +19,7 @@ import (
 	"github.com/chaitin/panda-wiki/repo/pg"
 	store "github.com/chaitin/panda-wiki/store/pg"
 	"github.com/chaitin/panda-wiki/store/rag"
+	"github.com/chaitin/panda-wiki/usecase"
 )
 
 type canceledLegacyMessage struct {
@@ -78,6 +79,7 @@ func TestRebuildSubmissionKeepsOldIndexAndDuplicateDeliveryDoesNotReupload(t *te
 	r := &stagedIndexRAG{dataset: kb.DatasetID, document: uuid.NewString(), t: t}
 	repo := pg.NewNodeRepository(storeDB, l)
 	h := &RAGMQHandler{nodeRepo: repo, kbRepo: pg.NewKnowledgeBaseRepository(storeDB, &config.Config{}, l, r), rag: r, logger: l}
+	h.modelUsecase = usecase.NewModelUsecase(nil, nil, nil, r, l, &config.Config{}, h.kbRepo, nil)
 	body, _ := json.Marshal(domain.NodeReleaseVectorRequest{KBID: kb.ID, NodeID: node.ID, NodeReleaseID: release.ID, TaskID: task.ID, Action: "upsert"})
 	for i := 0; i < 2; i++ {
 		if err := h.HandleNodeContentVectorRequest(t.Context(), canceledLegacyMessage{data: body}); err != nil {

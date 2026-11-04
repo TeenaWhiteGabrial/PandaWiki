@@ -29,6 +29,7 @@ type LearningTaskCounts struct {
 	Total         int64 `json:"total"`
 	Attention     int64 `json:"attention"`
 	Running       int64 `json:"running"`
+	Completed     int64 `json:"completed"`
 	Failed        int64 `json:"failed"`
 	Unavailable   int64 `json:"unavailable"`
 	Answerable    int64 `json:"answerable"`

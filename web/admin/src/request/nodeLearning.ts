@@ -32,6 +32,7 @@ export interface LearningTaskCounts {
   total: number;
   attention: number;
   running: number;
+  completed: number;
   failed: number;
   unavailable: number;
   answerable: number;

@@ -25,6 +25,7 @@ export interface SecureFilePreviewProps {
   title?: string;
   assetBase?: string;
   onAccessError?: (error: AccessError) => void;
+  unavailableMessage?: string;
 }
 
 export default function SecureFilePreview({
@@ -34,11 +35,15 @@ export default function SecureFilePreview({
   title = '文档预览',
   assetBase = '',
   onAccessError,
+  unavailableMessage,
 }: SecureFilePreviewProps) {
   const [data, setData] = useState<Uint8Array | null>(null);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('正在读取文件…');
   const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (error && unavailableMessage) console.warn('file-preview:', error);
+  }, [error, unavailableMessage]);
   const onAccessErrorRef = useRef(onAccessError);
   onAccessErrorRef.current = onAccessError;
   const headerKey = JSON.stringify(headers || {});
@@ -85,7 +90,13 @@ export default function SecureFilePreview({
     >
       {error ? (
         <Stack gap={2} sx={{ p: 3 }}>
-          <Alert severity='error'>{error}</Alert>
+          {unavailableMessage ? (
+            <Typography role='status' aria-live='polite' color='text.secondary'>
+              {unavailableMessage}
+            </Typography>
+          ) : (
+            <Alert severity='error'>{error}</Alert>
+          )}
           <Button onClick={() => setAttempt(n => n + 1)}>重新加载</Button>
         </Stack>
       ) : !data ? (

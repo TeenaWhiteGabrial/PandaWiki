@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -67,9 +68,10 @@ func (u *KnowledgeBaseUsecase) SetFileUsecase(fileUsecase *FileUsecase) {
 }
 
 func (u *KnowledgeBaseUsecase) CreateKnowledgeBase(ctx context.Context, req *domain.CreateKnowledgeBaseReq) (string, error) {
-	// create kb in vector store
+	// Document management must remain available before the first model is set.
+	// Applying an embedding model later creates and activates its index dataset.
 	datasetID, err := u.rag.CreateKnowledgeBase(ctx)
-	if err != nil {
+	if err != nil && !errors.Is(err, rag.ErrEmbeddingModelNotConfigured) {
 		return "", err
 	}
 	kbID := uuid.New().String()

@@ -136,6 +136,17 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 			ctx = taskCtx
 			go h.watchNodeLearningCancellation(ctx, cancelTask, request.TaskID)
 		}
+		if request.IndexBuildID == "" {
+			// Covers ordinary publication and legacy queued submissions too.
+			// Explicitly bound old tasks are not redirected to a new dataset.
+			datasetID, err := h.modelUsecase.EnsureLearningDataset(ctx, request.KBID)
+			if err != nil {
+				return err
+			}
+			if request.DatasetID == "" {
+				request.DatasetID = datasetID
+			}
+		}
 		kb, err := h.kbRepo.GetKnowledgeBaseByID(ctx, request.KBID)
 		if err != nil {
 			h.logger.Error("get kb failed", log.Error(err), log.String("kb_id", request.KBID))

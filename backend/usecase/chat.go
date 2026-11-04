@@ -141,7 +141,7 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 				eventCh <- domain.SSEEvent{Type: "error", Content: "nonce is required"}
 				return
 			}
-			err := u.conversationUsecase.ValidateChatConversation(ctx, req.KBID, req.ConversationID, req.Nonce)
+			err := u.conversationUsecase.ValidateChatConversation(ctx, req.KBID, req.ConversationID, req.Nonce, req.Info.UserInfo.UserID)
 			if err != nil {
 				u.logger.Error("failed to validate chat conversation nonce", log.Error(err))
 				eventCh <- domain.SSEEvent{Type: "error", Content: "validate chat conversation nonce failed"}
@@ -310,6 +310,19 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		trace.add("build_access_context", "completed", nil, map[string]any{"authenticated_user": req.Info.UserInfo.UserID != ""}, nil)
 		trace.trace.Steps[len(trace.trace.Steps)-1].DurationMS = time.Since(accessStarted).Milliseconds()
 
+		priorMessages, sourceErr := u.conversationUsecase.repo.GetConversationMessagesByID(ctx, req.ConversationID)
+		inheritedSources := []domain.AssistantSource{}
+		if sourceErr != nil {
+			eventCh <- domain.SSEEvent{Type: "error", Content: "读取历史来源失败"}
+			return
+		}
+		for _, m := range priorMessages {
+			if e := u.conversationUsecase.ValidateMessageSources(ctx, req.KBID, req.Info.UserInfo.UserID, m); e != nil {
+				eventCh <- domain.SSEEvent{Type: "error", Content: "历史资料权限已变化，请新建会话重新提问"}
+				return
+			}
+			inheritedSources = append(inheritedSources, sourceList(m.AssistantSources)...)
+		}
 		messageBuildStarted := time.Now()
 		messages, rankedNodes, err := u.llmUsecase.BuildConversationMessageWithRAGTraced(ctx, req.ConversationID, req.KBID, groupIds, shareAccess, req.Prompt, req.HistoryMessages, trace)
 		if err != nil {
@@ -381,9 +394,13 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		}
 		trace.add("final_answer", "completed", nil, map[string]any{"source": answerSource, "answer": answer}, nil)
 
+		for _, n := range rankedNodes {
+			inheritedSources = append(inheritedSources, domain.AssistantSource{Kind: "node", ID: n.NodeID, Name: n.NodeName})
+		}
 		persistAnswerStarted := time.Now()
 		if err := u.conversationUsecase.CreateChatConversationMessage(ctx, req.KBID, &domain.ConversationMessage{
 			ID:               messageId,
+			AssistantSources: sourcesJSON(uniqueSources(inheritedSources)),
 			ConversationID:   req.ConversationID,
 			KBID:             req.KBID,
 			AppID:            req.AppID,
