@@ -1,5 +1,6 @@
 'use client';
 
+import { loadCaptcha } from '@/utils/captcha';
 import { useBasePath } from '@/hooks';
 import { postShareV1CommonFileUpload } from '@/request/ShareFile';
 import { message } from '@ctzhian/ui';
@@ -136,7 +137,7 @@ const CommentInput = React.forwardRef<CommentInputRef, CommentInputProps>(
             let token = '';
 
             try {
-              const Cap = (await import(`@cap.js/widget`)).default;
+              const Cap = await loadCaptcha();
               const cap = new Cap({
                 apiEndpoint: `${basePath}/share/v1/captcha/`,
               });

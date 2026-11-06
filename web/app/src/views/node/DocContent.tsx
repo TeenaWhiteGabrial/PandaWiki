@@ -1,5 +1,6 @@
 'use client';
 
+import { loadCaptcha } from '@/utils/captcha';
 import CommentInput, {
   CommentInputRef,
   ImageItem,
@@ -126,7 +127,7 @@ const DocContent = ({
       setCommentLoading(true);
       let token = '';
       try {
-        const Cap = (await import('@cap.js/widget')).default;
+        const Cap = await loadCaptcha();
         const cap = new Cap({ apiEndpoint: `${basePath}/share/v1/captcha/` });
         const solution = await cap.solve();
         token = solution.token;

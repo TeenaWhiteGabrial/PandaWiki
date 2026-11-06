@@ -1,4 +1,5 @@
 'use client';
+import { loadCaptcha } from '@/utils/captcha';
 import Logo from '@/assets/images/logo.png';
 import noDocImage from '@/assets/images/no-doc.png';
 import { useBasePath } from '@/hooks';
@@ -138,7 +139,7 @@ const SearchDocContent: React.FC<SearchDocContentProps> = ({
     setFuzzySuggestions([]);
 
     let token = '';
-    const Cap = (await import(`@cap.js/widget`)).default;
+    const Cap = await loadCaptcha();
     const cap = new Cap({
       apiEndpoint: `${basePath}/share/v1/captcha/`,
     });

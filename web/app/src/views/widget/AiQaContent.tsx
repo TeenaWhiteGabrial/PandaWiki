@@ -1,4 +1,5 @@
 'use client';
+import { loadCaptcha } from '@/utils/captcha';
 import { useChatSession } from '@/hooks/useChatSession';
 import ChatHistoryToolbar from '@/components/ChatHistoryToolbar';
 import aiLoading from '@/assets/images/ai-loading.gif';
@@ -377,7 +378,7 @@ const AiQaContent: React.FC<{
 
     let token = '';
 
-    const Cap = (await import(`@cap.js/widget`)).default;
+    const Cap = await loadCaptcha();
     const cap = new Cap({
       apiEndpoint: `${basePath}/share/v1/captcha/`,
     });
