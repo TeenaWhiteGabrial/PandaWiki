@@ -232,8 +232,8 @@ services:
       PREVIEW_USERNAME: panda-wiki
       PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:-}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
-    ports:
-      - '${API_PORT}:8000'
+    # Frontends and workers use api:8000 on the Compose network. Do not publish
+    # the API directly on the host; browsers enter through admin or app.
     depends_on:
       pdf-parser:
         condition: service_healthy
@@ -350,9 +350,9 @@ services:
     labels: *pandawiki-log-labels
     working_dir: /workspace/web
     environment:
-      TARGET: http://${SERVER_IP}:${API_PORT}
+      TARGET: http://api:8000
       STATIC_FILE_TARGET: ${OSS_DOWNLOAD_URL}
-      SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
+      SWAGGER_BASE_URL: http://api:8000
       NODE_OPTIONS: --max-old-space-size=4096
       CI: 'true'
       COREPACK_NPM_REGISTRY: ${COREPACK_NPM_REGISTRY:-https://registry.npmmirror.com}
@@ -374,9 +374,9 @@ services:
     labels: *pandawiki-log-labels
     working_dir: /workspace/web
     environment:
-      TARGET: http://${SERVER_IP}:${API_PORT}
+      TARGET: http://api:8000
       STATIC_FILE_TARGET: ${OSS_DOWNLOAD_URL}
-      SWAGGER_BASE_URL: http://${SERVER_IP}:${API_PORT}
+      SWAGGER_BASE_URL: http://api:8000
       DEV_KB_ID: ''
       NODE_OPTIONS: --max-old-space-size=4096
       CI: 'true'

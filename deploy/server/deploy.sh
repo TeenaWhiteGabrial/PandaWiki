@@ -216,18 +216,16 @@ print_summary() {
   local server_ip
   local admin_port
   local app_port
-  local api_port
 
   server_ip="$(grep '^SERVER_IP=' "${ENV_FILE}" | cut -d= -f2-)"
   admin_port="$(grep '^ADMIN_PORT=' "${ENV_FILE}" | cut -d= -f2-)"
   app_port="$(grep '^APP_PORT=' "${ENV_FILE}" | cut -d= -f2-)"
-  api_port="$(grep '^API_PORT=' "${ENV_FILE}" | cut -d= -f2-)"
 
   echo
   echo "部署完成，可访问："
   echo "  管理台:  http://${server_ip}:${admin_port}"
   echo "  前台:    http://${server_ip}:${app_port}"
-  echo "  后端:    http://${server_ip}:${api_port}"
+  echo "  后端:    仅 Docker 内网 api:8000（通过管理台或前台代理访问）"
   echo "  对象存储: ${OSS_DOWNLOAD_URL}"
   echo
   echo "常用检查命令："
