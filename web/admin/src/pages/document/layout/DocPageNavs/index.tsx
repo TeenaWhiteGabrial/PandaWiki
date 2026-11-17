@@ -1,3 +1,4 @@
+import { usesNativeContextMenu } from '../../utils/contextMenu';
 import { branchKey, type BranchState } from '@/hooks/useLazyDocumentTree';
 import Card from '@/components/Card';
 import DragTree, { type DragTreeHandle } from '@/components/Drag/DragTree';
@@ -62,10 +63,15 @@ const DocPageNavs = ({
   const selectedId = useAppSelector(state => state.config.nav_id);
   const {
     menu: treeMenu,
+    openContextMenu,
+    closeContextMenu,
     permissionCatalog,
     openAddNav,
     viewDocument,
   } = useDocumentActions();
+  useEffect(closeContextMenu, [selectedId, isSearching, closeContextMenu]);
+  const [contextTargetId, setContextTargetId] = useState<string>();
+  const [activeFolder, setActiveFolder] = useState<ITreeItem | null>(null);
   const dragTreeRef = useRef<DragTreeHandle>(null);
   const expend = true;
   const navs = navListProp || [];
@@ -176,6 +182,8 @@ const DocPageNavs = ({
 
   const handleTreeItemClick = useCallback(
     (item: ITreeItem) => {
+      setContextTargetId(item.id);
+      if (item.type === 1) setActiveFolder(item);
       const targetNavId = item.kind === 'nav' ? item.id : item.nav_id;
       if (targetNavId && targetNavId !== selectedId) {
         handleSelect(targetNavId);
@@ -250,6 +258,62 @@ const DocPageNavs = ({
         ) : (
           <>
             <Box
+              onContextMenu={event => {
+                if (
+                  usesNativeContextMenu(event.target) ||
+                  (event.target as Element).closest('[data-document-row]')
+                )
+                  return;
+                const root = treeData.find(
+                  item =>
+                    item.kind === 'nav' &&
+                    (item.id === selectedId || item.nav_id === selectedId),
+                );
+                const findFolder = (
+                  items: ITreeItem[],
+                ): ITreeItem | undefined => {
+                  for (const item of items) {
+                    if (item.id === activeFolder?.id) return item;
+                    const match = item.children && findFolder(item.children);
+                    if (match) return match;
+                  }
+                };
+                const current = activeFolder && findFolder(treeData);
+                const target =
+                  current && (current.nav_id || current.id) === selectedId
+                    ? current
+                    : root;
+                const actions = target
+                  ? treeMenu({
+                      item: target,
+                      createItem: () => undefined,
+                      renameItem: () => undefined,
+                      isEditing: false,
+                      removeItem: () => undefined,
+                    }).filter(action =>
+                      ['folder', 'doc', 'file', 'batch-import-zip'].includes(
+                        action.key,
+                      ),
+                    )
+                  : [];
+                if (
+                  !readOnlyUser &&
+                  (sortedNavs.length === 0 ||
+                    sortedNavs.some(nav => nav.can_configure !== false))
+                )
+                  actions.push({
+                    key: 'new-nav',
+                    label: '新建栏目',
+                    onClick: openAddNav,
+                  });
+                actions.push({
+                  key: 'refresh',
+                  label: '刷新',
+                  dividerBefore: actions.length > 0,
+                  onClick: refresh,
+                });
+                openContextMenu(event, actions);
+              }}
               sx={{
                 height: 'calc(100vh - 216px)',
                 overflowY: 'auto',
@@ -266,6 +330,12 @@ const DocPageNavs = ({
                     : undefined
                 }
                 refresh={refresh}
+                onContextMenu={(event, item, actions) => {
+                  if (usesNativeContextMenu(event.target)) return;
+                  setContextTargetId(item.id);
+                  openContextMenu(event, actions);
+                }}
+                contextTargetId={contextTargetId}
                 readOnly={readOnlyUser}
                 supportSelect={false}
                 ref={dragTreeRef}

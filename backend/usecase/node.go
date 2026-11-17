@@ -571,9 +571,13 @@ func (u *NodeUsecase) GetShareNodeList(ctx context.Context, kbId, userID string)
 	done = domain.MeasureTreeLoadPhase(ctx, "tree_assembly")
 	defer done()
 	result := make([]*shareV1.NodeListGroupNavResp, 0, len(navs))
+	visibleNavs := make(map[string]bool, len(navs))
+	for _, node := range nodes {
+		visibleNavs[node.NavId] = true
+	}
 	navIndexMap := make(map[string]int, len(navs))
 	for _, nav := range navs {
-		if nav.Permissions.HasEnterpriseRule() && !u.enterprise.CanVisible(nav.Permissions, shareAccess) {
+		if !visibleNavs[nav.ID] && !u.enterprise.CanVisible(nav.Permissions, shareAccess) {
 			continue
 		}
 		navIndexMap[nav.ID] = len(result)
@@ -872,7 +876,7 @@ func (u *NodeUsecase) NodePermissionsEdit(ctx context.Context, req v1.NodePermis
 			}
 			if permissions.Inherit != nil && *permissions.Inherit {
 				permissions.ParentPermissionSnapshot = nil
-			} else if (permissions.Inherit != nil && !*permissions.Inherit) || hasExplicitNodePermissionRule(permissions) {
+			} else if permissions.ReadingVersion != 2 && ((permissions.Inherit != nil && !*permissions.Inherit) || hasExplicitNodePermissionRule(permissions)) {
 				permissions.ParentPermissionSnapshot, err = u.enterprise.ParentPermissionSnapshot(ctx, req.KbId, node.ParentID, node.NavId)
 				if err != nil {
 					return err

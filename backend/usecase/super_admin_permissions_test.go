@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 )
 
@@ -51,22 +50,5 @@ func TestSuperAdminDocumentFallbackPrecedesEveryReadingConstraint(t *testing.T) 
 	var supplied domain.EnterpriseAccessContext
 	if err := json.Unmarshal([]byte(`{"principal_id":"reader","IsSuperAdmin":true,"is_super_admin":true}`), &supplied); err != nil || supplied.IsSuperAdmin {
 		t.Fatal("client JSON must not create a super-admin principal")
-	}
-}
-
-func TestSuperAdminIsAlreadyWithinEveryManagementParentScope(t *testing.T) {
-	users := []domain.UserSummary{
-		{ID: "root", Role: consts.UserRoleAdmin},
-		{ID: "manager", Role: consts.UserRoleManager},
-	}
-	grant := func(id string) []domain.DocumentManagementGrant {
-		return []domain.DocumentManagementGrant{{SubjectType: domain.ManagementSubjectUser, SubjectIDs: []string{id}, DirectoryScope: domain.ManagementScopeTree}}
-	}
-	parent := [][]domain.DocumentManagementGrant{grant("another-manager")}
-	if !managementGrantAudienceWithinParents(users, grant("root"), parent, nil) {
-		t.Fatal("global super-admin access cannot be restricted by a parent whitelist")
-	}
-	if managementGrantAudienceWithinParents(users, grant("manager"), parent, nil) {
-		t.Fatal("ordinary managers must still be constrained by the parent scope")
 	}
 }

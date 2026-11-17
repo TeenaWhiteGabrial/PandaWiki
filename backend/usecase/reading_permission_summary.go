@@ -14,6 +14,13 @@ import (
 // Intersecting whitelist IDs alone would incorrectly remove a named account
 // that satisfies another ancestor through its department and level.
 func (u *EnterpriseUsecase) summarizeReadingPermissions(policy domain.NodePermissions, users []domain.UserSummary, ranks map[string]int) *v1.ReadingPermissionSummary {
+	// The legacy summary describes an intersection and cannot represent an OR
+	// list faithfully. New dialogs use rules and the evaluated audience instead.
+	for _, rule := range snapshotReadPermissionRules(policy) {
+		if rule.ReadingVersion == 2 {
+			return nil
+		}
+	}
 	result := &v1.ReadingPermissionSummary{
 		GroupAllowed:        true,
 		DepartmentGroups:    [][]string{},

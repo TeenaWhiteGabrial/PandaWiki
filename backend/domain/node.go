@@ -118,7 +118,18 @@ func (d RagInfo) HasAvailableIndex() bool {
 	return d.Status == consts.NodeRagStatusSucceeded
 }
 
+type ReadingRule struct {
+	Permissions        NodePermissions `json:"permissions"`
+	IncludeDescendants bool            `json:"include_descendants"`
+}
+
 type NodePermissions struct {
+	ReadingVersion        int           `json:"reading_version,omitempty"`
+	ReadingRules          []ReadingRule `json:"reading_rules,omitempty"`
+	ReadingBoundary       bool          `json:"-"`
+	ReadingDistance       int           `json:"-"`
+	ReadingTargetDocument bool          `json:"-"`
+
 	Constraints               []NodePermissions         `json:"constraints,omitempty"`
 	ParentPermissionSnapshot  []NodePermissions         `json:"-"` // internal JSONB baseline; omitted from API responses
 	ManagementGrants          []DocumentManagementGrant `json:"management_grants,omitempty"`
@@ -144,7 +155,7 @@ const (
 )
 
 func (s NodePermissions) HasEnterpriseRule() bool {
-	return len(s.Constraints) > 0 || s.ScopeType != "" ||
+	return s.ReadingVersion == 2 || len(s.Constraints) > 0 || s.ScopeType != "" ||
 		s.Inherit != nil ||
 		len(s.AllowedPermissionLevelIDs) > 0 ||
 		s.AllowAllUsers ||

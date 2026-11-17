@@ -9,14 +9,10 @@ export type TreeMenuItem = {
   label: string;
   onClick?: () => void;
   disabled?: boolean;
+  disabledReason?: string;
+  dividerBefore?: boolean;
   color?: 'error' | 'default';
-  children?: {
-    key: string;
-    label: string;
-    disabled?: boolean;
-    onClick?: () => void;
-    color?: 'error' | 'default';
-  }[];
+  children?: TreeMenuItem[];
 };
 
 export type TreeMenuOptions = {
@@ -25,113 +21,107 @@ export type TreeMenuOptions = {
   renameItem: () => void;
   isEditing: boolean;
   removeItem: (id: string) => void;
+  openFolder?: () => void;
 };
 
 const TreeMenu = ({
   menu,
   context,
+  anchorPosition,
+  onClose,
 }: {
   menu: TreeMenuItem[];
+  anchorPosition?: { top: number; left: number } | null;
+  onClose?: () => void;
   context?: React.ReactElement<{ onClick?: any; 'aria-describedby'?: any }>;
 }) => {
   const theme = useTheme();
 
+  const label = (item: TreeMenuItem, child = false) => (
+    <Stack
+      direction='row'
+      alignItems='center'
+      justifyContent='space-between'
+      gap={1}
+      title={item.disabled ? item.disabledReason : undefined}
+      sx={{
+        fontSize: 14,
+        px: 2,
+        minHeight: 40,
+        width: 190,
+        borderRadius: '5px',
+        color: item.disabled
+          ? 'text.disabled'
+          : item.color === 'error'
+            ? 'error.main'
+            : 'text.primary',
+        cursor: item.disabled ? 'not-allowed' : 'pointer',
+        ':hover': {
+          bgcolor: item.disabled
+            ? 'transparent'
+            : addOpacityToColor(
+                item.color === 'error'
+                  ? theme.palette.error.main
+                  : theme.palette.primary.main,
+                0.1,
+              ),
+        },
+      }}
+    >
+      {item.label}
+      {!child && item.children?.length ? (
+        <IconXiala sx={{ fontSize: 20, transform: 'rotate(-90deg)' }} />
+      ) : null}
+    </Stack>
+  );
   return (
     <Cascader
+      anchorPosition={anchorPosition}
+      onClose={onClose}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       childrenProps={{
         anchorOrigin: { vertical: 'top', horizontal: 'left' },
         transformOrigin: { vertical: 'top', horizontal: 'right' },
       }}
-      list={menu?.map(value => ({
-        key: value.key,
-        children: value.children?.map(it => ({
-          key: it.key,
-          onClick: it?.disabled ? undefined : it.onClick,
-          label: (
-            <Box key={it.key}>
-              <Stack
-                direction={'row'}
-                alignItems={'center'}
-                gap={1}
-                sx={{
-                  fontSize: 14,
-                  px: 2,
-                  lineHeight: '40px',
-                  height: 40,
-                  width: 180,
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  ':hover': {
-                    bgcolor: addOpacityToColor(theme.palette.primary.main, 0.1),
-                  },
-                }}
-              >
-                {it.label}
-              </Stack>
-            </Box>
-          ),
-        })),
+      list={menu.map(item => ({
+        key: item.key,
+        disabled: item.disabled,
+        dividerBefore: item.dividerBefore,
+        onClick: item.disabled ? undefined : item.onClick,
         label: (
-          <Box key={value.key}>
-            <Stack
-              direction={'row'}
-              alignItems={'center'}
-              justifyContent={'space-between'}
-              gap={1}
-              sx={{
-                fontSize: 14,
-                pl: 2,
-                pr: 1,
-                lineHeight: '40px',
-                height: 40,
-                width: 180,
-                borderRadius: '5px',
-                color: value?.disabled
-                  ? 'text.disabled'
-                  : value.color === 'error'
-                    ? 'error.main'
-                    : 'text.primary',
-                cursor: value?.disabled ? 'not-allowed' : 'pointer',
-                ':hover': {
-                  bgcolor: value?.disabled
-                    ? 'transparent'
-                    : value.color === 'error'
-                      ? addOpacityToColor(theme.palette.error.main, 0.1)
-                      : addOpacityToColor(theme.palette.primary.main, 0.1),
-                },
-              }}
-              onClick={value?.disabled ? undefined : value.onClick}
-            >
-              {value.label}
-              {value.children && (
-                <IconXiala sx={{ fontSize: 20, transform: 'rotate(-90deg)' }} />
-              )}
-            </Stack>
-            {value.key === 'next-line' && (
+          <Box>
+            {label(item)}
+            {item.key === 'next-line' && (
               <Box
                 sx={{
-                  width: 145,
                   borderBottom: '1px dashed',
                   borderColor: 'divider',
                   my: 0.5,
-                  mx: 'auto',
                 }}
               />
             )}
           </Box>
         ),
+        children: item.disabled
+          ? undefined
+          : item.children?.map(child => ({
+              key: child.key,
+              disabled: child.disabled,
+              onClick: child.disabled ? undefined : child.onClick,
+              label: label(child, true),
+            })),
       }))}
       context={
-        context || (
-          <IconButton size='small'>
-            <IconGengduo sx={{ fontSize: '14px' }} />
-          </IconButton>
-        )
+        anchorPosition !== undefined
+          ? undefined
+          : context || (
+              <IconButton size='small' aria-label='更多操作'>
+                <IconGengduo sx={{ fontSize: '14px' }} />
+              </IconButton>
+            )
       }
     />
   );
 };
-
 export default TreeMenu;

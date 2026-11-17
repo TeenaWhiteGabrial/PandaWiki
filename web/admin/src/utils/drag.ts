@@ -22,6 +22,12 @@ export interface DragTreeProps {
   readOnly?: boolean;
   loading?: boolean;
   menu?: (opra: TreeMenuOptions) => TreeMenuItem[];
+  contextTargetId?: string;
+  onContextMenu?: (
+    event: React.MouseEvent,
+    item: ITreeItem,
+    menu: TreeMenuItem[],
+  ) => void;
   refresh?: () => void;
   updateData?: (data: TreeItems<ITreeItem>) => void;
   ui?: 'select' | 'move';
@@ -117,6 +123,7 @@ export function convertToTree(data: DomainNodeListItemResp[]) {
       name: item.name!,
       level: 0,
       status: item.status,
+      publisher_id: item.publisher_id,
       order: item.position,
       emoji: item.emoji,
       content_type: item.content_type,

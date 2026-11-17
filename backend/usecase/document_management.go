@@ -154,7 +154,7 @@ func containsManagementGrant(grants []domain.DocumentManagementGrant, candidate 
 }
 
 // ValidateManagementGrantTargets permits delegation to any administrator.
-// Nested-directory scope is enforced separately by ValidateManagementGrantNarrowing.
+// Delegation is local and additive; a target need not manage the parent.
 // Historical level/department grants are admitted only when unchanged.
 func (u *EnterpriseUsecase) ValidateManagementGrantTargets(ctx context.Context, access *domain.DocumentManagementAccess, grants []domain.DocumentManagementGrant) error {
 	if access == nil {
@@ -198,67 +198,15 @@ func (u *EnterpriseUsecase) ValidateManagementGrantTargets(ctx context.Context, 
 	return nil
 }
 
-// ValidateManagementGrantNarrowing makes each nested node's manager list a
-// subset of the effective manager audience inherited from parent folders.
-func (u *EnterpriseUsecase) ValidateManagementGrantNarrowing(ctx context.Context, access *domain.DocumentManagementAccess, nodeIDs []string, grants []domain.DocumentManagementGrant) error {
-	if access == nil || len(grants) == 0 {
-		return nil
+// Existing document grants may be kept or explicitly cleared, but new document
+// grants must be delegated at the containing directory.
+func managementGrantsUnchanged(current, next []domain.DocumentManagementGrant) bool {
+	if len(current) != len(next) {
+		return false
 	}
-	users, err := u.repo.PermissionAudienceUsers(ctx)
-	if err != nil {
-		return err
-	}
-	departmentAncestors, err := u.departmentAncestorIDs(ctx)
-	if err != nil {
-		return err
-	}
-	for _, nodeID := range nodeIDs {
-		inherited := access.ManagementGrantConstraintsForParentNode(nodeID)
-		if len(inherited) == 0 {
-			if node := access.Nodes[nodeID]; node != nil && node.ParentID != "" && node.ParentID != node.NavId {
-				return fmt.Errorf("上级目录尚未配置可委派的管理员范围，请先配置上级目录管理权限")
-			}
-			continue
-		}
-		if !managementGrantAudienceWithinParents(users, grants, inherited, departmentAncestors) {
-			return fmt.Errorf("下级目录的管理权限只能在上级已授权管理员范围内收紧")
-		}
-	}
-	return nil
-}
-
-func managementGrantAudienceWithinParents(users []domain.UserSummary, grants []domain.DocumentManagementGrant, inherited [][]domain.DocumentManagementGrant, departmentAncestors map[string][]string) bool {
-	for _, user := range users {
-		// Super-admins already manage both parent and child globally.
-		if !consts.IsAdministrator(user.Role) || consts.IsSuperAdmin(user.Role) {
-			continue
-		}
-		principal := &domain.EnterpriseAccessContext{
-			PrincipalID:       user.ID,
-			PermissionLevelID: user.PermissionLevelID,
-			DepartmentIDs:     expandAudienceDepartmentIDs(user.DepartmentIDs, departmentAncestors),
-		}
-		selected := false
-		for _, grant := range grants {
-			if grant.Matches(principal) {
-				selected = true
-				break
-			}
-		}
-		if !selected {
-			continue
-		}
-		for _, group := range inherited {
-			matchesGroup := false
-			for _, grant := range group {
-				if grant.Matches(principal) {
-					matchesGroup = true
-					break
-				}
-			}
-			if !matchesGroup {
-				return false
-			}
+	for _, grant := range next {
+		if !containsManagementGrant(current, grant) {
+			return false
 		}
 	}
 	return true
@@ -270,6 +218,9 @@ func (u *EnterpriseUsecase) ValidateNodePermissionAudience(ctx context.Context, 
 	auth := domain.GetAuthInfoFromCtx(ctx)
 	if auth == nil {
 		return fmt.Errorf("未登录")
+	}
+	if permissions.ReadingVersion == 2 {
+		return nil
 	}
 	if err := u.validateReadAudienceWithinParent(ctx, kbID, permissions, parentID, navID); err != nil {
 		return err
@@ -463,7 +414,7 @@ func expandAudienceDepartmentIDs(ids []string, ancestors map[string][]string) []
 }
 
 func hasExplicitReadRule(permissions domain.NodePermissions) bool {
-	return permissions.ScopeType != "" || permissions.AllowAllUsers || permissions.MinPermissionLevelID != "" || permissions.MinPermissionLevelRank > 0 ||
+	return permissions.ReadingVersion == 2 || permissions.ScopeType != "" || permissions.AllowAllUsers || permissions.MinPermissionLevelID != "" || permissions.MinPermissionLevelRank > 0 ||
 		len(permissions.AllowedPermissionLevelIDs) > 0 || len(permissions.AllowedDepartmentIDs) > 0 || len(permissions.AllowedUserIDs) > 0 ||
 		len(permissions.DeniedDepartmentIDs) > 0 || len(permissions.DeniedUserIDs) > 0
 }

@@ -267,9 +267,6 @@ func (u *NodeUsecase) GetShareNodeTree(ctx context.Context, kbID, userID string,
 	}
 	result := []*shareV1.NodeListGroupNavResp{}
 	for _, nav := range navs {
-		if nav.Permissions.HasEnterpriseRule() && !u.enterprise.CanVisible(nav.Permissions, principal) {
-			continue
-		}
 		if !has["nav:"+nav.ID] {
 			continue
 		}

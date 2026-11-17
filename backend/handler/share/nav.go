@@ -3,7 +3,6 @@ package share
 import (
 	"github.com/labstack/echo/v4"
 
-	navV1 "github.com/chaitin/panda-wiki/api/nav/v1"
 	v1 "github.com/chaitin/panda-wiki/api/share/v1"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/handler"
@@ -60,22 +59,9 @@ func (h *ShareNavHandler) ShareNavList(c echo.Context) error {
 		return h.NewResponseWithError(c, "validate request failed", err)
 	}
 
-	navs, err := h.usecase.GetReleaseList(c.Request().Context(), req.KbId)
+	navs, err := h.usecase.GetShareReleaseList(c.Request().Context(), req.KbId, domain.GetShareUserID(c))
 	if err != nil {
 		return h.NewResponseWithError(c, "failed to get nav list", err)
-	}
-
-	userID := domain.GetShareUserID(c)
-	shareAccess, err := h.usecase.EnterpriseAccessContext(c.Request().Context(), userID)
-	if err == nil {
-		filtered := make([]navV1.NavListResp, 0, len(navs))
-		for _, nav := range navs {
-			if nav.Permissions.HasEnterpriseRule() && !h.usecase.CanVisible(nav.Permissions, shareAccess) {
-				continue
-			}
-			filtered = append(filtered, nav)
-		}
-		navs = filtered
 	}
 
 	return h.NewResponseWithData(c, navs)

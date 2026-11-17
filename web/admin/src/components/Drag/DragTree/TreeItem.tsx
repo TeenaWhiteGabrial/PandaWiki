@@ -91,6 +91,8 @@ const TreeItem = React.forwardRef<
     onItemClick,
     onItemDoubleClick,
     onExpand,
+    onContextMenu,
+    contextTargetId,
   } = context;
 
   const readOnly = contextReadOnly || item.can_manage === false;
@@ -226,6 +228,14 @@ const TreeItem = React.forwardRef<
           renameItem,
           isEditing: isEditting,
           removeItem,
+          openFolder:
+            item.type === 1
+              ? () => {
+                  if (collapsed) props.onCollapse?.();
+                  void onExpand?.(item);
+                  onItemClick?.(item);
+                }
+              : undefined,
         })?.filter(
           option =>
             !(
@@ -236,7 +246,19 @@ const TreeItem = React.forwardRef<
       );
     }
     return [];
-  }, [item, isEditting, createItem, renameItem, removeItem, readOnly, menu]);
+  }, [
+    item,
+    isEditting,
+    createItem,
+    renameItem,
+    removeItem,
+    readOnly,
+    menu,
+    props.onCollapse,
+    onExpand,
+    onItemClick,
+    collapsed,
+  ]);
   const ragStatusMeta = useMemo(() => getRagStatusMeta(item), [item]);
   const enterprisePermissionTags = item.permission_tags || [];
 
@@ -250,6 +272,7 @@ const TreeItem = React.forwardRef<
   if (item.placeholder) {
     return (
       <TreeItemWrapper
+        data-document-row
         {...props}
         ref={ref}
         showDragHandle={false}
@@ -280,8 +303,33 @@ const TreeItem = React.forwardRef<
 
   return (
     <Box
+      data-document-row
+      onContextMenu={event =>
+        onContextMenu?.(
+          event,
+          item,
+          menuList.length
+            ? menuList
+            : item.type === 1
+              ? [
+                  {
+                    key: 'open-folder',
+                    label: '打开',
+                    onClick: () => {
+                      if (collapsed) props.onCollapse?.();
+                      void onExpand?.(item);
+                      onItemClick?.(item);
+                    },
+                  },
+                ]
+              : [],
+        )
+      }
       sx={[
         treeSx(readOnly ?? false),
+        contextTargetId === item.id
+          ? { bgcolor: 'action.selected', borderRadius: 1 }
+          : {},
         {
           '&:hover': {
             '.dnd-sortable-tree_simple_handle': {

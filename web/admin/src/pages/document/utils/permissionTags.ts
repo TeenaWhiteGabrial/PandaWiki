@@ -42,6 +42,7 @@ interface ReadingRuleClause {
 
 function hasReadingRule(permissions: DomainNodePermissions): boolean {
   return (
+    permissions.reading_version === 2 ||
     permissions.scope_type === 'department' ||
     permissions.scope_type === 'permission_level' ||
     permissions.scope_type === 'user' ||
@@ -73,6 +74,40 @@ function describeReadingRule(
   permissions: DomainNodePermissions,
   catalog: PermissionAudienceCatalog,
 ): { label: string; detail: string; color: PermissionTagColor } {
+  if (permissions.reading_version === 2) {
+    const rules = permissions.reading_rules || [];
+    const denied = [
+      hasIDs(permissions.denied_user_ids) &&
+        `排除人员：${fullNames(permissions.denied_user_ids, catalog.users, '指定人员')}`,
+      hasIDs(permissions.denied_department_ids) &&
+        `排除部门：${fullNames(permissions.denied_department_ids, catalog.departments, '指定部门')}`,
+    ]
+      .filter(Boolean)
+      .join('；');
+    const all = rules.some(rule => rule.permissions.allow_all_users);
+    return {
+      label: !rules.length
+        ? '未授权普通用户查阅'
+        : all && !denied
+          ? '全员可查阅（需登录）'
+          : `${rules.length} 条查阅规则${denied ? '（含排除）' : ''}`,
+      detail: [
+        rules.length
+          ? '满足任意一条即可查阅：' +
+            rules
+              .map(
+                (rule, i) =>
+                  `${i + 1}. ${describeReadingRule(rule.permissions, catalog).detail}；${rule.include_descendants ? '含继承的下级' : '仅当前目录及直接文件'}`,
+              )
+              .join('；')
+          : '仅超级管理员可查阅；管理权限独立生效',
+        denied,
+      ]
+        .filter(Boolean)
+        .join('；'),
+      color: rules.length ? 'primary' : 'warning',
+    };
+  }
   const scope = permissions.scope_type || 'public';
   const departments = permissions.allowed_department_ids || [];
   const levels = permissions.allowed_permission_level_ids || [];
@@ -265,9 +300,7 @@ function getManagementPermissionTag(
     ),
   ];
   let subjectText: string;
-  if (groups.length > 1) {
-    subjectText = '多层管理授权';
-  } else if (subjectTypes.size === 1 && subjectTypes.has('user')) {
+  if (subjectTypes.size === 1 && subjectTypes.has('user')) {
     subjectText = `指定管理员 ${userIDs.length} 人`;
   } else if (subjectTypes.size === 1 && subjectTypes.has('department')) {
     subjectText = '部门管理员';
@@ -300,7 +333,8 @@ function getManagementPermissionTag(
       return `${groupRule}：${grantDetails.join('；')}`;
     })
     .join('；');
-  const groupConstraint = groups.length > 1 ? '不同授权组都必须满足。' : '';
+  const groupConstraint =
+    groups.length > 1 ? '本级与上级管理授权合并生效，满足任一授权即可。' : '';
   return {
     label: `${subjectText}·${scopeText}`,
     color: 'success',

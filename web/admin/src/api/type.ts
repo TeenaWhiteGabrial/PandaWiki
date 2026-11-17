@@ -214,6 +214,7 @@ export interface ITreeItem {
   canHaveChildren?: boolean | ((dragItem: ITreeItem) => boolean);
   updated_at?: string;
   status?: 0 | 1 | 2;
+  publisher_id?: string;
   permissions?: DomainNodePermissions;
   effective_permissions?: DomainNodePermissions;
   effective_management_grants?: DomainDocumentManagementGrant[];

@@ -1,4 +1,4 @@
-import { Box, Popover, Stack, SxProps, Theme } from '@mui/material';
+import { Box, Divider, Popover, Stack, SxProps, Theme } from '@mui/material';
 import React from 'react';
 
 interface Item {
@@ -6,6 +6,8 @@ interface Item {
   icon?: React.ReactNode;
   extra?: React.ReactNode;
   selected?: boolean;
+  disabled?: boolean;
+  dividerBefore?: boolean;
   children?: Item[];
   show?: boolean;
   textSx?: SxProps<Theme>;
@@ -15,6 +17,8 @@ interface Item {
 
 export interface CascaderProps {
   id?: string;
+  anchorPosition?: { top: number; left: number } | null;
+  onClose?: () => void;
   arrowIcon?: React.ReactNode;
   list: Item[];
   context?: React.ReactElement<{ onClick?: any; 'aria-describedby'?: any }>;
@@ -40,6 +44,8 @@ export interface CascaderProps {
 
 const Cascader: React.FC<CascaderProps> = ({
   id = 'cascader',
+  anchorPosition,
+  onClose: onExternalClose,
   arrowIcon,
   list,
   context,
@@ -70,20 +76,35 @@ const Cascader: React.FC<CascaderProps> = ({
     null,
   );
 
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelScheduledClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  React.useEffect(() => () => cancelScheduledClose(), []);
+
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
   };
 
   const handleClose = () => {
+    cancelScheduledClose();
     setAnchorEl(null);
     setHoveredItem(null);
     setSubMenuAnchor(null);
+    onExternalClose?.();
   };
 
   const handleItemHover = (
     event: React.MouseEvent<HTMLElement>,
     item: Item,
   ) => {
+    cancelScheduledClose();
+    if (item.disabled || !item.children?.length) {
+      setHoveredItem(null);
+      setSubMenuAnchor(null);
+      return;
+    }
     if (item.children?.length) {
       setHoveredItem(item);
       setSubMenuAnchor(event.currentTarget);
@@ -91,18 +112,24 @@ const Cascader: React.FC<CascaderProps> = ({
   };
 
   const handleItemLeave = () => {
-    setHoveredItem(null);
-    setSubMenuAnchor(null);
+    cancelScheduledClose();
+    closeTimer.current = setTimeout(() => {
+      setHoveredItem(null);
+      setSubMenuAnchor(null);
+      closeTimer.current = null;
+    }, 150);
   };
 
   const handleItemClick = (item: Item) => {
+    if (item.disabled) return;
     if (item.onClick) {
       item.onClick();
     }
     handleClose();
   };
 
-  const open = Boolean(anchorEl);
+  const positioned = anchorPosition !== undefined;
+  const open = positioned ? Boolean(anchorPosition) : Boolean(anchorEl);
   const curId = open ? id : undefined;
   return (
     <>
@@ -114,77 +141,117 @@ const Cascader: React.FC<CascaderProps> = ({
       <Popover
         id={curId}
         open={open}
-        anchorEl={anchorEl}
+        anchorEl={positioned ? undefined : anchorEl}
+        anchorReference={positioned ? 'anchorPosition' : 'anchorEl'}
+        anchorPosition={anchorPosition || undefined}
+        disableScrollLock={positioned}
+        disableAutoFocus={positioned}
+        disableEnforceFocus={positioned}
+        disableRestoreFocus={positioned}
+        hideBackdrop={positioned}
+        sx={positioned ? { pointerEvents: 'none' } : undefined}
+        slotProps={
+          positioned
+            ? {
+                paper: {
+                  sx: {
+                    pointerEvents: 'auto',
+                    maxHeight: 'calc(100vh - 32px)',
+                  },
+                },
+              }
+            : undefined
+        }
         onClose={handleClose}
         anchorOrigin={anchorOrigin}
-        transformOrigin={transformOrigin}
+        transformOrigin={
+          positioned ? { vertical: 'top', horizontal: 'left' } : transformOrigin
+        }
       >
         <Box className='cascader-list' sx={{ p: 0.5 }}>
           {list.map(item =>
             item.show === false ? null : (
-              <Box
-                className='cascader-item'
-                key={item.key}
-                onMouseEnter={e => handleItemHover(e, item)}
-                onMouseLeave={handleItemLeave}
-                onClick={event => {
-                  event.stopPropagation();
-                  if (item.children?.length) handleItemHover(event, item);
-                  else handleItemClick(item);
-                }}
-                sx={{
-                  position: 'relative',
-                  cursor: 'pointer',
-                }}
-              >
-                <Stack alignItems='center' gap={1} direction='row'>
-                  {item.icon}
-                  <Box sx={{ flexShrink: 0, ...item.textSx }}>{item.label}</Box>
-                  {item.extra}
-                  {item.children?.length ? arrowIcon : null}
-                </Stack>
-                {hoveredItem === item && item.children && (
-                  <Popover
-                    open={Boolean(subMenuAnchor)}
-                    anchorEl={subMenuAnchor}
-                    onClose={handleItemLeave}
-                    sx={{ pointerEvents: 'none' }}
-                    {...childrenProps}
-                  >
-                    <Box
-                      className='cascader-sub-list'
-                      sx={{
-                        pointerEvents: 'auto',
-                        p: 0.5,
-                      }}
-                    >
-                      {item.children.map(child =>
-                        child.show === false ? null : (
-                          <Box
-                            key={child.key}
-                            className='cascader-sub-item'
-                            onClick={event => {
-                              event.stopPropagation();
-                              handleItemClick(child);
-                            }}
-                            sx={{
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Stack alignItems='center' gap={1} direction='row'>
-                              {child.icon}
-                              <Box sx={{ flexShrink: 0, ...child.textSx }}>
-                                {child.label}
-                              </Box>
-                              {child.extra}
-                            </Stack>
-                          </Box>
-                        ),
-                      )}
+              <React.Fragment key={item.key}>
+                {item.dividerBefore && <Divider sx={{ my: 0.5 }} />}
+                <Box
+                  className='cascader-item'
+                  role='menuitem'
+                  aria-disabled={item.disabled || undefined}
+                  key={item.key}
+                  onMouseEnter={e => handleItemHover(e, item)}
+                  onMouseLeave={handleItemLeave}
+                  onClick={event => {
+                    event.stopPropagation();
+                    if (item.disabled) return;
+                    if (item.children?.length) handleItemHover(event, item);
+                    else handleItemClick(item);
+                  }}
+                  sx={{
+                    position: 'relative',
+                    cursor: item.disabled ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <Stack alignItems='center' gap={1} direction='row'>
+                    {item.icon}
+                    <Box sx={{ flexShrink: 0, ...item.textSx }}>
+                      {item.label}
                     </Box>
-                  </Popover>
-                )}
-              </Box>
+                    {item.extra}
+                    {item.children?.length ? arrowIcon : null}
+                  </Stack>
+                  {hoveredItem === item && item.children && (
+                    <Popover
+                      open={Boolean(subMenuAnchor)}
+                      anchorEl={subMenuAnchor}
+                      onClose={handleItemLeave}
+                      sx={{ pointerEvents: 'none' }}
+                      {...childrenProps}
+                    >
+                      <Box
+                        className='cascader-sub-list'
+                        onMouseEnter={cancelScheduledClose}
+                        onMouseLeave={handleItemLeave}
+                        sx={{
+                          pointerEvents: 'auto',
+                          p: 0.5,
+                        }}
+                      >
+                        {item.children.map(child =>
+                          child.show === false ? null : (
+                            <Box
+                              key={child.key}
+                              className='cascader-sub-item'
+                              role='menuitem'
+                              aria-disabled={child.disabled || undefined}
+                              onClick={event => {
+                                event.stopPropagation();
+                                handleItemClick(child);
+                              }}
+                              sx={{
+                                cursor: child.disabled
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                              }}
+                            >
+                              <Stack
+                                alignItems='center'
+                                gap={1}
+                                direction='row'
+                              >
+                                {child.icon}
+                                <Box sx={{ flexShrink: 0, ...child.textSx }}>
+                                  {child.label}
+                                </Box>
+                                {child.extra}
+                              </Stack>
+                            </Box>
+                          ),
+                        )}
+                      </Box>
+                    </Popover>
+                  )}
+                </Box>
+              </React.Fragment>
             ),
           )}
         </Box>

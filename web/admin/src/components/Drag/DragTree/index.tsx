@@ -38,6 +38,8 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
       onItemClick,
       onItemDoubleClick,
       onExpand,
+      onContextMenu,
+      contextTargetId,
     },
     ref,
   ) => {
@@ -73,6 +75,8 @@ const DragTree = forwardRef<DragTreeHandle, DragTreeProps>(
           onItemClick,
           onItemDoubleClick,
           onExpand,
+          onContextMenu,
+          contextTargetId,
         }}
       >
         <SortableTree

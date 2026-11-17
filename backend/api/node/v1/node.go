@@ -194,6 +194,8 @@ type NodeManagementEditReq struct {
 }
 
 type NodeManagementResp struct {
+	NodeType               domain.NodeType                    `json:"node_type,omitempty"`
+	InheritedSources       []domain.ManagementGrantSource     `json:"inherited_sources"`
 	ID                     string                             `json:"id"`
 	Grants                 []domain.DocumentManagementGrant   `json:"grants"`
 	ParentGrantConstraints [][]domain.DocumentManagementGrant `json:"parent_grant_constraints,omitempty"`

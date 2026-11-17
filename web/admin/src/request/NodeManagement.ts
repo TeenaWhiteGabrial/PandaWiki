@@ -3,6 +3,12 @@ import { DomainResponse, DomainDocumentManagementGrant } from './types';
 
 export interface NodeManagementResp {
   id: string;
+  node_type?: number;
+  inherited_sources?: {
+    id: string;
+    name: string;
+    grants: DomainDocumentManagementGrant[];
+  }[];
   grants?: DomainDocumentManagementGrant[];
   parent_grant_constraints?: DomainDocumentManagementGrant[][];
   has_parent_folder?: boolean;

@@ -1,3 +1,6 @@
+import { useDocumentContextMenu } from '../hooks/useDocumentContextMenu';
+import TreeMenu from '@/components/Drag/DragTree/TreeMenu';
+import { organizeDocumentMenu } from '../utils/documentMenu';
 import type { ITreeItem } from '@/api';
 import { message, Modal } from '@/components/ui';
 import type { TreeMenuOptions } from '@/components/Drag/DragTree/TreeMenu';
@@ -85,6 +88,9 @@ function useActions({
   onViewDocument,
 }: Omit<Props, 'children'>) {
   const [mutationVersion, setMutationVersion] = useState(0);
+  const contextMenu = useDocumentContextMenu(
+    `${kb_id}:${viewerId}:${mutationVersion}`,
+  );
   const refresh = () => {
     setMutationVersion(version => version + 1);
     reload();
@@ -330,39 +336,42 @@ function useActions({
       can_create_document: group.can_create_document,
       can_create_folder: group.can_create_folder,
     };
-    return [
-      ...actions.filter(
-        action =>
-          !['move', 'rename', 'properties', 'delete'].includes(action.key),
-      ),
-      ...(group.can_configure !== false
-        ? [
-            {
-              key: 'edit',
-              label: '修改目录',
-              onClick: () => setNavEditor({ nav }),
-            },
-            {
-              key: 'permission',
-              label: '目录权限',
-              onClick: () => setPermissionNav(nav),
-            },
-            ...(groups.length > 1
-              ? [
-                  {
-                    key: 'delete',
-                    label: '删除目录',
-                    color: 'error' as const,
-                    onClick: () => {
-                      setDeleteConfirmInput('');
-                      setDeletingNav(nav);
+    return organizeDocumentMenu(
+      [
+        ...actions.filter(
+          action =>
+            !['move', 'rename', 'properties', 'delete'].includes(action.key),
+        ),
+        ...(group.can_configure !== false
+          ? [
+              {
+                key: 'edit',
+                label: '修改栏目',
+                onClick: () => setNavEditor({ nav }),
+              },
+              {
+                key: 'permission',
+                label: '栏目权限',
+                onClick: () => setPermissionNav(nav),
+              },
+              ...(groups.length > 1
+                ? [
+                    {
+                      key: 'delete',
+                      label: '删除栏目',
+                      color: 'error' as const,
+                      onClick: () => {
+                        setDeleteConfirmInput('');
+                        setDeletingNav(nav);
+                      },
                     },
-                  },
-                ]
-              : []),
-          ]
-        : []),
-    ];
+                  ]
+                : []),
+            ]
+          : []),
+      ],
+      'nav',
+    );
   };
 
   const closeDeleteNav = () => {
@@ -387,6 +396,11 @@ function useActions({
 
   const dialogs = (
     <>
+      <TreeMenu
+        menu={contextMenu.state?.menu || []}
+        anchorPosition={contextMenu.state?.position || null}
+        onClose={contextMenu.close}
+      />
       <DocAddByCustomText
         open={!!createTarget || !!renameTarget}
         data={renameTarget || undefined}
@@ -557,6 +571,9 @@ function useActions({
   );
 
   return {
+    openContextMenu: contextMenu.open,
+    closeContextMenu: contextMenu.close,
+    refresh,
     menu,
     viewDocument,
     mutationVersion,

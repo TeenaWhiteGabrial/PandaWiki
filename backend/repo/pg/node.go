@@ -437,7 +437,7 @@ func (r *NodeRepository) GetNodeByID(ctx context.Context, id string) (*domain.No
 // bodies or file metadata. Published reader trees still obey current policies.
 func (r *NodeRepository) GetNodePermissionSnapshot(ctx context.Context, kbID string) (map[string]*domain.Node, error) {
 	var nodes []*domain.Node
-	if err := r.db.WithContext(ctx).Select("id, parent_id, permissions").Where("kb_id = ?", kbID).Find(&nodes).Error; err != nil {
+	if err := r.db.WithContext(ctx).Select("id, kb_id, nav_id, type, parent_id, permissions").Where("kb_id = ?", kbID).Find(&nodes).Error; err != nil {
 		return nil, err
 	}
 	result := make(map[string]*domain.Node, len(nodes))
@@ -1001,6 +1001,7 @@ func (r *NodeRepository) GetNodeReleaseDetailByKBIDAndID(ctx context.Context, kb
 		Model(&domain.KBReleaseNodeRelease{}).
 		Select(`node_releases.node_id AS id,
 			node_releases.kb_id,
+			kb_release_node_releases.nav_id,
 			node_releases.type,
 			node_releases.name,
 			node_releases.content,

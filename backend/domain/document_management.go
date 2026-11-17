@@ -10,8 +10,7 @@ const (
 	ManagementScopeCurrent      = "current"
 )
 
-// A grant group is a union of subjects at one hierarchy level. A manager must
-// match every applicable group from the node through its ancestors.
+// Management grants are additive: a local grant never revokes an ancestor grant.
 type DocumentManagementGrant struct {
 	SubjectType    string   `json:"subject_type"`
 	SubjectIDs     []string `json:"subject_ids"`
@@ -81,7 +80,7 @@ func (a *DocumentManagementAccess) CanManageNode(id string) bool {
 			return allowed
 		}
 	}
-	allowed := a.matchesAllManagementConstraints(a.ManagementGrantConstraintsForNode(id))
+	allowed := a.matchesAnyManagementGrant(a.ManagementGrantConstraintsForNode(id))
 	if a.evaluation != nil {
 		a.evaluation.managed[id] = allowed
 	}
@@ -99,94 +98,38 @@ func (a *DocumentManagementAccess) ManagementGrantsForNode(id string) []Document
 	return grants
 }
 
-// ManagementGrantConstraintsForNode returns the applicable grant groups from
-// this node, its ancestors, and its navigation root. Grants within each group
-// are alternatives; every returned group must be satisfied.
+// ManagementGrantConstraintsForNode retains the API grouping by source, but
+// groups are alternatives: matching any applicable ancestor or local grant wins.
 func (a *DocumentManagementAccess) ManagementGrantConstraintsForNode(id string) [][]DocumentManagementGrant {
-	return a.managementGrantConstraintsForNode(id, map[string]bool{})
-}
-
-func (a *DocumentManagementAccess) managementGrantConstraintsForNode(id string, visiting map[string]bool) (constraints [][]DocumentManagementGrant) {
 	if a == nil {
 		return nil
 	}
-	node, exists := a.Nodes[id]
-	if !exists || visiting[id] {
-		return nil
-	}
 	if a.evaluation != nil {
-		if cached, found := a.evaluation.constraints[id]; found {
-			return slices.Clone(cached)
+		if v, ok := a.evaluation.constraints[id]; ok {
+			return slices.Clone(v)
 		}
-		defer func() { a.evaluation.constraints[id] = slices.Clone(constraints) }()
 	}
-	visiting[id] = true
-	defer delete(visiting, id)
-
-	// Keep directory-scope rules: a current-directory grant does not itself
-	// authorize a nested folder. If any rule authorizes this folder, also require
-	// the principal to manage every parent folder, even if a direct child grant
-	// would otherwise match.
-	constraints = a.managementGrantConstraints(node, node.ParentID, 0, node.Type)
-	if len(constraints) == 0 || node.Type != NodeTypeFolder || node.ParentID == "" || node.ParentID == node.NavId {
-		return constraints
-	}
-	parent, ok := a.Nodes[node.ParentID]
-	if !ok || parent.Type != NodeTypeFolder || parent.NavId != node.NavId {
+	node := a.Nodes[id]
+	if node == nil {
 		return nil
 	}
-	parentConstraints := a.managementGrantConstraintsForNode(parent.ID, visiting)
-	if len(parentConstraints) == 0 {
-		return nil
-	}
-	return appendUniqueManagementConstraints(parentConstraints, constraints)
-}
-
-func appendUniqueManagementConstraints(result, additions [][]DocumentManagementGrant) [][]DocumentManagementGrant {
-	for _, addition := range additions {
-		duplicate := false
-		for _, existing := range result {
-			if len(existing) != len(addition) {
-				continue
-			}
-			duplicate = true
-			for index, grant := range existing {
-				other := addition[index]
-				if grant.SubjectType != other.SubjectType || grant.DirectoryScope != other.DirectoryScope || !slices.Equal(grant.SubjectIDs, other.SubjectIDs) {
-					duplicate = false
-					break
-				}
-			}
-			if duplicate {
-				break
-			}
-		}
-		if !duplicate {
-			result = append(result, addition)
-		}
+	result := a.managementGrantConstraints(node, node.ParentID, 0, node.Type)
+	if a.evaluation != nil {
+		a.evaluation.constraints[id] = slices.Clone(result)
 	}
 	return result
 }
 
-// ManagementGrantConstraintsForParentNode returns only the constraints
-// inherited by a node from its parent folders. Top-level nodes have no parent
-// folder and can delegate to any administrator.
+// Parent grants include navigation authorization, even for top-level folders.
 func (a *DocumentManagementAccess) ManagementGrantConstraintsForParentNode(id string) [][]DocumentManagementGrant {
 	if a == nil {
 		return nil
 	}
-	node, exists := a.Nodes[id]
-	if !exists {
+	node := a.Nodes[id]
+	if node == nil {
 		return nil
 	}
-	if node.ParentID == "" || node.ParentID == node.NavId {
-		return nil
-	}
-	parent := a.Nodes[node.ParentID]
-	if parent == nil || parent.Type != NodeTypeFolder || parent.NavId != node.NavId {
-		return [][]DocumentManagementGrant{{}}
-	}
-	return a.managementGrantConstraintsForNode(parent.ID, map[string]bool{})
+	return a.managementGrantConstraints(a.Nodes[node.ParentID], node.ParentID, 1, node.Type, node.NavId)
 }
 
 func (a *DocumentManagementAccess) managementGrantConstraints(current *Node, parentID string, distance int, targetType NodeType, navIDOverride ...string) [][]DocumentManagementGrant {
@@ -197,38 +140,78 @@ func (a *DocumentManagementAccess) managementGrantConstraints(current *Node, par
 	if current != nil {
 		navID = current.NavId
 	}
-	if len(navIDOverride) > 0 && navIDOverride[0] != "" {
+	if len(navIDOverride) > 0 {
 		navID = navIDOverride[0]
 	}
 	visited := map[string]bool{}
-	var constraints [][]DocumentManagementGrant
-	for current != nil && !visited[current.ID] {
+	var groups [][]DocumentManagementGrant
+	for current != nil {
+		if visited[current.ID] || current.NavId != navID {
+			return nil
+		}
 		visited[current.ID] = true
-		if current.NavId != navID {
-			return constraints
-		}
-		applicable := applicableManagementGrants(current.Permissions.ManagementGrants, distance, targetType)
-		if len(applicable) > 0 {
-			constraints = append(constraints, applicable)
-		}
-		// A top-level folder with an applicable local rule starts the folder
-		// hierarchy, so its scope defines managers below it. Navigation grants
-		// are a fallback when no local folder rule applies at this distance.
-		if current.Type == NodeTypeFolder && (current.ParentID == "" || current.ParentID == current.NavId) && len(applicable) > 0 {
-			return constraints
+		if applicable := applicableManagementGrants(current.Permissions.ManagementGrants, distance, targetType); len(applicable) > 0 {
+			groups = append(groups, applicable)
 		}
 		parentID = current.ParentID
-		current = a.Nodes[parentID]
+		if parentID == "" || parentID == navID {
+			break
+		}
+		parent := a.Nodes[parentID]
+		if parent == nil || parent.Type != NodeTypeFolder {
+			return nil
+		}
+		current = parent
 		distance++
 	}
-	if current == nil && (parentID == "" || parentID == navID) {
-		if nav := a.Navs[navID]; nav != nil {
-			if applicable := applicableManagementGrants(nav.Permissions.ManagementGrants, distance, targetType); len(applicable) > 0 {
-				constraints = append(constraints, applicable)
-			}
+	if current == nil && parentID != "" && parentID != navID {
+		return nil
+	}
+	// The navigation is the parent of the root node, not its alternative.
+	if current != nil {
+		distance++
+	}
+	if nav := a.Navs[navID]; nav != nil {
+		if applicable := applicableManagementGrants(nav.Permissions.ManagementGrants, distance, targetType); len(applicable) > 0 {
+			groups = append(groups, applicable)
 		}
 	}
-	return constraints
+	return groups
+}
+
+type ManagementGrantSource struct {
+	ID     string                    `json:"id"`
+	Name   string                    `json:"name"`
+	Grants []DocumentManagementGrant `json:"grants"`
+}
+
+// ManagementGrantSourcesForNode describes grants without exposing unrelated
+// content. Callers must authorize inspection of the target before returning it.
+func (a *DocumentManagementAccess) ManagementGrantSourcesForNode(id string) []ManagementGrantSource {
+	node := a.Nodes[id]
+	if node == nil || len(a.ManagementGrantConstraintsForNode(id)) == 0 {
+		return nil
+	}
+	var result []ManagementGrantSource
+	current := node
+	distance := 0
+	for current != nil {
+		if grants := applicableManagementGrants(current.Permissions.ManagementGrants, distance, node.Type); len(grants) > 0 {
+			result = append(result, ManagementGrantSource{ID: current.ID, Name: current.Name, Grants: grants})
+		}
+		if current.ParentID == "" || current.ParentID == node.NavId {
+			distance++
+			break
+		}
+		current = a.Nodes[current.ParentID]
+		distance++
+	}
+	if nav := a.Navs[node.NavId]; nav != nil {
+		if grants := applicableManagementGrants(nav.Permissions.ManagementGrants, distance, node.Type); len(grants) > 0 {
+			result = append(result, ManagementGrantSource{ID: "nav:" + nav.ID, Name: nav.Name, Grants: grants})
+		}
+	}
+	return result
 }
 
 func applicableManagementGrants(grants []DocumentManagementGrant, distance int, nodeType NodeType) []DocumentManagementGrant {
@@ -294,7 +277,7 @@ func (a *DocumentManagementAccess) CanCreateInNav(parentID, navID string, nodeTy
 	}
 	if parentID == "" || parentID == navID {
 		_, ok := a.Navs[navID]
-		return ok && (a.Global || a.matchesAllManagementConstraints(a.managementGrantConstraints(nil, navID, 1, nodeType, navID)))
+		return ok && (a.Global || a.matchesAnyManagementGrant(a.managementGrantConstraints(nil, navID, 1, nodeType, navID)))
 	}
 	parent, ok := a.Nodes[parentID]
 	if !ok || (navID != "" && parent.NavId != navID) {
@@ -325,19 +308,16 @@ func (a *DocumentManagementAccess) canManageAt(node *Node, parentID string, crea
 		navID = current.NavId
 		distance = 1
 	}
-	return a.matchesAllManagementConstraints(a.managementGrantConstraints(current, parentID, distance, node.Type, navID))
+	return a.matchesAnyManagementGrant(a.managementGrantConstraints(current, parentID, distance, node.Type, navID))
 }
 
-func (a *DocumentManagementAccess) matchesAllManagementConstraints(constraints [][]DocumentManagementGrant) bool {
-	if len(constraints) == 0 {
-		return false
-	}
-	for _, grants := range constraints {
-		if !a.matchesGrants(grants, a.Principal) {
-			return false
+func (a *DocumentManagementAccess) matchesAnyManagementGrant(groups [][]DocumentManagementGrant) bool {
+	for _, grants := range groups {
+		if a.matchesGrants(grants, a.Principal) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // Destructive operations must be authorized for every affected descendant.

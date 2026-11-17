@@ -26,7 +26,15 @@ func (u *NodeUsecase) GetNodeManagement(ctx context.Context, kbID, nodeID string
 	if !canConfigure {
 		return nil, fmt.Errorf("没有此文档或目录的管理权限")
 	}
+	sources := access.ManagementGrantSourcesForNode(nodeID)
+	inherited := make([]domain.ManagementGrantSource, 0, len(sources))
+	for _, source := range sources {
+		if source.ID != nodeID {
+			inherited = append(inherited, source)
+		}
+	}
 	return &v1.NodeManagementResp{
+		NodeType: node.Type, InheritedSources: inherited,
 		ID:                     nodeID,
 		Grants:                 node.Permissions.ManagementGrants,
 		ParentGrantConstraints: access.ManagementGrantConstraintsForParentNode(nodeID),
@@ -59,8 +67,11 @@ func (u *NodeUsecase) EditNodeManagement(ctx context.Context, req *v1.NodeManage
 	if err := validateManagementGrantChanges(currentGroups, req.Grants); err != nil {
 		return err
 	}
-	if err := u.enterprise.ValidateManagementGrantNarrowing(ctx, access, req.IDs, req.Grants); err != nil {
-		return err
+	for _, id := range req.IDs {
+		node := access.Nodes[id]
+		if node != nil && node.Type == domain.NodeTypeDocument && len(req.Grants) > 0 && !managementGrantsUnchanged(node.Permissions.ManagementGrants, req.Grants) {
+			return fmt.Errorf("文档管理权限由所属目录分配，请在目录中添加管理员")
+		}
 	}
 	if err := u.enterprise.ValidateManagementGrantTargets(ctx, access, req.Grants); err != nil {
 		return err
@@ -165,6 +176,10 @@ func clearManagementGrantsFromPermissions(permissions *domain.NodePermissions) {
 		return
 	}
 	permissions.ManagementGrants = nil
+	permissions.ReadingRules = append([]domain.ReadingRule(nil), permissions.ReadingRules...)
+	for i := range permissions.ReadingRules {
+		clearManagementGrantsFromPermissions(&permissions.ReadingRules[i].Permissions)
+	}
 	permissions.Constraints = append([]domain.NodePermissions(nil), permissions.Constraints...)
 	for index := range permissions.Constraints {
 		clearManagementGrantsFromPermissions(&permissions.Constraints[index])

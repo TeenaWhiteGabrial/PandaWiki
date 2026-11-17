@@ -175,8 +175,8 @@ func (u *EnterpriseUsecase) ResolveShareNodePermissions(ctx context.Context, nod
 	return u.resolvePermissionHierarchy(ctx, nodeID, parentID, current)
 }
 
-// resolvePermissionHierarchy keeps the closest explicit rule as the primary
-// rule and adds every applicable ancestor rule as an AND constraint.
+// Resolve reading rules using the closest new policy boundary; keep historical
+// pyramid constraints for nodes that have not been converted.
 func (u *EnterpriseUsecase) resolvePermissionHierarchy(ctx context.Context, nodeID, parentID string, current domain.NodePermissions) (domain.NodePermissions, error) {
 	return u.newTreePermissionResolver(ctx, nil)(nodeID, parentID, current)
 }
@@ -185,9 +185,12 @@ func resolvePermissionHierarchy(nodeID, parentID string, current domain.NodePerm
 	entries := []nodePermissionHierarchyEntry{{permissions: current, parentID: parentID}}
 	visited := map[string]struct{}{nodeID: {}}
 	nextParentID := parentID
-	for depth := 0; depth < 20 && nextParentID != ""; depth++ {
+	for depth := 0; nextParentID != ""; depth++ {
+		if depth >= 1024 {
+			return domain.NodePermissions{}, fmt.Errorf("目录层级过深")
+		}
 		if _, ok := visited[nextParentID]; ok {
-			break
+			return domain.NodePermissions{}, fmt.Errorf("目录结构存在循环")
 		}
 		visited[nextParentID] = struct{}{}
 
@@ -202,7 +205,10 @@ func resolvePermissionHierarchy(nodeID, parentID string, current domain.NodePerm
 		entries = append(entries, nodePermissionHierarchyEntry{permissions: parentNode.Permissions, parentID: parentNode.ParentID})
 		nextParentID = parentNode.ParentID
 	}
-	return composeNodePermissionHierarchy(entries), nil
+	resolved := composeNodePermissionHierarchy(entries)
+	resolved.ReadingDistance = len(entries)
+	resolved.ReadingTargetDocument = current.ReadingTargetDocument
+	return resolved, nil
 }
 
 type nodePermissionHierarchyEntry struct {
@@ -226,26 +232,32 @@ func composeNodePermissionHierarchy(entries []nodePermissionHierarchyEntry) doma
 		seen[key] = struct{}{}
 		rules = append(rules, rule)
 	}
-	for _, entry := range entries {
-		applies := !shouldInheritNodePermissions(entry.permissions, entry.parentID)
-		if entry.parentID == "" && !hasExplicitNodePermissionRule(entry.permissions) {
-			applies = false
+	boundary := false
+	for distance, entry := range entries {
+		if entry.permissions.ReadingVersion == 2 {
+			if entry.permissions.Inherit != nil && *entry.permissions.Inherit {
+				continue
+			}
+			appendRule(readingPolicyAtDistance(entry.permissions, distance, entries[0].permissions.ReadingTargetDocument))
+			boundary = true
+			break
 		}
-		if !applies {
+		if shouldInheritNodePermissions(entry.permissions, entry.parentID) || !hasExplicitNodePermissionRule(entry.permissions) {
 			continue
 		}
 		appendRule(entry.permissions)
-		// A local rule captures the parent audience as it existed when saved.
-		// Current ancestor rules are still appended below, so later tightening
-		// applies while later widening cannot expand this saved child.
 		for _, snapshotRule := range entry.permissions.ParentPermissionSnapshot {
 			appendRule(snapshotRule)
 		}
 	}
 	if len(rules) == 0 {
+		if entries[0].permissions.ReadingVersion == 2 {
+			return entries[0].permissions
+		}
 		return domain.NodePermissions{}
 	}
 	resolved := rules[0]
+	resolved.ReadingBoundary = boundary
 	if len(rules) > 1 {
 		resolved.Constraints = append([]domain.NodePermissions(nil), rules[1:]...)
 	}
@@ -298,7 +310,7 @@ func shouldInheritNodePermissions(perm domain.NodePermissions, parentID string) 
 }
 
 func hasExplicitNodePermissionRule(perm domain.NodePermissions) bool {
-	return perm.ScopeType != "" ||
+	return perm.ReadingVersion == 2 || perm.ScopeType != "" ||
 		perm.AllowAllUsers ||
 		len(perm.AllowedPermissionLevelIDs) > 0 ||
 		perm.MinPermissionLevelID != "" ||
@@ -310,6 +322,20 @@ func hasExplicitNodePermissionRule(perm domain.NodePermissions) bool {
 }
 
 func (u *EnterpriseUsecase) MergeNodeAndNavPermissions(nodePerm, navPerm domain.NodePermissions) domain.NodePermissions {
+	if nodePerm.ReadingBoundary || (nodePerm.ReadingVersion == 2 && (nodePerm.Inherit == nil || !*nodePerm.Inherit)) {
+		return nodePerm
+	}
+	if navPerm.ReadingVersion == 2 {
+		nav := readingPolicyAtDistance(navPerm, nodePerm.ReadingDistance, nodePerm.ReadingTargetDocument)
+		if !nodePerm.HasEnterpriseRule() || (nodePerm.ReadingVersion == 2 && nodePerm.Inherit != nil && *nodePerm.Inherit) {
+			return nav
+		}
+		nodePerm.Constraints = append(nodePerm.Constraints, nav)
+		return nodePerm
+	}
+	if nodePerm.ReadingVersion == 2 && nodePerm.Inherit != nil && *nodePerm.Inherit {
+		return navPerm
+	}
 	if !navPerm.HasEnterpriseRule() {
 		return nodePerm
 	}
@@ -368,6 +394,25 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 		if !u.canAccess(constraint, access) {
 			return false
 		}
+	}
+	if perm.ReadingVersion == 2 {
+		if access == nil || access.PrincipalID == "" || access.PrincipalID == "visitor" {
+			return false
+		}
+		if slices.Contains(perm.DeniedUserIDs, access.PrincipalID) {
+			return false
+		}
+		for _, id := range access.DepartmentIDs {
+			if slices.Contains(perm.DeniedDepartmentIDs, id) {
+				return false
+			}
+		}
+		for _, rule := range perm.ReadingRules {
+			if u.canAccess(rule.Permissions, access) {
+				return true
+			}
+		}
+		return false
 	}
 	if !perm.HasEnterpriseRule() {
 		return true
@@ -453,6 +498,12 @@ func (u *EnterpriseUsecase) canAccess(perm domain.NodePermissions, access *domai
 }
 
 func (u *EnterpriseUsecase) NormalizeNodePermissions(ctx context.Context, perm domain.NodePermissions) (domain.NodePermissions, error) {
+	if perm.ReadingVersion != 0 && perm.ReadingVersion != 2 {
+		return perm, fmt.Errorf("不支持的查阅规则版本")
+	}
+	if perm.ReadingVersion == 2 {
+		return u.normalizeReadingRules(ctx, perm)
+	}
 	if err := validateNodePermissionScope(perm); err != nil {
 		return perm, err
 	}
@@ -509,6 +560,13 @@ func (u *EnterpriseUsecase) normalizeResolvedNodePermissions(ctx context.Context
 }
 
 func normalizeResolvedNodePermissions(perm domain.NodePermissions, lookup func(string) (*domain.PermissionLevel, error)) (domain.NodePermissions, error) {
+	for i := range perm.ReadingRules {
+		p, err := normalizeResolvedNodePermissions(perm.ReadingRules[i].Permissions, lookup)
+		if err != nil {
+			return perm, err
+		}
+		perm.ReadingRules[i].Permissions = p
+	}
 	if !config.PermissionLevelsDisabled() && (perm.MinPermissionLevelID != "" || len(perm.AllowedPermissionLevelIDs) > 0) {
 		// Existing permission data may predate current validation rules. Reading
 		// effective permissions must still resolve level references, but must not

@@ -178,34 +178,14 @@ func TestManagementGrantScopeCurrentIsLegacyOnly(t *testing.T) {
 	}
 }
 
-func TestNestedManagementDelegationUsesParentAudienceNotDepartmentTree(t *testing.T) {
-	users := []domain.UserSummary{
-		{ID: "admin-a", Role: consts.UserRoleManager, DepartmentIDs: []string{"engineering"}},
-		{ID: "admin-b", Role: consts.UserRoleAdmin, DepartmentIDs: []string{"engineering"}},
-		{ID: "admin-c", Role: consts.UserRoleManager, DepartmentIDs: []string{"finance"}},
-		{ID: "ordinary", Role: consts.UserRoleUser, DepartmentIDs: []string{"engineering"}},
+func TestLegacyDocumentManagementCannotBeExpanded(t *testing.T) {
+	current := []domain.DocumentManagementGrant{{SubjectType: domain.ManagementSubjectUser, SubjectIDs: []string{"alice"}, DirectoryScope: domain.ManagementScopeTree}}
+	if !managementGrantsUnchanged(current, current) {
+		t.Fatal("unchanged legacy grant rejected")
 	}
-	ancestors := map[string][]string{
-		"engineering": {"engineering"},
-		"finance":     {"finance"},
-	}
-	parentScope := [][]domain.DocumentManagementGrant{{{
-		SubjectType: domain.ManagementSubjectDepartment, SubjectIDs: []string{"engineering"}, DirectoryScope: domain.ManagementScopeTree,
-	}}}
-	grantB := []domain.DocumentManagementGrant{{
-		SubjectType: domain.ManagementSubjectUser, SubjectIDs: []string{"admin-b"}, DirectoryScope: domain.ManagementScopeTree,
-	}}
-	if !managementGrantAudienceWithinParents(users, grantB, parentScope, ancestors) {
-		t.Fatal("an administrator matching the parent department scope should be delegable")
-	}
-	grantC := []domain.DocumentManagementGrant{{
-		SubjectType: domain.ManagementSubjectUser, SubjectIDs: []string{"admin-c"}, DirectoryScope: domain.ManagementScopeTree,
-	}}
-	if managementGrantAudienceWithinParents(users, grantC, parentScope, ancestors) {
-		t.Fatal("an administrator outside the parent management audience must not be delegable")
-	}
-	if !managementGrantAudienceWithinParents(users, grantC, nil, ancestors) {
-		t.Fatal("a top-level directory has no parent audience restriction")
+	next := []domain.DocumentManagementGrant{{SubjectType: domain.ManagementSubjectUser, SubjectIDs: []string{"bob"}, DirectoryScope: domain.ManagementScopeTree}}
+	if managementGrantsUnchanged(current, next) {
+		t.Fatal("new document manager accepted")
 	}
 }
 

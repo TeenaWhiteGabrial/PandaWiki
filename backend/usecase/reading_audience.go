@@ -11,9 +11,14 @@ import (
 	"github.com/chaitin/panda-wiki/domain"
 )
 
-// prepareReadingPermissions is shared by saving and previewing. Client-provided
-// effective constraints/snapshots never replace the server's parent policy.
+// prepareReadingPermissions is shared by saving and previewing. Legacy rules
+// keep server-captured parent constraints; v2 rules define an explicit boundary
+// and may carry a copied historical compound rule inside their rule list.
 func (u *EnterpriseUsecase) prepareReadingPermissions(ctx context.Context, current, draft domain.NodePermissions, node bool) (domain.NodePermissions, error) {
+	if draft.ReadingVersion == 2 {
+		draft.ManagementGrants = current.ManagementGrants
+		return u.NormalizeNodePermissions(ctx, draft)
+	}
 	draft.Constraints = nil
 	draft.ParentPermissionSnapshot = nil
 	draft.ManagementGrants = current.ManagementGrants
@@ -54,7 +59,7 @@ func (u *NodeUsecase) ReadingAudience(ctx context.Context, req *v1.ReadingAudien
 			if err != nil {
 				return nil, err
 			}
-			if local.Inherit == nil || !*local.Inherit {
+			if local.ReadingVersion != 2 && (local.Inherit == nil || !*local.Inherit) {
 				local.ParentPermissionSnapshot, err = u.enterprise.ParentPermissionSnapshot(ctx, req.KBID, node.ParentID, node.NavId)
 				if err != nil {
 					return nil, err
@@ -146,10 +151,17 @@ func (u *NodeUsecase) ReadingAudience(ctx context.Context, req *v1.ReadingAudien
 }
 
 func (u *EnterpriseUsecase) resolveDraftReadingPolicy(ctx context.Context, nodes map[string]*domain.Node, node *domain.Node, local domain.NodePermissions, drafts map[string]domain.NodePermissions) (domain.NodePermissions, error) {
+	local.ReadingTargetDocument = node.Type == domain.NodeTypeDocument
 	entries := []nodePermissionHierarchyEntry{{permissions: local, parentID: node.ParentID}}
 	seen := map[string]bool{node.ID: true}
 	parentID := node.ParentID
-	for depth := 0; depth < 20 && parentID != "" && !seen[parentID]; depth++ {
+	for depth := 0; parentID != ""; depth++ {
+		if parentID == node.NavId || parentID == "nav:"+node.NavId {
+			break
+		}
+		if depth >= 1024 || seen[parentID] {
+			return domain.NodePermissions{}, fmt.Errorf("目录结构无效")
+		}
 		seen[parentID] = true
 		parent := nodes[parentID]
 		if parent == nil || parent.KBID != node.KBID || parent.NavId != node.NavId {
@@ -162,7 +174,10 @@ func (u *EnterpriseUsecase) resolveDraftReadingPolicy(ctx context.Context, nodes
 		entries = append(entries, nodePermissionHierarchyEntry{permissions: permissions, parentID: parent.ParentID})
 		parentID = parent.ParentID
 	}
-	return u.normalizeResolvedNodePermissions(ctx, composeNodePermissionHierarchy(entries))
+	resolved := composeNodePermissionHierarchy(entries)
+	resolved.ReadingDistance = len(entries)
+	resolved.ReadingTargetDocument = node.Type == domain.NodeTypeDocument
+	return u.normalizeResolvedNodePermissions(ctx, resolved)
 }
 
 func (u *NodeUsecase) inheritedReadingSource(ctx context.Context, access *domain.DocumentManagementAccess, node *domain.Node) (*v1.ReadingAudienceSource, error) {
@@ -221,6 +236,14 @@ func unrestrictedReadingPolicy(policy domain.NodePermissions) bool {
 		}
 	}
 	if len(policy.DeniedUserIDs) > 0 || len(policy.DeniedDepartmentIDs) > 0 {
+		return false
+	}
+	if policy.ReadingVersion == 2 {
+		for _, rule := range policy.ReadingRules {
+			if unrestrictedReadingPolicy(rule.Permissions) {
+				return true
+			}
+		}
 		return false
 	}
 	if policy.AllowAllUsers {

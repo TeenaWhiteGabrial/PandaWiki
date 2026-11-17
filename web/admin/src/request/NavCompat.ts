@@ -1,15 +1,6 @@
 import httpClient, { ContentType } from './httpClient';
-export interface NavEnterprisePermissions {
-  scope_type?: string;
-  min_permission_level_id?: string;
-  min_permission_level_rank?: number;
-  allowed_permission_level_ids?: string[];
-  allowed_department_ids?: string[];
-  allowed_user_ids?: string[];
-  allow_all_users?: boolean;
-  denied_department_ids?: string[];
-  denied_user_ids?: string[];
-}
+import type { DomainNodePermissions } from './types';
+export type NavEnterprisePermissions = DomainNodePermissions;
 
 export interface NavPermissionResp {
   id: string;

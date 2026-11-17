@@ -53,11 +53,14 @@ const Member = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
-  const [curUser, setCurUser] = useState<UserListItemCompat | null>(null);
-  const [curType, setCurType] = useState<'delete' | 'reset-password' | null>(
-    null,
-  );
-  const [enterpriseOpen, setEnterpriseOpen] = useState(false);
+  const [dialog, setDialog] = useState<{
+    type: 'delete' | 'reset-password' | 'enterprise';
+    user: UserListItemCompat;
+  } | null>(null);
+  const closeDialog = () => {
+    // A response from a previous dialog must not dismiss a newer operation.
+    setDialog(current => (current === dialog ? null : current));
+  };
   const [departments, setDepartments] = useState<Department[]>([]);
   const [levelNameMap, setLevelNameMap] = useState<Record<string, string>>({});
   const [filters, setFilters] = useState<{
@@ -181,8 +184,7 @@ const Member = () => {
               record.role !== ConstsUserRole.UserRoleUser
             }
             onClick={() => {
-              setCurUser(record);
-              setEnterpriseOpen(true);
+              setDialog({ type: 'enterprise', user: record });
             }}
           >
             组织和权限
@@ -278,8 +280,7 @@ const Member = () => {
                   user?.id !== record.id)
               }
               onClick={() => {
-                setCurUser(record);
-                setCurType('reset-password');
+                setDialog({ type: 'reset-password', user: record });
               }}
             >
               {user?.id === record.id ? '修改密码' : '重置密码'}
@@ -296,8 +297,7 @@ const Member = () => {
                 color='error'
                 sx={{ p: 0, minWidth: 'auto' }}
                 onClick={() => {
-                  setCurUser(record);
-                  setCurType('delete');
+                  setDialog({ type: 'delete', user: record });
                 }}
               >
                 删除
@@ -485,31 +485,33 @@ const Member = () => {
           )
         }
       />
-      {curUser && curType === 'reset-password' && (
+      {dialog?.type === 'reset-password' && (
         <MemberUpdate
-          user={curUser}
+          key={dialog.user.id}
+          user={dialog.user}
           refresh={getData}
-          type={user?.id === curUser.id ? 'update' : 'reset'}
+          onClose={closeDialog}
+          type={user?.id === dialog.user.id ? 'update' : 'reset'}
         />
       )}
-      <MemberEnterpriseAccess
-        open={enterpriseOpen}
-        user={curUser}
-        refresh={getData}
-        onClose={() => {
-          setEnterpriseOpen(false);
-          setCurUser(null);
-        }}
-      />
-      <MemberDelete
-        open={!!curUser && curType === 'delete'}
-        onClose={() => {
-          setCurType(null);
-          setCurUser(null);
-        }}
-        user={curUser}
-        refresh={getData}
-      />
+      {dialog?.type === 'enterprise' && (
+        <MemberEnterpriseAccess
+          key={dialog.user.id}
+          open
+          user={dialog.user}
+          refresh={getData}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.type === 'delete' && (
+        <MemberDelete
+          key={dialog.user.id}
+          open
+          onClose={closeDialog}
+          user={dialog.user}
+          refresh={getData}
+        />
+      )}
     </Card>
   );
 };

@@ -21,9 +21,10 @@ type UpdateMemberProps = {
   user: V1UserListItemResp;
   refresh: () => void;
   type: 'reset' | 'update';
+  onClose: () => void;
 };
 
-const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
+const MemberUpdate = ({ user, refresh, type, onClose }: UpdateMemberProps) => {
   const [updateOpen, setUpdateOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [password, setPassword] = useState('');
@@ -51,6 +52,7 @@ const MemberUpdate = ({ user, refresh, type }: UpdateMemberProps) => {
     setShowConfirmPassword(false);
     reset();
     setLoading(false);
+    onClose();
     refresh();
   };
 

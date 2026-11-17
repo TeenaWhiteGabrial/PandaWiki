@@ -92,6 +92,55 @@ func (u *NavUsecase) GetReleaseList(ctx context.Context, kbID string) ([]v1.NavL
 	return navs, nil
 }
 
+// GetShareReleaseList includes a navigation root when it is itself readable
+// or is needed as the path to independently authorized published descendants.
+func (u *NavUsecase) GetShareReleaseList(ctx context.Context, kbID, userID string) ([]v1.NavListResp, error) {
+	navs, err := u.navRepo.GetReleaseList(ctx, kbID)
+	if err != nil {
+		return nil, err
+	}
+	principal, err := u.enterprise.BuildShareAccessContext(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	readable := map[string]bool{}
+	needsPaths := false
+	for _, nav := range navs {
+		readable[nav.ID] = u.enterprise.CanVisible(nav.Permissions, principal)
+		if !readable[nav.ID] {
+			needsPaths = true
+		}
+	}
+	paths := map[string]bool{}
+	if needsPaths {
+		graph, err := u.nodeRepo.GetNodeReleaseListByKBID(ctx, kbID, pg.TreeNodeQuery{PolicyOnly: true})
+		if err != nil {
+			return nil, err
+		}
+		nodeUsecase := &NodeUsecase{nodeRepo: u.nodeRepo, navRepo: u.navRepo, enterprise: u.enterprise}
+		visible, err := nodeUsecase.filterShareNodesWithAccess(ctx, kbID, graph, navs, principal)
+		if err != nil {
+			return nil, err
+		}
+		for _, node := range visible {
+			paths[node.NavId] = true
+		}
+	}
+	result := make([]v1.NavListResp, 0, len(navs))
+	for _, nav := range navs {
+		if !readable[nav.ID] && !paths[nav.ID] {
+			continue
+		}
+		if !readable[nav.ID] {
+			nav.Permissions = domain.NodePermissions{}
+		} else {
+			clearManagementGrantsFromPermissions(&nav.Permissions)
+		}
+		result = append(result, nav)
+	}
+	return result, nil
+}
+
 func (u *NavUsecase) GetPermission(ctx context.Context, kbID, id string) (*v1.NavPermissionResp, error) {
 	nav, err := u.navRepo.GetByKBID(ctx, kbID, id)
 	if err != nil {

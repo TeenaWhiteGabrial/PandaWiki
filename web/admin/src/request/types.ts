@@ -1170,7 +1170,14 @@ export interface DomainDocumentManagementGrant {
   directory_scope: 'current_and_descendants' | 'current';
 }
 
+export interface DomainReadingRule {
+  permissions: DomainNodePermissions;
+  include_descendants: boolean;
+}
+
 export interface DomainNodePermissions {
+  reading_version?: number;
+  reading_rules?: DomainReadingRule[];
 	constraints?: DomainNodePermissions[];
   allowed_permission_level_ids?: string[];
 	allow_all_users?: boolean;

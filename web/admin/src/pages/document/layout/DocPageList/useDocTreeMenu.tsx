@@ -1,3 +1,4 @@
+import { organizeDocumentMenu } from '../../utils/documentMenu';
 import { ITreeItem } from '@/api';
 import {
   TreeMenuItem,
@@ -29,12 +30,15 @@ export function useDocTreeMenu(
 
   return useCallback(
     (opra: TreeMenuOptions): TreeMenuItem[] => {
-      const { item, createItem, renameItem, isEditing } = opra;
+      const { item, createItem, renameItem, isEditing, openFolder } = opra;
       if (readOnly || item.can_manage === false || item.placeholder) return [];
       const menuItems: TreeMenuItem[] = [];
 
       if (!readOnly && item.type === 1) {
         menuItems.push(
+          ...(openFolder
+            ? [{ key: 'open-folder', label: '打开', onClick: openFolder }]
+            : []),
           { label: '创建文件夹', key: 'folder', onClick: () => createItem(1) },
           {
             label: '创建文档',
@@ -108,7 +112,7 @@ export function useDocTreeMenu(
             onClick: () => handleEdit(item),
           });
         }
-        if (!readOnly && item.file_readonly && item.file_key) {
+        if (!readOnly && item.file_key) {
           if (handleDownloadFile) {
             menuItems.push({
               label: '下载原文件',
@@ -155,6 +159,11 @@ export function useDocTreeMenu(
         menuItems.push({
           label: '用户端查看',
           key: 'front_doc',
+          disabled: item.status !== 2 && !item.publisher_id,
+          disabledReason:
+            item.status !== 2 && !item.publisher_id
+              ? '发布后可查看'
+              : undefined,
           onClick: () => handleFrontDoc(item.id),
         });
       }
@@ -171,17 +180,20 @@ export function useDocTreeMenu(
         });
       }
 
-      return menuItems.filter(
-        action =>
-          !(
-            ['folder', 'batch-import-zip'].includes(action.key) &&
-            item.can_create_folder === false
-          ) &&
-          !(
-            ['doc', ConstsCrawlerSource.CrawlerSourceFile].includes(
-              action.key,
-            ) && item.can_create_document === false
-          ),
+      return organizeDocumentMenu(
+        menuItems.filter(
+          action =>
+            !(
+              ['folder', 'batch-import-zip'].includes(action.key) &&
+              item.can_create_folder === false
+            ) &&
+            !(
+              ['doc', ConstsCrawlerSource.CrawlerSourceFile].includes(
+                action.key,
+              ) && item.can_create_document === false
+            ),
+        ),
+        item.type === 2 ? 'document' : 'folder',
       );
     },
     [

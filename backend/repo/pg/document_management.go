@@ -56,7 +56,7 @@ func documentManagementAccess(ctx context.Context, db *store.DB, kbID, userID st
 		access.Nodes[node.ID] = node
 	}
 	var navs []*domain.Nav
-	if err := db.WithContext(ctx).Select("id, kb_id, permissions").Where("kb_id = ?", kbID).Find(&navs).Error; err != nil {
+	if err := db.WithContext(ctx).Select("id, kb_id, name, permissions").Where("kb_id = ?", kbID).Find(&navs).Error; err != nil {
 		return nil, err
 	}
 	for _, nav := range navs {

@@ -46,6 +46,13 @@ func (u *EnterpriseUsecase) newTreePermissionResolver(ctx context.Context, snaps
 		return level, err
 	}
 	return func(id, parentID string, permissions domain.NodePermissions) (domain.NodePermissions, error) {
+		current, err := lookupNode(id)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.NodePermissions{}, err
+		}
+		if current != nil {
+			permissions.ReadingTargetDocument = current.Type == domain.NodeTypeDocument
+		}
 		resolved, err := resolvePermissionHierarchy(id, parentID, permissions, lookupNode)
 		if err != nil {
 			return domain.NodePermissions{}, err

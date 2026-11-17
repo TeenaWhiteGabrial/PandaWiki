@@ -1,3 +1,4 @@
+import { contextSelection, usesNativeContextMenu } from '../utils/contextMenu';
 import { useDocumentActions } from './DocumentActionsProvider';
 import type { ITreeItem } from '@/api';
 import TreeMenu from '@/components/Drag/DragTree/TreeMenu';
@@ -65,6 +66,8 @@ const DocPageFileManager = ({
 }: DocPageFileManagerProps) => {
   const {
     menu,
+    openContextMenu,
+    closeContextMenu,
     mutationVersion,
     permissionCatalog,
     openCreate,
@@ -73,8 +76,10 @@ const DocPageFileManager = ({
     openMove,
     openDelete,
     openAddNav,
+    refresh,
     viewDocument,
   } = useDocumentActions();
+  useEffect(closeContextMenu, [folderId, navId, closeContextMenu]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   useEffect(() => {
@@ -453,7 +458,44 @@ const DocPageFileManager = ({
             <Box sx={{ width: 168, textAlign: 'right' }}>状态</Box>
           </Stack>
         </Stack>
-        <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
+        <Box
+          sx={{ flex: 1, overflow: 'auto', p: 1.5 }}
+          onContextMenu={event => {
+            if (
+              usesNativeContextMenu(event.target) ||
+              (event.target as Element).closest('[data-document-row]')
+            )
+              return;
+            const actions =
+              !loading && folderId
+                ? menu({
+                    item: currentFolderTarget,
+                    createItem: () => undefined,
+                    renameItem: () => undefined,
+                    isEditing: false,
+                    removeItem: () => undefined,
+                  }).filter(action =>
+                    ['folder', 'doc', 'file', 'batch-import-zip'].includes(
+                      action.key,
+                    ),
+                  )
+                : [];
+            if (!folderId && !readOnlyUser && canManageRoots)
+              actions.push({
+                key: 'new-nav',
+                label: '新建栏目',
+                onClick: openAddNav,
+              });
+            actions.push({
+              key: 'refresh',
+              label: '刷新',
+              dividerBefore: actions.length > 0,
+              onClick: refresh,
+            });
+            setSelectedItemIds([]);
+            openContextMenu(event, actions);
+          }}
+        >
           {currentItems.length === 0 ? (
             <Stack
               alignItems='center'
@@ -502,6 +544,12 @@ const DocPageFileManager = ({
                   createItem: () => undefined,
                   renameItem: () => undefined,
                   isEditing: false,
+                  openFolder: isFolder
+                    ? () => {
+                        setSelectedId(item.id || null);
+                        onFolderChange(item.id || '');
+                      }
+                    : undefined,
                   removeItem: () => undefined,
                 });
                 const ragStatusMeta = getRagStatusMeta(item);
@@ -523,6 +571,49 @@ const DocPageFileManager = ({
                 return (
                   <Stack
                     key={item.id}
+                    data-document-row
+                    onContextMenu={event => {
+                      if (usesNativeContextMenu(event.target)) return;
+                      const ids = contextSelection(
+                        item.id || '',
+                        selectedItemIds,
+                        !itemReadOnly && !item.explorerKind,
+                      );
+                      setSelectedId(item.id || null);
+                      setSelectedItemIds(ids);
+                      const batch = selectedItems.filter(entry =>
+                        ids.includes(entry.id!),
+                      );
+                      const actions =
+                        batch.length > 1
+                          ? [
+                              {
+                                key: 'batch-move',
+                                label: `移动所选 ${batch.length} 项`,
+                                onClick: () => openMove(batch),
+                              },
+                              {
+                                key: 'batch-delete',
+                                label: `删除所选 ${batch.length} 项`,
+                                color: 'error' as const,
+                                dividerBefore: true,
+                                onClick: () => openDelete(batch),
+                              },
+                            ]
+                          : resolvedActionMenu.length
+                            ? resolvedActionMenu
+                            : isFolder
+                              ? [
+                                  {
+                                    key: 'open-folder',
+                                    label: '打开',
+                                    onClick: () =>
+                                      onFolderChange(item.id || ''),
+                                  },
+                                ]
+                              : [];
+                      openContextMenu(event, actions);
+                    }}
                     direction='row'
                     alignItems='center'
                     gap={1.5}
