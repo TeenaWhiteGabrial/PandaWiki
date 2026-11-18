@@ -1,18 +1,12 @@
 'use client';
 
 import SecureFilePreview, { type AccessError } from '@panda-wiki/file-preview';
-import { clearAuthStorage } from '@/utils/auth';
+import { handleReaderAuthFailure } from '@/utils/sessionRecovery';
 
-const onAccessError = ({ data }: AccessError) => {
+const onAccessError = ({ status, data }: AccessError) => {
   const base = (window._BASE_PATH_ || '').replace(/\/$/, '');
-  if (data.code === 40101) {
-    clearAuthStorage();
-    if (location.pathname !== `${base}/auth/login`)
-      location.href = `${base}/auth/login?redirect=${encodeURIComponent(location.pathname.slice(base.length) + location.search)}`;
-  } else if (
-    data.code === 40302 &&
-    location.pathname !== `${base}/auth/login`
-  ) {
+  void handleReaderAuthFailure(status, data.code);
+  if (data.code === 40302 && location.pathname !== `${base}/auth/login`) {
     location.href = `${base}/auth/login?change_password=1`;
   }
 };

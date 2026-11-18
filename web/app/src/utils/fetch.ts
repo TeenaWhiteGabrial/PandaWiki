@@ -1,4 +1,4 @@
-import { clearAuthStorage } from './auth';
+import { handleReaderAuthFailure } from './sessionRecovery';
 type SSECallback<T> = (data: T) => void;
 type SSEErrorCallback = (error: Error) => void;
 type SSECompleteCallback = () => void;
@@ -83,15 +83,19 @@ class SSEClient<T> {
         if (!response.ok) {
           clearTimeout(timeoutId);
           let errorMessage = `HTTP error! status: ${response.status}`;
+          let code: number | undefined;
           try {
             const body = await response.json();
-            if (body?.code === 40101) clearAuthStorage();
+            code = body?.code;
             if (body?.code === 40302 && typeof window !== 'undefined') {
-              window.location.assign('/auth/login?change_password=1');
+              window.location.assign(
+                `${window._BASE_PATH_ || ''}/auth/login?change_password=1`,
+              );
             }
             if (body?.message) errorMessage = body.message;
             else if (body?.error) errorMessage = body.error;
           } catch {}
+          await handleReaderAuthFailure(response.status, code);
           throw new SSEHttpError(response.status, errorMessage);
         }
         if (!response.body) {

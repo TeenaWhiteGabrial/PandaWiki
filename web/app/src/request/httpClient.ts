@@ -16,7 +16,7 @@ import {
   getServerPathname,
   getServerSearch,
 } from '@/utils/getServerHeader';
-import { clearAuthStorage } from '@/utils/auth';
+import { handleReaderAuthFailure } from '@/utils/sessionRecovery';
 import { message as alert } from '@ctzhian/ui';
 import { redirect } from 'next/navigation';
 export type QueryParamsType = Record<string | number, any>;
@@ -96,23 +96,14 @@ const stripBasePath = (pathname: string) => {
   return pathname;
 };
 
-const redirectToLogin = () => {
-  clearAuthStorage();
-  const redirectAfterLogin = encodeURIComponent(
-    stripBasePath(location.href.replace(location.origin, '')),
-  );
-  const search = `redirect=${redirectAfterLogin}`;
-  const pathname = `${window._BASE_PATH_ || ''}/auth/login`;
-  window.location.href = [pathname, search]?.join('?');
-};
-
 const logTraceID = (traceID?: string) => {
   if (traceID && typeof window !== 'undefined') {
     console.error('API error trace_id:', traceID);
   }
 };
 
-const getBrowserSessionHeaders = () => typeof window === 'undefined' ? {} : { 'X-PW-CSRF': '1' };
+const getBrowserSessionHeaders = () =>
+  typeof window === 'undefined' ? {} : { 'X-PW-CSRF': '1' };
 
 export class HttpClient<SecurityDataType = unknown> {
   public baseUrl: string = '';
@@ -288,35 +279,26 @@ export class HttpClient<SecurityDataType = unknown> {
             : payloadFormatter(body),
       },
     ).then(async response => {
-      // Only the user identity endpoint confirms that the login token itself
-      // is invalid. Other 401 responses can describe an endpoint-specific
-      // authorization failure and must not log the user out globally.
-      if (response.status === 401 && path === '/share/v1/auth/user') {
-        if (typeof window === 'undefined') {
-          const pathname = await getServerPathname();
-          const basePath = await getServerBasePath();
-          const normalizedPathname =
-            basePath && pathname.startsWith(basePath)
-              ? pathname.slice(basePath.length) || '/'
-              : pathname;
-          if (!pathnameWhiteList.includes(normalizedPathname)) {
-            const search = await getServerSearch();
-            redirect(
-              `${basePath}/auth/login?redirect=${encodeURIComponent(normalizedPathname + search)}`,
-            );
-          }
-          return;
+      // Server navigation keeps its existing identity-endpoint redirect.
+      // Browser requests are handled below, after reading the business code.
+      if (
+        typeof window === 'undefined' &&
+        response.status === 401 &&
+        path === '/share/v1/auth/user'
+      ) {
+        const pathname = await getServerPathname();
+        const basePath = await getServerBasePath();
+        const normalizedPathname =
+          basePath && pathname.startsWith(basePath)
+            ? pathname.slice(basePath.length) || '/'
+            : pathname;
+        if (!pathnameWhiteList.includes(normalizedPathname)) {
+          const search = await getServerSearch();
+          redirect(
+            `${basePath}/auth/login?redirect=${encodeURIComponent(normalizedPathname + search)}`,
+          );
         }
-
-        if (typeof window !== 'undefined') {
-          const normalizedPathname = stripBasePath(window.location.pathname);
-          if (!pathnameWhiteList.includes(normalizedPathname)) {
-            redirectToLogin();
-          } else {
-            clearAuthStorage();
-          }
-          return;
-        }
+        return;
       }
 
       //  if (response.status === 403) {
@@ -352,11 +334,7 @@ export class HttpClient<SecurityDataType = unknown> {
         this.abortControllers.delete(cancelToken);
       }
 
-      if (typeof window !== 'undefined' && data.code === 40101) {
-        if (stripBasePath(location.pathname) === '/auth/login')
-          clearAuthStorage();
-        else redirectToLogin();
-      }
+      await handleReaderAuthFailure(response.status, data?.code, path);
       if (
         typeof window !== 'undefined' &&
         data.code === 40302 &&
