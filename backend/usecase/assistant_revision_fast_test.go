@@ -92,7 +92,7 @@ func TestAssistantRevisionContentOnlyScope(t *testing.T) {
 			t.Fatal("source body selection incorrect", tc)
 		}
 	}
-	for _, req := range []domain.AssistantSubmit{{Message: "精简第三页", AttachmentIDs: []string{"new"}}, {Message: "精简第三页", WebSearchEnabled: true}, {Message: "精简第三页", SourceScope: domain.AssistantScope{NodeIDs: []string{"source"}}}} {
+	for _, req := range []domain.AssistantSubmit{{Message: "精简第三页", AttachmentIDs: []string{"new"}}, {Message: "精简第三页", SourceScope: domain.AssistantScope{NodeIDs: []string{"source"}}}} {
 		if assistantRevisionContentOnly(req) {
 			t.Fatal("explicit additional source ignored")
 		}

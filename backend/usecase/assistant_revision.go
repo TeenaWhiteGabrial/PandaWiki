@@ -31,7 +31,7 @@ func assistantRevisionNeedsSearch(req domain.AssistantSubmit) bool {
 }
 
 func assistantRevisionContentOnly(req domain.AssistantSubmit) bool {
-	if len(req.AttachmentIDs) > 0 || req.WebSearchEnabled || assistantRevisionNeedsSearch(req) {
+	if len(req.AttachmentIDs) > 0 || assistantRevisionNeedsSearch(req) {
 		return false
 	}
 	text := regexp.MustCompile(`(?:不|不要|无需)(?:再)?(?:新增|增加|补充)[^，。；;]*`).ReplaceAllString(req.Message, "")

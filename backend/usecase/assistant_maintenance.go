@@ -94,7 +94,7 @@ func (u *AssistantUsecase) saveRunTrace(r *domain.AssistantRun) {
 	if diagnostics := current.Checkpoint["content_generation_diagnostics"]; diagnostics != nil {
 		output["content_generation_diagnostics"] = diagnostics
 	}
-	trace.Steps = append(trace.Steps, domain.ChatTraceStep{Name: current.Stage, Status: current.State, StartedAt: r.StageStartedAt, FinishedAt: &now, DurationMS: now.Sub(r.StageStartedAt).Milliseconds(), Input: map[string]any{"run_id": current.ID, "web_search_enabled": req.WebSearchEnabled, "public_search_query": req.PublicSearchQuery, "attachment_count": len(req.AttachmentIDs), "template": req.TemplateRef, "attempt": current.Attempt}, Output: output, Error: current.Error})
+	trace.Steps = append(trace.Steps, domain.ChatTraceStep{Name: current.Stage, Status: current.State, StartedAt: r.StageStartedAt, FinishedAt: &now, DurationMS: now.Sub(r.StageStartedAt).Milliseconds(), Input: map[string]any{"run_id": current.ID, "attachment_count": len(req.AttachmentIDs), "template": req.TemplateRef, "attempt": current.Attempt}, Output: output, Error: current.Error})
 	sort.SliceStable(trace.Steps, func(i, j int) bool { return trace.Steps[i].StartedAt.Before(trace.Steps[j].StartedAt) })
 	if e := u.chat.conversationUsecase.repo.SaveChatTrace(ctx, trace); e != nil {
 		u.logger.Error("save assistant trace", log.Error(e))

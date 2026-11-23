@@ -1,5 +1,6 @@
 import request, { ContentType } from './httpClient';
 
+export type AssistantFileFormat = 'docx' | 'pptx' | 'xlsx';
 export interface AssistantUpload {
   id: string;
   name: string;
@@ -36,9 +37,9 @@ export interface AssistantTemplate {
 }
 export interface AssistantArtifact {
   outline?: { id: string; title: string; position: number; unit: string }[];
-	family_id: string;
-	base_id?: string;
-	created_at?: string;
+  family_id: string;
+  base_id?: string;
+  created_at?: string;
   id: string;
   name: string;
   format: string;
@@ -54,7 +55,13 @@ export interface AssistantRun {
     total: number;
     unit: string;
     current_title?: string;
-    parts: { id: string; position?: number; title: string; preview?: string; completed: boolean }[];
+    parts: {
+      id: string;
+      position?: number;
+      title: string;
+      preview?: string;
+      completed: boolean;
+    }[];
   };
   uploads?: AssistantUpload[];
   id: string;
@@ -104,14 +111,21 @@ export interface AssistantPlan {
   sufficient: boolean;
   gaps: string[];
   outline: AssistantOutlineItem[];
-  materials: { id: string; name: string; status: string; characters: number; total_characters?: number; read_mode?: string }[];
+  materials: {
+    id: string;
+    name: string;
+    status: string;
+    characters: number;
+    total_characters?: number;
+    read_mode?: string;
+  }[];
   framework_only: boolean;
 }
 export interface AssistantOptions {
   attachments: AssistantUpload[];
   template?: TemplateRef;
-  web: boolean;
-  publicQuery: string;
+  includeTemplateContent?: boolean;
+  format?: AssistantFileFormat;
   scope: { type: 'all' | 'documents'; node_ids?: string[] };
   baseArtifact?: string;
   targetIDs?: string[];

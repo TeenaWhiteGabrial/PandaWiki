@@ -28,3 +28,31 @@ export function assistantTemplateIntent(message) {
     return false;
   return /(生成|制作|创建|套用|做一|做个|做份)/.test(text);
 }
+
+export function assistantOutputFormat(message, options) {
+  return (
+    options.format ||
+    assistantFileIntent(message) ||
+    (options.template &&
+    /模板|版式/.test(message) &&
+    assistantTemplateIntent(message)
+      ? 'pptx'
+      : undefined)
+  );
+}
+
+export function assistantFileOptions(message, options) {
+  const format = assistantOutputFormat(message, options);
+  const template = format === 'pptx' ? options.template : undefined;
+  const templateOnlyId =
+    template?.kind === 'upload' && !options.includeTemplateContent
+      ? template.id
+      : undefined;
+  return {
+    format,
+    template,
+    attachmentIds: options.attachments
+      .filter(file => file.id !== templateOnlyId)
+      .map(file => file.id),
+  };
+}

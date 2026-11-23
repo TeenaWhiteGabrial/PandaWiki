@@ -83,12 +83,10 @@ load_external_oss_env() {
     export "${key}=${value}"
   done
 
-  for key in ASSISTANT_SEARCH_API_KEY ASSISTANT_RETENTION_DAYS; do
-    if [[ -z "${!key:-}" ]]; then
-      value="$(read_env_value "${env_file}" "${key}")"
-      [[ -z "${value}" ]] || export "${key}=${value}"
-    fi
-  done
+  if [[ -z "${ASSISTANT_RETENTION_DAYS:-}" ]]; then
+    value="$(read_env_value "${env_file}" ASSISTANT_RETENTION_DAYS)"
+    [[ -z "${value}" ]] || export ASSISTANT_RETENTION_DAYS="${value}"
+  fi
 
   case "${OSS_ENDPOINT}" in
     https://*)

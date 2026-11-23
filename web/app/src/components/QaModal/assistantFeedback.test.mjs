@@ -8,10 +8,11 @@ test('technical failures remain paused, never shown as completed or raw errors',
     'Unexpected EOF in JSON',
     'HTTP 502 internal-service',
     '模型返回格式无效，请重试',
+    '联网搜索失败',
   ]) {
     const view = assistantTaskView({
       state: 'failed',
-      stage: '需求计划格式校验失败',
+      stage: error === '联网搜索失败' ? '联网搜索' : '需求计划格式校验失败',
       error,
     });
     assert.equal(view.label, '已暂停');

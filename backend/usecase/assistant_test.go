@@ -30,7 +30,12 @@ func TestAssistantDurableRunIsolationPostgres(t *testing.T) {
 	conv := &ConversationUsecase{repo: pg.NewConversationRepository(db, logger)}
 	chat := &ChatUsecase{appRepo: pg.NewAppRepository(db, logger), conversationUsecase: conv, enterpriseUsecase: enterprise, nodeRepo: pg.NewNodeRepository(db, logger)}
 	u := &AssistantUsecase{db: db.DB, cfg: &config.Config{Assistant: config.AssistantConfig{RetentionDays: 30}}, chat: chat, logger: logger}
-	req := domain.AssistantSubmit{ClientRequestID: uuid.NewString(), Message: "根据上传资料生成PPT", SourceScope: domain.AssistantScope{Type: "documents"}}
+	// Older clients can replay an original request, but their search
+	// settings do not become part of the new job.
+	req := domain.AssistantSubmit{
+		ClientRequestID: uuid.NewString(), Message: "根据上传资料生成PPT", SourceScope: domain.AssistantScope{Type: "documents"},
+		WebSearchEnabled: true, PublicSearchQuery: "旧客户端检索词",
+	}
 	r, e := u.Submit(ctx, kb.ID, owner.ID, "127.0.0.1", req)
 	if e != nil {
 		t.Fatal(e)
@@ -41,6 +46,15 @@ func TestAssistantDurableRunIsolationPostgres(t *testing.T) {
 	duplicate, e := u.Submit(ctx, kb.ID, owner.ID, "127.0.0.1", req)
 	if e != nil || duplicate.ID != r.ID {
 		t.Fatalf("duplicate request created another task: %+v %v", duplicate, e)
+	}
+	var stored domain.AssistantRun
+	if e := db.First(&stored, "id=?", r.ID).Error; e != nil {
+		t.Fatal(e)
+	}
+	for _, key := range []string{"web_search_enabled", "public_search_query"} {
+		if _, exists := stored.Request[key]; exists {
+			t.Fatalf("retired search field was persisted: %s", key)
+		}
 	}
 	changed := req
 	changed.Message = "不同内容"

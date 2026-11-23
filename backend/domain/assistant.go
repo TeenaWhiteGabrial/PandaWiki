@@ -49,6 +49,8 @@ type AssistantScope struct {
 	NodeIDs    []string          `json:"node_ids,omitempty"`
 	ReleaseIDs map[string]string `json:"release_ids,omitempty"`
 }
+
+// WebSearchEnabled and PublicSearchQuery preserve request hashes for older clients.
 type AssistantSubmit struct {
 	ClientRequestID   string                `json:"client_request_id"`
 	ConversationID    string                `json:"conversation_id"`

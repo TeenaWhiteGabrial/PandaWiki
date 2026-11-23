@@ -53,7 +53,7 @@ func NewAssistantHandler(e *echo.Echo, base *handler.BaseHandler, u *usecase.Ass
 	}
 	share := e.Group("/share/v1/assistant", base.ShareAuthMiddleware.Authorize, echomw.BodyLimit("22M"), jsonLimit)
 	share.GET("/capabilities", func(c echo.Context) error {
-		return respond(c, map[string]any{"search_available": cfg.Assistant.SearchKey != "", "retention_days": cfg.Assistant.RetentionDays, "max_file_bytes": 20 << 20, "supported_formats": []string{"pdf", "docx", "pptx", "xlsx", "txt", "csv", "png", "jpg", "jpeg"}}, nil)
+		return respond(c, map[string]any{"search_available": false, "retention_days": cfg.Assistant.RetentionDays, "max_file_bytes": 20 << 20, "supported_formats": []string{"pdf", "docx", "pptx", "xlsx", "txt", "csv", "png", "jpg", "jpeg"}}, nil)
 	})
 	upload := func(admin bool) echo.HandlerFunc {
 		return func(c echo.Context) error {

@@ -585,17 +585,6 @@ func (u *AssistantUsecase) buildRun(ctx context.Context, r *domain.AssistantRun)
 		body, coverage := prepareAssistantMaterials(inputs, max(6000, 52000-len([]rune(assistantString(r.Checkpoint["user_facts"])))))
 		materials.WriteString(body)
 		r.Checkpoint["material_coverage"] = coverage
-		if req.WebSearchEnabled {
-			if e := u.stage(ctx, r, "联网搜索", nil); e != nil {
-				return e
-			}
-			text, refs, e := u.publicSearch(ctx, req.PublicSearchQuery)
-			if e != nil {
-				return e
-			}
-			materials.WriteString(text)
-			sources = append(sources, refs...)
-		}
 		if facts := assistantString(r.Checkpoint["user_facts"]); facts != "" {
 			materials.WriteString("\n[用户主动补充的事实，未作外部核验]\n" + facts)
 			sources = append(sources, domain.AssistantSource{Kind: "user", ID: r.ID, Version: digest([]byte(facts)), Name: "用户补充说明"})
@@ -907,52 +896,6 @@ func (u *AssistantUsecase) preview(ctx context.Context, data []byte, name string
 		return nil, fmt.Errorf("预览内容无效")
 	}
 	return b, e
-}
-
-// Only the explicitly public, user-confirmed query enters the search service.
-// We use the provider's textual results; no arbitrary webpage fetcher is enabled.
-func (u *AssistantUsecase) publicSearch(ctx context.Context, query string) (string, []domain.AssistantSource, error) {
-	if u.cfg.Assistant.SearchKey == "" || len([]rune(query)) > 200 || strings.TrimSpace(query) == "" {
-		return "", nil, fmt.Errorf("公开检索词需为1～200字，且已配置搜索服务")
-	}
-	b, _ := json.Marshal(map[string]any{"query": query, "max_results": 5, "include_answer": false, "include_raw_content": false, "search_depth": "basic"})
-	req, e := http.NewRequestWithContext(ctx, "POST", "https://api.tavily.com/search", bytes.NewReader(b))
-	if e != nil {
-		return "", nil, e
-	}
-	req.Header.Set("Authorization", "Bearer "+u.cfg.Assistant.SearchKey)
-	req.Header.Set("Content-Type", "application/json")
-	searchCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	resp, e := u.client.Do(req.WithContext(searchCtx))
-	if e != nil {
-		return "", nil, e
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", nil, fmt.Errorf("联网搜索失败，请检查搜索服务配置")
-	}
-	var result struct {
-		Results []struct {
-			Title   string `json:"title"`
-			URL     string `json:"url"`
-			Content string `json:"content"`
-		} `json:"results"`
-	}
-	if e = json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&result); e != nil {
-		return "", nil, e
-	}
-	var text strings.Builder
-	refs := []domain.AssistantSource{}
-	for i, v := range result.Results {
-		if i >= 5 {
-			break
-		}
-		source := domain.AssistantSource{Kind: "web", ID: digest([]byte(v.URL)), Name: v.Title, URL: v.URL, Version: time.Now().UTC().Format(time.RFC3339)}
-		text.WriteString("\n[公网搜索摘要，非全文：" + v.Title + "；大纲来源ID：" + assistantSourceKey(source) + "]\n" + v.Content + "\n来源：" + v.URL)
-		refs = append(refs, source)
-	}
-	return text.String(), refs, nil
 }
 
 func assistantString(v any) string { s, _ := v.(string); return s }

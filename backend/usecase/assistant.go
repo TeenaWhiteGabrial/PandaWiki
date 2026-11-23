@@ -327,9 +327,6 @@ func (u *AssistantUsecase) Submit(ctx context.Context, kb, user, remote string, 
 	if len([]rune(req.Message)) == 0 || len([]rune(req.Message)) > 12000 || len(req.AttachmentIDs) > 10 {
 		return nil, fmt.Errorf("问题需为1～12000字，附件不超过10份")
 	}
-	if req.WebSearchEnabled && (u.cfg.Assistant.SearchKey == "" || strings.TrimSpace(req.PublicSearchQuery) == "") {
-		return nil, fmt.Errorf("联网搜索未配置，或尚未提供确认可公开的检索词")
-	}
 	raw, _ := json.Marshal(req)
 	hash := digest(raw)
 	var existing domain.AssistantRun
@@ -524,16 +521,16 @@ func (u *AssistantUsecase) Submit(ctx context.Context, kb, user, remote string, 
 				return e
 			}
 		}
-		settings := map[string]any{"web_search_enabled": req.WebSearchEnabled}
 		if saveTemplatePreference {
-			settings["template_ref"] = preferenceTemplate
-		}
-		pref := domain.AssistantPreference{ConversationID: req.ConversationID, KBID: kb, UserID: user, Settings: assistantJSON(settings), UpdatedAt: time.Now()}
-		if e := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "conversation_id"}}, DoUpdates: clause.Assignments(map[string]any{"settings": gorm.Expr("assistant_preferences.settings || EXCLUDED.settings"), "updated_at": time.Now()})}).Create(&pref).Error; e != nil {
-			return e
+			pref := domain.AssistantPreference{ConversationID: req.ConversationID, KBID: kb, UserID: user, Settings: assistantJSON(map[string]any{"template_ref": preferenceTemplate}), UpdatedAt: time.Now()}
+			if e := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "conversation_id"}}, DoUpdates: clause.Assignments(map[string]any{"settings": gorm.Expr("assistant_preferences.settings || EXCLUDED.settings"), "updated_at": time.Now()})}).Create(&pref).Error; e != nil {
+				return e
+			}
 		}
 		run.ConversationID = req.ConversationID
 		run.Request = assistantJSON(req)
+		delete(run.Request, "web_search_enabled")
+		delete(run.Request, "public_search_query")
 		for _, m := range []domain.ConversationMessage{{ID: run.UserMessageID, KBID: kb, AppID: app.ID, ConversationID: req.ConversationID, Role: schema.User, Content: req.Message, RemoteIP: remote}, {ID: run.AssistantMessageID, KBID: kb, AppID: app.ID, ConversationID: req.ConversationID, Role: schema.Assistant, Content: "", ParentID: run.UserMessageID, RemoteIP: remote}} {
 			if e := tx.Create(&m).Error; e != nil {
 				return e
@@ -752,15 +749,6 @@ func (u *AssistantUsecase) Preferences(ctx context.Context, kb, user, cid string
 				return nil, fmt.Errorf("不支持的会话偏好")
 			}
 		}
-		if v, ok := (*settings)["web_search_enabled"]; ok {
-			enabled, valid := v.(bool)
-			if !valid {
-				return nil, fmt.Errorf("联网偏好必须是开关值")
-			}
-			if enabled && u.cfg.Assistant.SearchKey == "" {
-				return nil, fmt.Errorf("联网搜索尚未配置")
-			}
-		}
 		if v := (*settings)["template_ref"]; v != nil {
 			b, _ := json.Marshal(v)
 			var ref domain.AssistantTemplateRef
@@ -771,10 +759,15 @@ func (u *AssistantUsecase) Preferences(ctx context.Context, kb, user, cid string
 				return nil, e
 			}
 		}
+		delete(*settings, "web_search_enabled") // Ignore this preference from older clients.
 	}
-	if settings != nil {
+	if settings != nil && len(*settings) > 0 {
 		p := domain.AssistantPreference{ConversationID: cid, KBID: kb, UserID: user, Settings: *settings, UpdatedAt: time.Now()}
-		e := u.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "conversation_id"}}, DoUpdates: clause.AssignmentColumns([]string{"settings", "updated_at"})}).Create(&p).Error
+		e := u.db.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "conversation_id"}},
+			DoUpdates: clause.Assignments(map[string]any{"settings": gorm.Expr("assistant_preferences.settings || EXCLUDED.settings"), "updated_at": time.Now()}),
+		}, clause.Returning{Columns: []clause.Column{{Name: "settings"}}}).Create(&p).Error
+		delete(p.Settings, "web_search_enabled")
 		return p.Settings, e
 	}
 	var p domain.AssistantPreference
@@ -782,6 +775,7 @@ func (u *AssistantUsecase) Preferences(ctx context.Context, kb, user, cid string
 	if errors.Is(e, gorm.ErrRecordNotFound) {
 		return domain.JSONB{}, nil
 	}
+	delete(p.Settings, "web_search_enabled")
 	return p.Settings, e
 }
 
@@ -911,7 +905,7 @@ func (u *AssistantUsecase) derivedExpiry(ctx context.Context, sources domain.JSO
 
 func (u *AssistantUsecase) decorateUploads(ctx context.Context, r *domain.AssistantRun, req domain.AssistantSubmit) {
 	ids := append([]string{}, req.AttachmentIDs...)
-	if req.TemplateRef != nil && req.TemplateRef.Kind == "upload" {
+	if req.TemplateRef != nil && req.TemplateRef.Kind == "upload" && !slices.Contains(ids, req.TemplateRef.ID) {
 		ids = append(ids, req.TemplateRef.ID)
 	}
 	for _, id := range ids {
@@ -923,7 +917,12 @@ func (u *AssistantUsecase) decorateUploads(ctx context.Context, r *domain.Assist
 		}
 	}
 }
-func AssistantErrorMessage(e error) string { return safeAssistantError(e) }
+func AssistantErrorMessage(e error) string {
+	if errors.Is(e, http.ErrMissingFile) {
+		return "请求中没有收到文件，请重新选择文件上传"
+	}
+	return safeAssistantError(e)
+}
 
 func (u *AssistantUsecase) RetryUpload(ctx context.Context, kb, user, id string) error {
 	v, e := u.GetUpload(ctx, kb, user, id)

@@ -171,18 +171,20 @@ export class HttpClient<SecurityDataType = unknown> {
         ? JSON.stringify(input)
         : input,
     [ContentType.FormData]: (input: any) =>
-      Object.keys(input || {}).reduce((formData, key) => {
-        const property = input[key];
-        formData.append(
-          key,
-          property instanceof Blob
-            ? property
-            : typeof property === 'object' && property !== null
-              ? JSON.stringify(property)
-              : `${property}`,
-        );
-        return formData;
-      }, new FormData()),
+      input instanceof FormData
+        ? input
+        : Object.keys(input || {}).reduce((formData, key) => {
+            const property = input[key];
+            formData.append(
+              key,
+              property instanceof Blob
+                ? property
+                : typeof property === 'object' && property !== null
+                  ? JSON.stringify(property)
+                  : `${property}`,
+            );
+            return formData;
+          }, new FormData()),
     [ContentType.UrlEncoded]: (input: any) => this.toQueryString(input),
   };
 

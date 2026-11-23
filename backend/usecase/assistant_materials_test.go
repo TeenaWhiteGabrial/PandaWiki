@@ -113,6 +113,11 @@ func TestAssistantTemplateOnlyAppliesToPPTPostgres(t *testing.T) {
 	if _, e := u.Preferences(ctx, r.KBID, r.UserID, r.ConversationID, func() *domain.JSONB { v := assistantJSON(map[string]any{"template_ref": ref}); return &v }()); e != nil {
 		t.Fatal(e)
 	}
+	searchPreference := domain.JSONB{"web_search_enabled": true}
+	preference, err := u.Preferences(ctx, r.KBID, r.UserID, r.ConversationID, &searchPreference)
+	if err != nil || preference["template_ref"] == nil || preference["web_search_enabled"] != nil {
+		t.Fatalf("legacy search setting affected template preferences: %v %v", preference, err)
+	}
 	for _, format := range []string{"docx", "xlsx"} {
 		item, e := u.Submit(ctx, r.KBID, r.UserID, "", domain.AssistantSubmit{ClientRequestID: uuid.NewString(), ConversationID: r.ConversationID, Message: "生成文件", Format: format, TemplateRef: &domain.AssistantTemplateRef{Kind: "enterprise", ID: "irrelevant-invalid-template", Version: 1}, SourceScope: domain.AssistantScope{Type: "documents"}})
 		if e != nil {

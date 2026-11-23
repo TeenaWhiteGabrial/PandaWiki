@@ -41,8 +41,8 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  assistantFileIntent,
-  assistantTemplateIntent,
+  assistantFileOptions,
+  assistantOutputFormat,
 } from './assistantIntent.mjs';
 import ChatLoading from '../../views/chat/ChatLoading';
 import {
@@ -239,19 +239,7 @@ const AiQaContent: React.FC<{
     q: string,
     opts = assistantOptionsRef.current,
   ) => {
-    const format =
-      assistantFileIntent(q) ||
-      (opts.template && assistantTemplateIntent(q) ? 'pptx' : undefined);
-    if (opts.attachments.some(a => a.status === 'failed')) {
-      setAssistantHint('请先继续处理尚未准备好的附件，或移除后再次发送。');
-      setLoading(false);
-      return;
-    }
-    if (opts.web && !opts.publicQuery.trim()) {
-      setAssistantHint('填写本轮可公开的检索词后，就可以继续。');
-      setLoading(false);
-      return;
-    }
+    const { format, template, attachmentIds } = assistantFileOptions(q, opts);
     setAssistantBusy(true);
     const version = chatSession.generation.current;
     try {
@@ -260,10 +248,9 @@ const AiQaContent: React.FC<{
       const fingerprint = JSON.stringify({
         q,
         cid: session?.conversation_id,
-        attachments: opts.attachments.map(a => a.id),
-        template: opts.template,
-        web: opts.web,
-        query: opts.publicQuery,
+        attachments: attachmentIds,
+        template,
+        format,
         scope: opts.scope,
         base: opts.baseArtifact,
         targets: opts.targetIDs,
@@ -274,13 +261,9 @@ const AiQaContent: React.FC<{
         client_request_id: pendingAssistant.current.requestId,
         conversation_id: session?.conversation_id || '',
         message: q,
-        attachment_ids: opts.attachments
-          .filter(a => a.id !== opts.template?.id)
-          .map(a => a.id),
-        template_ref: format && format !== 'pptx' ? undefined : opts.template,
+        attachment_ids: attachmentIds,
+        template_ref: template,
         format,
-        web_search_enabled: opts.web,
-        public_search_query: opts.web ? opts.publicQuery : '',
         source_scope: opts.scope,
         base_artifact_id: opts.baseArtifact,
         target_ids: opts.targetIDs,
@@ -303,9 +286,10 @@ const AiQaContent: React.FC<{
       setAssistantOptions({
         ...opts,
         attachments: [],
+        format: undefined,
+        includeTemplateContent: undefined,
         baseArtifact: undefined,
         targetIDs: undefined,
-        publicQuery: '',
       });
     } catch (e) {
       if (version !== chatSession.generation.current) return;
@@ -640,7 +624,13 @@ const AiQaContent: React.FC<{
   }, []);
 
   const onSearch = (q: string, reset: boolean = false) => {
-    if (loading || restoringHistory || uploadingAttachments || !q.trim())
+    if (
+      loading ||
+      assistantBusy ||
+      restoringHistory ||
+      uploadingAttachments ||
+      !q.trim()
+    )
       return;
     const pending = reset
       ? undefined
@@ -655,6 +645,22 @@ const AiQaContent: React.FC<{
               ].includes(item.assistantRun?.state || '') &&
               !!item.assistantRun?.planning,
           )?.assistantRun;
+    const opts = { ...assistantOptionsRef.current };
+    if (pending && opts.format) {
+      setAssistantHint('请先完成或取消当前文件任务，再发起新的文件生成。');
+      return;
+    }
+    if (
+      opts.attachments.some(
+        a =>
+          a.status === 'failed' ||
+          a.status === 'deleted' ||
+          a.status === 'unavailable',
+      )
+    ) {
+      setAssistantHint('请先重试解析或移除不可用的资料，再发送。');
+      return;
+    }
     if (
       pending &&
       pending.state !== 'awaiting_sources' &&
@@ -693,7 +699,6 @@ const AiQaContent: React.FC<{
       setInput('');
       return;
     }
-    const opts = { ...assistantOptionsRef.current };
     const target = assistantRevisionTarget(
       q,
       conversation.flatMap(c => (c.assistantRun ? [c.assistantRun] : [])),
@@ -714,11 +719,9 @@ const AiQaContent: React.FC<{
     setTargetChoices([]);
     const useAssistant =
       opts.attachments.length > 0 ||
-      (!!opts.template && assistantTemplateIntent(q)) ||
-      opts.web ||
       !!opts.baseArtifact ||
       opts.scope.type !== 'all' ||
-      !!assistantFileIntent(q);
+      !!assistantOutputFormat(q, opts);
     if (useAssistant) void submitAssistant(q, opts);
     else void chatAnswer(q);
     setInput('');
@@ -1381,6 +1384,7 @@ const AiQaContent: React.FC<{
             )}
             <AssistantTools
               value={assistantOptions}
+              outputFormat={assistantOutputFormat(input, assistantOptions)}
               onChange={setAssistantOptions}
               onUploadingChange={setUploadingAttachments}
               disabled={loading || restoringHistory || assistantBusy}

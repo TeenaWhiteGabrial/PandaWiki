@@ -18,7 +18,7 @@ import (
 // route to explicit catalog requests; uploaded data and revisions retain their
 // original workflow rather than being silently discarded.
 func assistantCatalogRequest(req domain.AssistantSubmit, checkpoint domain.JSONB) bool {
-	if req.BaseArtifactID != "" || len(req.AttachmentIDs) > 0 || req.WebSearchEnabled {
+	if req.BaseArtifactID != "" || len(req.AttachmentIDs) > 0 {
 		return false
 	}
 	text := strings.ToLower(req.Message + "\n" + assistantString(checkpoint["feedback"]))

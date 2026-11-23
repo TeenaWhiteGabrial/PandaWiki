@@ -5,6 +5,7 @@ import {
   Autocomplete,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -12,31 +13,34 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
+  Menu,
   Select,
   Stack,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
-import PublicIcon from '@mui/icons-material/Public';
 import SlideshowIcon from '@mui/icons-material/Slideshow';
 import {
   assistantRequest,
   AssistantOptions,
+  AssistantFileFormat,
   AssistantTemplate,
   AssistantUpload,
 } from '@/request/Assistant';
 import { useBasePath } from '@/hooks';
 import { usePathname } from 'next/navigation';
+import { useStore } from '@/provider';
 import { reportAssistantIssue } from './assistantFeedback.mjs';
+
+const formatNames = { docx: 'Word', pptx: 'PPT', xlsx: 'Excel' } as const;
+type DocumentOption = { id: string; name: string; type: number };
 
 export const emptyAssistantOptions = (): AssistantOptions => ({
   attachments: [],
-  web: false,
-  publicQuery: '',
   scope: { type: 'all' },
 });
 export default function AssistantTools({
@@ -45,24 +49,34 @@ export default function AssistantTools({
   disabled,
   conversationId,
   onUploadingChange,
+  outputFormat,
 }: {
   value: AssistantOptions;
   onChange: (v: AssistantOptions) => void;
   disabled: boolean;
   conversationId: string;
   onUploadingChange: (busy: boolean) => void;
+  outputFormat?: AssistantFileFormat;
 }) {
   const base = useBasePath();
   const pathname = usePathname();
   const currentNode = pathname.match(/\/node\/([^/]+)/)?.[1];
+  const { nodeList } = useStore();
   const [documentQuery, setDocumentQuery] = useState('');
-  const [documentOptions, setDocumentOptions] = useState<
-    { id: string; name: string; type: number }[]
+  const [documentOptions, setDocumentOptions] = useState<DocumentOption[]>([]);
+  const [rememberedDocuments, setRememberedDocuments] = useState<
+    DocumentOption[]
   >([]);
+  const [pickerError, setPickerError] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [formatAnchor, setFormatAnchor] = useState<HTMLElement | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [templates, setTemplates] = useState<AssistantTemplate[]>([]);
-  const [searchAvailable, setSearchAvailable] = useState(false);
+  const [templateRetry, setTemplateRetry] = useState(0);
+  const [templatesStatus, setTemplatesStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
   const [error, setError] = useState('');
   const [templateDialog, setTemplateDialog] = useState<AssistantUpload | null>(
     null,
@@ -70,44 +84,39 @@ export default function AssistantTools({
   const preferenceGeneration = useRef(0);
   const valueRef = useRef(value);
   valueRef.current = value;
+  const showPptTemplate = outputFormat === 'pptx';
   useEffect(() => {
+    if (!showPptTemplate || templatesStatus === 'ready') return;
     const ac = new AbortController();
-    Promise.all([
-      assistantRequest<{ search_available: boolean }>(
-        '/capabilities',
-        'GET',
-        undefined,
-        ac.signal,
-      ),
-      assistantRequest<AssistantTemplate[]>(
-        '/templates',
-        'GET',
-        undefined,
-        ac.signal,
-      ),
-    ])
-      .then(([c, t]) => {
-        setSearchAvailable(c.search_available);
-        setTemplates(t);
+    setTemplatesStatus('loading');
+    assistantRequest<AssistantTemplate[]>(
+      '/templates',
+      'GET',
+      undefined,
+      ac.signal,
+    )
+      .then(items => {
+        if (ac.signal.aborted) return;
+        setTemplates(items);
+        setTemplatesStatus('ready');
       })
-      .catch(e => {
-        if (!ac.signal.aborted) setError(reportAssistantIssue('settings', e));
+      .catch(() => {
+        if (!ac.signal.aborted) setTemplatesStatus('error');
       });
     return () => ac.abort();
-  }, []);
+  }, [showPptTemplate, templateRetry]);
   useEffect(() => {
     if (!conversationId) return;
     const generation = preferenceGeneration.current;
     const ac = new AbortController();
     assistantRequest<{
-      web_search_enabled?: boolean;
       template_ref?: AssistantOptions['template'];
     }>(`/preferences/${conversationId}`, 'GET', undefined, ac.signal)
       .then(s => {
-        if (generation !== preferenceGeneration.current) return;
+        if (ac.signal.aborted || generation !== preferenceGeneration.current)
+          return;
         onChange({
           ...valueRef.current,
-          web: !!s.web_search_enabled,
           template: s.template_ref,
         });
       })
@@ -115,12 +124,16 @@ export default function AssistantTools({
     return () => ac.abort();
   }, [conversationId]);
   const change = (next: AssistantOptions) => {
-    preferenceGeneration.current++;
+    const templateChanged =
+      JSON.stringify(next.template) !==
+      JSON.stringify(valueRef.current.template);
+    valueRef.current = next;
     onChange(next);
+    if (!templateChanged) return;
+    preferenceGeneration.current++;
     if (conversationId)
       void assistantRequest(`/preferences/${conversationId}`, 'PATCH', {
-        web_search_enabled: next.web,
-        template_ref: next.template,
+        template_ref: next.template ?? null,
       }).catch(e => setError(reportAssistantIssue('settings', e)));
   };
   useEffect(() => {
@@ -205,7 +218,7 @@ export default function AssistantTools({
     }
   };
   useEffect(() => {
-    if (value.scope.type !== 'documents') return;
+    if (!moreOpen || value.scope.type !== 'documents') return;
     const ac = new AbortController();
     const t = setTimeout(() => {
       assistantRequest<{ id: string; name: string; type: number }[]>(
@@ -214,20 +227,45 @@ export default function AssistantTools({
         undefined,
         ac.signal,
       )
-        .then(setDocumentOptions)
-        .catch(() => {});
+        .then(items => {
+          if (!ac.signal.aborted) {
+            setDocumentOptions(items);
+            setPickerError(false);
+          }
+        })
+        .catch(() => {
+          if (!ac.signal.aborted) setPickerError(true);
+        });
     }, 300);
     return () => {
       ac.abort();
       clearTimeout(t);
     };
-  }, [documentQuery, value.scope.type]);
-  const selected =
+  }, [documentQuery, value.scope.type, moreOpen]);
+  const selectedTemplate =
     value.template?.kind === 'enterprise'
       ? `${value.template.id}:${value.template.version}`
       : value.template?.kind === 'upload'
         ? `upload:${value.template.id}`
         : '';
+  const selectedDocuments = (value.scope.node_ids || []).map(
+    id =>
+      documentOptions.find(doc => doc.id === id) ||
+      rememberedDocuments.find(doc => doc.id === id) || {
+        id,
+        name: nodeList?.find(doc => doc.id === id)?.name || '已选资料',
+        type: 2,
+      },
+  );
+  const personalTemplates = value.attachments.filter(
+    file =>
+      file.format === 'pptx' &&
+      file.status === 'ready' &&
+      file.report?.template_supported,
+  );
+  const templateAttachment = value.attachments.find(
+    file => value.template?.kind === 'upload' && value.template.id === file.id,
+  );
   return (
     <Stack gap={1} sx={{ width: '100%' }}>
       {error && (
@@ -257,141 +295,239 @@ export default function AssistantTools({
           disabled={disabled || uploading}
           onClick={() => input.current?.click()}
         >
-          {uploading ? '上传中…' : '上传文件'}
+          {uploading ? '上传中…' : '上传资料'}
         </Button>
-        <Tooltip
-          title={
-            searchAvailable
-              ? '仅发送你确认可公开的检索词，不自动外发内部资料'
-              : '尚未配置搜索服务'
-          }
+        <Button
+          size='small'
+          startIcon={<SlideshowIcon />}
+          variant={outputFormat ? 'contained' : 'text'}
+          aria-haspopup='menu'
+          aria-expanded={formatAnchor ? true : undefined}
+          disabled={disabled}
+          onClick={event => setFormatAnchor(event.currentTarget)}
         >
-          <span>
-            <Button
-              size='small'
-              startIcon={<PublicIcon />}
-              disabled={disabled || !searchAvailable}
-              variant={value.web ? 'contained' : 'text'}
-              onClick={() => change({ ...value, web: !value.web })}
-            >
-              {value.web ? '联网搜索 · 已开启' : '联网搜索'}
-            </Button>
-          </span>
-        </Tooltip>
-        <FormControl size='small' sx={{ minWidth: 155 }}>
-          <InputLabel>PPT 模板</InputLabel>
-          <Select
-            label='PPT 模板'
-            value={selected}
-            disabled={disabled}
-            onChange={e => {
-              if (String(e.target.value).startsWith('upload:')) return;
-              const t = templates.find(
-                t => `${t.id}:${t.version}` === e.target.value,
-              );
-              change({
-                ...value,
-                template: t
-                  ? { kind: 'enterprise', id: t.id, version: t.version }
-                  : undefined,
-              });
+          {outputFormat ? `生成 ${formatNames[outputFormat]}` : '生成文件'}
+        </Button>
+        <Menu
+          anchorEl={formatAnchor}
+          open={!!formatAnchor}
+          onClose={() => setFormatAnchor(null)}
+        >
+          <MenuItem
+            selected={!value.format}
+            onClick={() => {
+              change({ ...value, format: undefined });
+              setFormatAnchor(null);
             }}
           >
-            <MenuItem value=''>使用默认模板</MenuItem>
-            {value.template?.kind === 'upload' && (
-              <MenuItem value={`upload:${value.template.id}`}>
-                个人上传模板
-              </MenuItem>
-            )}
-            {templates.map(t => (
-              <MenuItem
-                key={`${t.id}:${t.version}`}
-                value={`${t.id}:${t.version}`}
-              >
-                {t.name} · v{t.version}
-                {t.is_default ? '（默认）' : ''}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size='small' sx={{ minWidth: 135 }}>
-          <InputLabel>资料范围</InputLabel>
-          <Select
-            label='资料范围'
-            value={value.scope.type}
-            disabled={disabled}
-            onChange={e =>
-              change({
-                ...value,
-                scope:
-                  e.target.value === 'documents'
-                    ? { type: 'documents', node_ids: [] }
-                    : { type: 'all' },
-              })
-            }
-          >
-            <MenuItem value='all'>全部授权知识</MenuItem>
-            <MenuItem value='documents'>指定文档 / 目录</MenuItem>
-          </Select>
-        </FormControl>
+            根据问题自动判断
+          </MenuItem>
+          {(['docx', 'pptx', 'xlsx'] as const).map(format => (
+            <MenuItem
+              key={format}
+              selected={value.format === format}
+              onClick={() => {
+                change({ ...value, format });
+                setFormatAnchor(null);
+              }}
+            >
+              生成 {formatNames[format]}
+            </MenuItem>
+          ))}
+        </Menu>
+        <Button
+          size='small'
+          aria-expanded={moreOpen}
+          disabled={disabled}
+          onClick={() => setMoreOpen(v => !v)}
+        >
+          更多
+        </Button>
       </Stack>
-      {value.scope.type === 'documents' && (
-        <Stack direction='row' gap={1}>
-          <Autocomplete
-            multiple
-            fullWidth
-            size='small'
-            options={documentOptions}
-            filterOptions={x => x}
-            getOptionLabel={o => (o.type === 1 ? '目录：' : '') + o.name}
-            isOptionEqualToValue={(a, b) => a.id === b.id}
-            value={(value.scope.node_ids || []).map(
-              id =>
-                documentOptions.find(o => o.id === id) || {
-                  id,
-                  name: '已选资料',
-                  type: 2,
-                },
-            )}
-            onInputChange={(_, q) => setDocumentQuery(q)}
-            onChange={(_, items) =>
-              change({
-                ...value,
-                scope: { type: 'documents', node_ids: items.map(i => i.id) },
-              })
-            }
-            renderInput={p => (
-              <TextField
-                {...p}
-                label='搜索并选择授权文档或目录'
-                helperText='不选择时只使用上传资料；目录范围会固定到本轮可访问清单。'
-              />
-            )}
-          />
-          {currentNode && (
-            <Button
-              size='small'
-              onClick={() =>
+      {showPptTemplate && (
+        <Stack direction='row' gap={1} alignItems='center' flexWrap='wrap'>
+          <FormControl size='small' sx={{ minWidth: 175, maxWidth: '100%' }}>
+            <InputLabel>PPT 模板</InputLabel>
+            <Select
+              label='PPT 模板'
+              value={selectedTemplate}
+              disabled={disabled}
+              onChange={event => {
+                const id = String(event.target.value);
+                if (id.startsWith('upload:')) {
+                  const file = personalTemplates.find(
+                    item => `upload:${item.id}` === id,
+                  );
+                  if (file) setTemplateDialog(file);
+                  return;
+                }
+                const selected = templates.find(
+                  item => `${item.id}:${item.version}` === id,
+                );
                 change({
                   ...value,
-                  scope: { type: 'documents', node_ids: [currentNode] },
-                })
-              }
+                  includeTemplateContent: false,
+                  template: selected
+                    ? {
+                        kind: 'enterprise',
+                        id: selected.id,
+                        version: selected.version,
+                      }
+                    : undefined,
+                });
+              }}
             >
-              当前文档
+              <MenuItem value=''>使用默认模板</MenuItem>
+              {!!selectedTemplate &&
+                !personalTemplates.some(
+                  t => `upload:${t.id}` === selectedTemplate,
+                ) &&
+                !templates.some(
+                  t => `${t.id}:${t.version}` === selectedTemplate,
+                ) && (
+                  <MenuItem value={selectedTemplate} disabled>
+                    已选模板
+                  </MenuItem>
+                )}
+              {templates.map(t => (
+                <MenuItem
+                  key={`${t.id}:${t.version}`}
+                  value={`${t.id}:${t.version}`}
+                >
+                  {t.name} · v{t.version}
+                  {t.is_default ? '（默认）' : ''}
+                </MenuItem>
+              ))}
+              {personalTemplates.map(file => (
+                <MenuItem key={file.id} value={`upload:${file.id}`}>
+                  套用 {file.name} 的版式
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {templatesStatus === 'error' && (
+            <Button
+              size='small'
+              disabled={disabled}
+              onClick={() => setTemplateRetry(n => n + 1)}
+            >
+              重试加载企业模板
             </Button>
+          )}
+          {templateAttachment && (
+            <FormControlLabel
+              label='同时参考这份 PPT 的正文'
+              control={
+                <Checkbox
+                  checked={!!value.includeTemplateContent}
+                  onChange={(_, checked) =>
+                    change({ ...value, includeTemplateContent: checked })
+                  }
+                  disabled={disabled}
+                />
+              }
+            />
           )}
         </Stack>
       )}
-      {value.web && (
-        <TextField
+      {value.scope.type === 'documents' && (
+        <Chip
           size='small'
-          label='本轮确认可公开的检索词'
-          value={value.publicQuery}
-          inputProps={{ maxLength: 200 }}
-          onChange={e => change({ ...value, publicQuery: e.target.value })}
-          helperText='只向搜索服务发送这里填写的词，不会自动附带会话或上传资料。'
+          sx={{ alignSelf: 'flex-start', maxWidth: '100%' }}
+          label={
+            selectedDocuments.length
+              ? `知识库范围：${selectedDocuments.map(doc => doc.name).join('、')}`
+              : '仅参考上传资料'
+          }
+          onClick={disabled ? undefined : () => setMoreOpen(true)}
+          onDelete={
+            disabled
+              ? undefined
+              : () => change({ ...value, scope: { type: 'all' } })
+          }
         />
+      )}
+      {moreOpen && (
+        <Stack gap={1}>
+          <FormControl
+            size='small'
+            sx={{ minWidth: 155, alignSelf: 'flex-start' }}
+          >
+            <InputLabel>资料范围</InputLabel>
+            <Select
+              label='资料范围'
+              value={value.scope.type}
+              disabled={disabled}
+              onChange={event =>
+                change({
+                  ...value,
+                  scope:
+                    event.target.value === 'documents'
+                      ? { type: 'documents', node_ids: [] }
+                      : { type: 'all' },
+                })
+              }
+            >
+              <MenuItem value='all'>全部授权知识</MenuItem>
+              <MenuItem value='documents'>指定文档 / 目录</MenuItem>
+            </Select>
+          </FormControl>
+          {value.scope.type === 'documents' && (
+            <Stack direction='row' gap={1} alignItems='flex-start'>
+              <Autocomplete
+                multiple
+                fullWidth
+                size='small'
+                disabled={disabled}
+                options={documentOptions}
+                filterOptions={items => items}
+                getOptionLabel={doc =>
+                  (doc.type === 1 ? '目录：' : '') + doc.name
+                }
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                value={selectedDocuments}
+                onInputChange={(_, query) => setDocumentQuery(query)}
+                onChange={(_, items) => {
+                  setRememberedDocuments(items);
+                  change({
+                    ...value,
+                    scope: {
+                      type: 'documents',
+                      node_ids: items.map(doc => doc.id),
+                    },
+                  });
+                }}
+                renderInput={params => (
+                  <TextField
+                    {...params}
+                    label='搜索授权文档或目录'
+                    error={pickerError}
+                    helperText={
+                      pickerError
+                        ? '资料列表读取失败，可重新搜索'
+                        : '未选择文档或目录时，只使用上传资料。'
+                    }
+                  />
+                )}
+              />
+              {currentNode && (
+                <Button
+                  size='small'
+                  disabled={disabled}
+                  sx={{ flexShrink: 0 }}
+                  onClick={() =>
+                    change({
+                      ...value,
+                      scope: { type: 'documents', node_ids: [currentNode] },
+                    })
+                  }
+                >
+                  当前文档
+                </Button>
+              )}
+            </Stack>
+          )}
+        </Stack>
       )}
       {value.attachments.map(a => (
         <Stack
@@ -403,7 +539,7 @@ export default function AssistantTools({
         >
           <Chip
             size='small'
-            label={`${a.name} · ${a.status === 'ready' ? '可使用' : a.status === 'failed' ? '待继续处理' : a.status === 'processing' ? '解析中' : '等待处理'}`}
+            label={`${a.name} · ${a.status === 'ready' ? '可使用' : a.status === 'failed' ? '解析失败' : a.status === 'processing' ? '解析中' : '等待处理'}`}
             color='default'
             onDelete={
               disabled
@@ -449,31 +585,13 @@ export default function AssistantTools({
               这份资料尚未准备好，可继续处理或换一份资料。
             </Typography>
           )}
-          {a.format === 'pptx' && a.status === 'ready' && (
-            <Button
-              size='small'
-              startIcon={<SlideshowIcon />}
-              disabled={disabled || !a.report?.template_supported}
-              onClick={() => setTemplateDialog(a)}
-            >
-              {value.template?.id === a.id ? '本次 PPT 模板' : '用作 PPT 模板'}
-            </Button>
-          )}
-          {a.report?.template_error && (
+          {showPptTemplate && a.report?.template_error && (
             <Typography variant='caption' color='text.secondary'>
               这份文件可作为参考资料；使用PPT模板时，请选择包含标题和正文占位符的16:9模板。
             </Typography>
           )}
         </Stack>
       ))}
-      {value.template?.kind === 'upload' && (
-        <Chip
-          size='small'
-          color='primary'
-          label={`个人模板：${value.attachments.find(a => a.id === value.template?.id)?.name || '已选模板'}`}
-          onDelete={() => change({ ...value, template: undefined })}
-        />
-      )}
       {!!value.attachments.length && (
         <Typography variant='caption' color='text.secondary'>
           资料默认仅本人可用，不自动加入知识库；会按系统配置交给模型处理，保留期限见文件卡片。
@@ -517,6 +635,7 @@ export default function AssistantTools({
               if (templateDialog)
                 change({
                   ...value,
+                  includeTemplateContent: false,
                   template: { kind: 'upload', id: templateDialog.id },
                 });
               setTemplateDialog(null);
