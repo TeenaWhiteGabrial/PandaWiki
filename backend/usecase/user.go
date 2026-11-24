@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -26,6 +27,12 @@ type UserUsecase struct {
 
 var ErrAdministratorOnly = errors.New("仅管理员可登录管理后台，请使用用户端查阅文档")
 
+var (
+	ErrCreateAdministrator           = errors.New("只有超级管理员可以新建管理员")
+	ErrCreateUserDepartment          = errors.New("只能在本人所属部门新建用户")
+	ErrCreateUserDepartmentSelection = errors.New("请选择一个有效的所属部门")
+)
+
 func NewUserUsecase(repo *pg.UserRepository, enterpriseRepo *pg.EnterpriseRepository, logger *log.Logger, config *config.Config) (*UserUsecase, error) {
 	if config.AdminPassword != "" {
 		if err := repo.UpsertDefaultUser(context.Background(), &domain.User{
@@ -47,18 +54,52 @@ func NewUserUsecase(repo *pg.UserRepository, enterpriseRepo *pg.EnterpriseReposi
 }
 
 func (u *UserUsecase) CreateUser(ctx context.Context, user *domain.User, departmentIDs []string, edition consts.LicenseEdition) error {
+	auth := domain.GetAuthInfoFromCtx(ctx)
+	if auth == nil {
+		return ErrAdministratorOnly
+	}
+	operator, err := u.repo.GetUser(ctx, auth.UserId)
+	if err != nil {
+		return err
+	}
+	if !consts.IsAdministrator(operator.Role) {
+		return ErrAdministratorOnly
+	}
+	if user.Role != consts.UserRoleUser && user.Role != consts.UserRoleManager {
+		return errors.New("新建用户的角色必须是普通用户或管理员")
+	}
+	if user.Role == consts.UserRoleManager && !consts.IsSuperAdmin(operator.Role) {
+		return ErrCreateAdministrator
+	}
+	selected, err := u.enterpriseRepo.ResolveEffectiveDepartmentIDs(ctx, departmentIDs)
+	if err != nil || len(selected) != 1 {
+		return ErrCreateUserDepartmentSelection
+	}
+	primary := selected[0]
+	if operator.Role == consts.UserRoleManager {
+		managed, err := u.GetEffectiveDepartmentIDs(ctx, operator.ID)
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(managed, primary) {
+			return ErrCreateUserDepartment
+		}
+	}
+	// Older clients submit the selected department together with ancestors.
+	// Persist the same primary department that was checked above, regardless of input order.
+	assignments := make([]string, 0, len(departmentIDs))
+	for _, id := range departmentIDs {
+		if id != "" && id != primary && !slices.Contains(assignments, id) {
+			assignments = append(assignments, id)
+		}
+	}
+	assignments = append(assignments, primary)
 	if err := domain.ValidatePassword(user.Password, user.Account); err != nil {
 		return err
 	}
 	user.PasswordChangeRequired = true
 	if !domain.ValidUserAccount(user.Account) {
 		return errors.New("账号仅支持英文字母（大小写）、数字和下划线")
-	}
-	if user.Role == consts.UserRoleAdmin {
-		return errors.New("admin user cannot be created from ui")
-	}
-	if len(departmentIDs) == 0 {
-		return errors.New("department is required")
 	}
 	if user.PermissionLevelID != nil && *user.PermissionLevelID != "" {
 		level, err := u.enterpriseRepo.GetPermissionLevelByID(ctx, *user.PermissionLevelID)
@@ -69,7 +110,7 @@ func (u *UserUsecase) CreateUser(ctx context.Context, user *domain.User, departm
 			return errors.New("权限等级已停用")
 		}
 	}
-	return u.repo.CreateUser(ctx, user, departmentIDs, edition, u.enterpriseRepo)
+	return u.repo.CreateUser(ctx, user, assignments, edition, u.enterpriseRepo)
 }
 
 func (u *UserUsecase) VerifyUserAndGenerateToken(ctx context.Context, req v1.LoginReq) (string, error) {

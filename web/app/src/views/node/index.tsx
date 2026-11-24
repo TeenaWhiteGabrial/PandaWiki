@@ -18,37 +18,16 @@ import { useEffect, useMemo, useState } from 'react';
 import DocAnchor from './DocAnchor';
 import DocContent from './DocContent';
 
-const Doc = ({
-  nodeId,
-  node,
-  error,
-}: {
-  nodeId?: string;
-  node?: V1ShareNodeDetailResp;
-  error?: Partial<Error> & { digest?: string } & { code?: number | string };
-}) => {
-  const {
-    kbDetail,
-    mobile,
-    catalogWidth,
-    authInfo,
-    authRevision = 0,
-  } = useStore();
-  const requestedNodeId = nodeId || node?.id;
-  const requestScope = `${authInfo?.id || 'anonymous'}:${authRevision}:${requestedNodeId || ''}`;
+type DocPageError = Partial<Error> & { code?: number | string };
+
+const DocView = ({ nodeId }: { nodeId: string }) => {
+  const { kbDetail, mobile, catalogWidth } = useStore();
   const [loading, setLoading] = useState(true);
   const [editorReady, setEditorReady] = useState(false);
   const [headings, setHeadings] = useState<TocList>([]);
   const [characterCount, setCharacterCount] = useState(0);
-  const [nodeState, setNodeState] = useState<V1ShareNodeDetailResp | undefined>(
-    node,
-  );
-  const [loadedScope, setLoadedScope] = useState(requestScope);
-  const [pageError, setPageError] = useState<typeof error>(error);
-  const pathname = usePathname();
-  const isCurrentScope = loadedScope === requestScope;
-  const currentNode = isCurrentScope ? nodeState : undefined;
-  const currentError = isCurrentScope ? pageError : undefined;
+  const [currentNode, setCurrentNode] = useState<V1ShareNodeDetailResp>();
+  const [currentError, setCurrentError] = useState<DocPageError>();
   const isMarkdown = useMemo(() => {
     return currentNode?.meta?.content_type === 'md';
   }, [currentNode?.meta?.content_type]);
@@ -61,45 +40,31 @@ const Doc = ({
   }, [isMarkdown, isReadonlyFilePreview]);
 
   useEffect(() => {
-    if (!requestedNodeId) {
-      return;
-    }
+    if (!nodeId) return;
 
-    let disposed = false;
-    // Always reauthorize the document on navigation or identity changes.
-    // A process-wide cache keyed only by document ID can replay content
-    // obtained by a previous login without consulting the permission API.
-    setLoadedScope(requestScope);
-    setNodeState(undefined);
-    setLoading(true);
-    setPageError(undefined);
-    setEditorReady(false);
-    setHeadings([]);
-    setCharacterCount(0);
+    const controller = new AbortController();
 
     getShareV1NodeDetail(
-      { id: requestedNodeId, format: 'json' },
-      { cache: 'no-store' },
+      { id: nodeId, format: 'json' },
+      { cache: 'no-store', signal: controller.signal, isAlert: false },
     )
       .then(res => {
-        if (!disposed) {
+        if (!controller.signal.aborted) {
           const detail = res as V1ShareNodeDetailResp | undefined;
           if (!detail) throw new Error('文档内容为空');
-          setNodeState(detail);
+          setCurrentNode(detail);
           setLoading(false);
         }
       })
       .catch(err => {
-        if (!disposed) {
-          setPageError(err as Error);
+        if (!controller.signal.aborted) {
+          setCurrentError(err as DocPageError);
           setLoading(false);
         }
       });
 
-    return () => {
-      disposed = true;
-    };
-  }, [requestedNodeId, requestScope]);
+    return () => controller.abort();
+  }, [nodeId]);
 
   useEffect(() => {
     if (isReadonlyFilePreview || isMarkdown) {
@@ -157,15 +122,12 @@ const Doc = ({
 
     setEditorReady(false);
     setHeadings([]);
-    requestAnimationFrame(() => {
-      editorRef.setContent(currentNode?.content || '', 'html');
+    const frame = requestAnimationFrame(() => {
+      editorRef.setContent(currentNode.content || '', 'html');
       setEditorReady(true);
     });
+    return () => cancelAnimationFrame(frame);
   }, [currentNode, editorRef.editor, shouldUseTiptap]);
-
-  useEffect(() => {
-    document.querySelector('#scroll-container')?.scrollTo({ top: 0 });
-  }, [pathname]);
 
   return (
     <>
@@ -191,7 +153,7 @@ const Doc = ({
             editorRef={editorRef}
             editorReady={editorReady}
             characterCount={characterCount}
-            loading={!isCurrentScope || (loading && !isReadonlyFilePreview)}
+            loading={loading && !isReadonlyFilePreview}
             headings={headings}
           />
           {!mobile && !isReadonlyFilePreview && headings.length > 0 && (
@@ -203,6 +165,25 @@ const Doc = ({
       )}
     </>
   );
+};
+
+const Doc = ({ nodeId }: { nodeId: string }) => {
+  const { authInfo, authRevision, catalogRevision } = useStore();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    document.querySelector('#scroll-container')?.scrollTo({ top: 0 });
+  }, [pathname]);
+
+  // Unmount the old content, editor and preview as soon as the catalog changes.
+  // Only the fresh detail request can render content for this revision.
+  const scope = JSON.stringify([
+    nodeId,
+    authInfo?.id,
+    authRevision,
+    catalogRevision,
+  ]);
+  return <DocView key={scope} nodeId={nodeId} />;
 };
 
 export default Doc;

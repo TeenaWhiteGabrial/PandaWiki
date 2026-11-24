@@ -1,4 +1,16 @@
 import type { Department } from '@/request/Enterprise';
+import { ConstsUserRole } from '@/request/types';
+import type { UserInfoCompat } from '@/request/userCompat';
+
+export const getUserCreationDepartments = (
+  departments: Department[],
+  operator?: UserInfoCompat,
+) => {
+  if (operator?.role === ConstsUserRole.UserRoleAdmin) return departments;
+  if (operator?.role !== ConstsUserRole.UserRoleManager) return [];
+  const allowed = new Set(operator?.effective_department_ids);
+  return departments.filter(department => allowed.has(department.id));
+};
 
 export const buildDepartmentTree = (
   departments: Department[],
@@ -88,13 +100,38 @@ export const getAncestorIds = (
 
   selectedIds.forEach(id => {
     let current = map.get(id);
-    while (current?.parent_id) {
+    const visited = new Set([id]);
+    while (current?.parent_id && !visited.has(current.parent_id)) {
+      visited.add(current.parent_id);
       result.add(current.parent_id);
       current = map.get(current.parent_id);
     }
   });
 
   return [...result];
+};
+
+export const getDeepestDepartmentIds = (
+  assignedIds: string[],
+  departments: Department[],
+) => {
+  const ancestors = new Set(getAncestorIds(assignedIds, departments));
+  return [...new Set(assignedIds)].filter(id => !ancestors.has(id));
+};
+
+export const getDepartmentPathLabel = (
+  department: Department,
+  byId: ReadonlyMap<string, Department>,
+) => {
+  const names: string[] = [];
+  const visited = new Set<string>();
+  let current: Department | undefined = department;
+  while (current && !visited.has(current.id)) {
+    names.unshift(current.name);
+    visited.add(current.id);
+    current = current.parent_id ? byId.get(current.parent_id) : undefined;
+  }
+  return names.join(' / ');
 };
 
 /**

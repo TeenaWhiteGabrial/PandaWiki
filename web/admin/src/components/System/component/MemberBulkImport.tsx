@@ -8,7 +8,8 @@ import {
 import { useAppSelector } from '@/store';
 import { getApiV1UserListCompat } from '@/request/userCompat';
 import type { V1CreateUserReq } from '@/request/types';
-import { getAncestorIds } from '@/utils/enterprise';
+import { ConstsUserRole } from '@/request/types';
+import { getAncestorIds, getUserCreationDepartments } from '@/utils/enterprise';
 import { message, Modal } from '@/components/ui';
 import {
   Add,
@@ -324,9 +325,10 @@ const getErrorMessage = (error: unknown) => {
 };
 
 const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
-  const levelsDisabled = useAppSelector(
-    state => state.config.user?.permission_levels_disabled,
-  );
+  const operator = useAppSelector(state => state.config.user);
+  const levelsDisabled = operator?.permission_levels_disabled;
+  const canCreateAdministrator =
+    operator?.role === ConstsUserRole.UserRoleAdmin;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nextRowId = useRef(1);
   const departmentRequestStarted = useRef(false);
@@ -349,21 +351,29 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
     () => new Map(departments.map(department => [department.id, department])),
     [departments],
   );
+  const creationDepartments = useMemo(
+    () => getUserCreationDepartments(departments, operator),
+    [departments, operator],
+  );
+  const creationDepartmentIds = useMemo(
+    () => new Set(creationDepartments.map(department => department.id)),
+    [creationDepartments],
+  );
   const departmentLookup = useMemo(() => {
     const byPath = new Map<string, Department>();
     const byName = new Map<string, Department[]>();
-    const paths = departments.map(department => {
+    const paths: string[] = [];
+    for (const department of departments) {
       const path = getDepartmentPath(department, departmentMap);
       byPath.set(normalizeDepartmentPath(path), department);
       const sameName = byName.get(department.name) || [];
       sameName.push(department);
       byName.set(department.name, sameName);
-      return path;
-    });
+      if (creationDepartmentIds.has(department.id)) paths.push(path);
+    }
     return { byPath, byName, paths };
-  }, [departments, departmentMap]);
+  }, [departments, departmentMap, creationDepartmentIds]);
 
-  const rows = mode === 'manual' ? manualRows : excelRows;
   const setCurrentRows = mode === 'manual' ? setManualRows : setExcelRows;
 
   useEffect(() => {
@@ -420,8 +430,14 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
       }
       if (!name) errors.push('姓名不能为空');
       if (row.roleError) errors.push(row.roleError);
+      if (row.role === 'manager' && !canCreateAdministrator) {
+        errors.push('只有超级管理员可以新建管理员，请改为普通用户');
+      }
       if (!departmentPath) errors.push('请选择或填写部门路径');
       else if (!department) errors.push('未找到部门，请填写有效的完整路径');
+      else if (!creationDepartmentIds.has(department.id)) {
+        errors.push('只能在本人所属部门新建用户');
+      }
       if (!levelsDisabled && permissionLevel && !level) {
         errors.push('权限等级不存在、已停用或名称不唯一');
       }
@@ -472,7 +488,9 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
       ['姓名（必填）', '填写用户的真实姓名或便于识别的名称。'],
       [
         '角色（可选）',
-        '填写“普通用户”或“管理员”；也接受 user 或 manager。留空时默认为普通用户。',
+        canCreateAdministrator
+          ? '填写“普通用户”或“管理员”，也接受 user 或 manager。留空时默认为普通用户。'
+          : '填写“普通用户”或 user，留空也会创建普通用户。',
       ],
       [
         '部门路径（必填）',
@@ -489,7 +507,7 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
       ['', ''],
       ['填写示例（仅供参考，不会导入）', '', '', ''],
       HEADERS,
-      ['Zhang_San01', '张三', '普通用户', '集团/研发部', ''],
+      ['Zhang_San01', '张三', '普通用户', departmentLookup.paths[0] || '', ''],
       ['', ''],
       [
         '注意',
@@ -699,7 +717,7 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
         };
       });
       nextRowId.current = importedRows.length + 1;
-      setExcelRows(validateRows(importedRows));
+      setExcelRows(importedRows);
     } catch (error) {
       setFileName('');
       message.error(getErrorMessage(error));
@@ -711,16 +729,14 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
   const updateRow = (id: number, update: Partial<ImportRow>) => {
     setResult(null);
     setCurrentRows(current =>
-      validateRows(
-        current.map(row =>
-          row.id === id
-            ? {
-                ...row,
-                ...update,
-                ...(update.role ? { roleError: undefined } : {}),
-              }
-            : row,
-        ),
+      current.map(row =>
+        row.id === id
+          ? {
+              ...row,
+              ...update,
+              ...(update.role ? { roleError: undefined } : {}),
+            }
+          : row,
       ),
     );
   };
@@ -731,30 +747,27 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
       return;
     }
     const id = nextRowId.current++;
-    setManualRows(current =>
-      validateRows([
-        ...current,
-        {
-          id,
-          rowNumber: id,
-          account: '',
-          name: '',
-          role: 'user',
-          departmentPath: '',
-          departmentId: '',
-        },
-      ]),
-    );
+    setManualRows(current => [
+      ...current,
+      {
+        id,
+        rowNumber: id,
+        account: '',
+        name: '',
+        role: 'user',
+        departmentPath: '',
+        departmentId: '',
+      },
+    ]);
     setResult(null);
   };
 
   const removeRow = (id: number) => {
-    setCurrentRows(current =>
-      validateRows(current.filter(row => row.id !== id)),
-    );
+    setCurrentRows(current => current.filter(row => row.id !== id));
     setResult(null);
   };
 
+  const rows = validateRows(mode === 'manual' ? manualRows : excelRows);
   const validRows = rows.filter(row => !row.error);
   const canSubmit =
     rows.length > 0 &&
@@ -976,7 +989,9 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
                   startIcon={<Add />}
                   onClick={addManualRow}
                   disabled={
-                    importing || loadingDepartments || !departments.length
+                    importing ||
+                    loadingDepartments ||
+                    !creationDepartments.length
                   }
                 >
                   添加一行
@@ -988,6 +1003,7 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
                 updateRow,
                 removeRow,
                 departmentLookup.paths,
+                canCreateAdministrator,
                 importing,
                 levelsDisabled ? undefined : permissionLevels,
               )}
@@ -1031,6 +1047,7 @@ const MemberBulkImport = ({ refresh }: { refresh: () => void }) => {
                 updateRow,
                 removeRow,
                 departmentLookup.paths,
+                canCreateAdministrator,
                 importing,
                 levelsDisabled ? undefined : permissionLevels,
               )}
@@ -1105,6 +1122,7 @@ const renderRows = (
   updateRow: (id: number, update: Partial<ImportRow>) => void,
   removeRow: (id: number) => void,
   departmentPaths: string[],
+  canCreateAdministrator: boolean,
   disabled: boolean,
   permissionLevels?: PermissionLevel[],
 ) => {
@@ -1192,12 +1210,19 @@ const renderRows = (
             />
             <AntSelect
               size='middle'
-              value={row.role}
+              value={
+                canCreateAdministrator || row.role === 'user'
+                  ? row.role
+                  : undefined
+              }
+              placeholder='请选择角色'
               onChange={role => updateRow(row.id, { role })}
               disabled={disabled}
               options={[
                 { value: 'user', label: '普通用户' },
-                { value: 'manager', label: '管理员' },
+                ...(canCreateAdministrator
+                  ? [{ value: 'manager' as const, label: '管理员' }]
+                  : []),
               ]}
             />
             <Autocomplete

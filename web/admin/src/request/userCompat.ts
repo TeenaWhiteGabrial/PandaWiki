@@ -12,6 +12,7 @@ export type UserInfoCompat = {
   created_at?: string;
   permission_level_id?: string;
   department_ids?: string[];
+  effective_department_ids?: string[];
 };
 
 export type UserListItemCompat = {
@@ -25,7 +26,8 @@ export type UserListItemCompat = {
   department_ids?: string[];
 };
 
-export const getApiV1UserCompat = () => getApiV1User() as Promise<UserInfoCompat>;
+export const getApiV1UserCompat = () =>
+  getApiV1User() as Promise<UserInfoCompat>;
 
 export const getApiV1UserListCompat = async (query: UserListQuery = {}) => {
   const resp = await getApiV1UserList(query);

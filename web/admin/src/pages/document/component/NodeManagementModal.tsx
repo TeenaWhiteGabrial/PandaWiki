@@ -10,23 +10,16 @@ import {
 import { DomainDocumentManagementGrant } from '@/request/types';
 import {
   Alert,
+  Box,
   Button,
   CircularProgress,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import {
   PermissionDialogTabs,
   PermissionObjectName,
   PermissionHelp,
-  permissionTableSx,
 } from './PermissionDialogLayout';
 import { Select } from 'antd';
 import { isAdministrator } from '@/utils/permission';
@@ -37,6 +30,36 @@ const subjectLabels = {
   user: '指定管理员',
   department: '部门',
 };
+
+const isLocalAdministratorGrant = (grant: DomainDocumentManagementGrant) =>
+  grant.subject_type === 'user' && grant.directory_scope !== 'current';
+
+const administratorIds = (grants: DomainDocumentManagementGrant[]) => [
+  ...new Set(
+    grants
+      .filter(isLocalAdministratorGrant)
+      .flatMap(grant => grant.subject_ids),
+  ),
+];
+
+function withAdministrators(
+  grants: DomainDocumentManagementGrant[],
+  subjectIds: string[],
+): DomainDocumentManagementGrant[] {
+  const legacy = grants.filter(grant => !isLocalAdministratorGrant(grant));
+  if (subjectIds.length === 0) return legacy;
+  return [
+    ...legacy,
+    {
+      subject_type: 'user',
+      subject_ids: [...new Set(subjectIds)],
+      directory_scope: 'current_and_descendants',
+    },
+  ];
+}
+
+const scopeLabel = (grant: DomainDocumentManagementGrant) =>
+  grant.directory_scope === 'current' ? '仅当前目录' : '当前及下级目录';
 function expandDepartments(
   ids: string[] | undefined,
   departments: Department[],
@@ -221,7 +244,16 @@ export default function NodeManagementModal({
       all.some(grant => userMatchesGrant(grant, user, departments)),
     );
   }, [sources, grants, users, departments]);
-  const invalid = grants.some(
+  const localIds = administratorIds(grants);
+  const legacyGrants = documentOnly
+    ? grants
+    : grants.filter(grant => !isLocalAdministratorGrant(grant));
+  const savedGrants = documentOnly
+    ? grants
+    : withAdministrators(grants, localIds);
+  const editable = ready && canConfigure && !loading;
+  const userOptions = users.map(user => ({ value: user.id, label: user.name }));
+  const invalid = savedGrants.some(
     grant =>
       !grant.subject_ids.length ||
       (grant.subject_type === 'user' &&
@@ -240,8 +272,17 @@ export default function NodeManagementModal({
     setLoading(true);
     try {
       if (targetType === 'nav')
-        await editNavManagement({ kb_id: kbID, id: nodeIDs[0], grants });
-      else await editNodeManagement({ kb_id: kbID, ids: nodeIDs, grants });
+        await editNavManagement({
+          kb_id: kbID,
+          id: nodeIDs[0],
+          grants: savedGrants,
+        });
+      else
+        await editNodeManagement({
+          kb_id: kbID,
+          ids: nodeIDs,
+          grants: savedGrants,
+        });
       message.success('文档管理权限已保存');
       onClose();
       onSuccess();
@@ -249,9 +290,6 @@ export default function NodeManagementModal({
       setLoading(false);
     }
   };
-  const inheritedRows = sources.flatMap(source =>
-    source.grants.map((grant, index) => ({ source, grant, index })),
-  );
   return (
     <Modal
       open={open}
@@ -302,144 +340,102 @@ export default function NodeManagementModal({
                 项的本级授权，当前显示第一项；各自的上级授权继续生效。
               </Typography>
             )}
-            <Stack
-              direction='row'
-              alignItems='center'
-              justifyContent='space-between'
-            >
-              <Typography fontSize={13}>
-                {documentOnly ? '使用所属目录的管理授权' : '管理员授权'}
+            <Stack direction='row' gap={1.5} alignItems='center'>
+              <Typography fontSize={13} flexShrink={0}>
+                {documentOnly ? '使用所属目录的管理授权' : '本级管理员'}
               </Typography>
+              {!documentOnly && (
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Select
+                    aria-label='本级管理员'
+                    mode='multiple'
+                    allowClear
+                    maxTagCount='responsive'
+                    showSearch
+                    optionFilterProp='label'
+                    disabled={!editable}
+                    style={{ width: '100%' }}
+                    value={localIds}
+                    options={[
+                      ...userOptions,
+                      ...localIds
+                        .filter(id => !users.some(user => user.id === id))
+                        .map(id => ({
+                          value: id,
+                          label: `${id}（不可用）`,
+                          disabled: true,
+                        })),
+                    ]}
+                    placeholder='搜索并选择管理员'
+                    onChange={ids =>
+                      updateGrants(withAdministrators(grants, ids))
+                    }
+                  />
+                </Box>
+              )}
+              {!documentOnly && (
+                <Typography fontSize={12} color='text.secondary' flexShrink={0}>
+                  当前及下级目录
+                </Typography>
+              )}
               <PermissionHelp management />
             </Stack>
-            <TableContainer
-              sx={{
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-              }}
-            >
-              <Table
-                size='small'
-                sx={permissionTableSx}
-                aria-label='管理授权列表'
-              >
-                <TableHead>
-                  <TableRow>
-                    <TableCell>管理员</TableCell>
-                    <TableCell sx={{ width: 145 }}>授权来源</TableCell>
-                    <TableCell sx={{ width: 135 }}>生效范围</TableCell>
-                    <TableCell align='right' sx={{ width: 65 }}>
-                      操作
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {inheritedRows.map(({ source, grant, index }) => (
-                    <TableRow key={`${source.id}:${index}`}>
-                      <TableCell>
-                        {describeGrant(grant, users, departments, levels)}
-                      </TableCell>
-                      <TableCell>
-                        <Typography fontSize={13}>
-                          {source.name || source.id}
+            {sources.length > 0 && (
+              <Box component='details' sx={{ fontSize: 13 }}>
+                <Box component='summary' sx={{ cursor: 'pointer' }}>
+                  上级继承（{sources.length} 处）
+                </Box>
+                <Stack gap={1} sx={{ mt: 1, pl: 2 }}>
+                  {sources.map(source => (
+                    <Box key={source.id}>
+                      <Typography fontSize={13}>
+                        {source.name || source.id}
+                      </Typography>
+                      {source.grants.map((grant, index) => (
+                        <Typography
+                          key={index}
+                          fontSize={12}
+                          color='text.secondary'
+                        >
+                          {describeGrant(grant, users, departments, levels)} ·{' '}
+                          {scopeLabel(grant)}
                         </Typography>
-                        <Typography fontSize={11} color='text.secondary'>
-                          继承
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        {grant.directory_scope === 'current'
-                          ? '仅当前目录'
-                          : '当前及下级目录'}
-                      </TableCell>
-                      <TableCell align='right'>
-                        <Tooltip title='请在授权来源处修改'>
-                          <Typography
-                            component='span'
-                            fontSize={12}
-                            color='text.secondary'
-                          >
-                            只读
-                          </Typography>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
+                      ))}
+                    </Box>
                   ))}
-                  {grants.map((grant, index) => (
-                    <TableRow key={`local:${index}`}>
-                      <TableCell>
-                        {grant.subject_type === 'user' && !documentOnly ? (
-                          <Select
-                            aria-label={`本级管理员${index + 1}`}
-                            mode='multiple'
-                            maxTagCount='responsive'
-                            showSearch
-                            optionFilterProp='label'
-                            disabled={!ready || !canConfigure || loading}
-                            style={{ width: '100%' }}
-                            value={grant.subject_ids}
-                            options={[
-                              ...users.map(user => ({
-                                value: user.id,
-                                label: user.name,
-                              })),
-                              ...grant.subject_ids
-                                .filter(
-                                  id => !users.some(user => user.id === id),
-                                )
-                                .map(id => ({
-                                  value: id,
-                                  label: `${id}（不可选）`,
-                                  disabled: true,
-                                })),
-                            ]}
-                            placeholder='搜索姓名或账号'
-                            onChange={subject_ids =>
-                              updateGrants(
-                                grants.map((item, i) =>
-                                  i === index ? { ...item, subject_ids } : item,
-                                ),
-                              )
-                            }
-                          />
-                        ) : (
-                          <>
-                            <Typography fontSize={13}>
-                              {describeGrant(grant, users, departments, levels)}
-                            </Typography>
-                            <Typography fontSize={11} color='text.secondary'>
-                              历史授权
-                            </Typography>
-                          </>
-                        )}
-                      </TableCell>
-                      <TableCell>本级授权</TableCell>
-                      <TableCell>
-                        {grant.directory_scope === 'current' ? (
-                          <Stack gap={0.5}>
-                            <Typography fontSize={13}>仅当前目录</Typography>
-                            {!documentOnly && grant.subject_type === 'user' && (
+                </Stack>
+              </Box>
+            )}
+            {legacyGrants.length > 0 && (
+              <Box component='details' sx={{ fontSize: 13 }}>
+                <Box component='summary' sx={{ cursor: 'pointer' }}>
+                  历史授权（{legacyGrants.length} 条）
+                </Box>
+                <Stack gap={1} sx={{ mt: 1, pl: 2 }}>
+                  {legacyGrants.map((grant, index) => (
+                    <Stack
+                      key={index}
+                      direction='row'
+                      gap={1}
+                      alignItems='center'
+                      justifyContent='space-between'
+                    >
+                      <Typography fontSize={12} color='text.secondary'>
+                        {describeGrant(grant, users, departments, levels)} ·{' '}
+                        {scopeLabel(grant)}
+                      </Typography>
+                      {!documentOnly && (
+                        <Stack direction='row' flexShrink={0}>
+                          {grant.subject_type === 'user' &&
+                            grant.directory_scope === 'current' && (
                               <Button
                                 size='small'
-                                color='inherit'
-                                disabled={!canConfigure || loading}
-                                sx={{
-                                  p: 0,
-                                  minWidth: 0,
-                                  alignSelf: 'flex-start',
-                                  fontSize: 12,
-                                }}
+                                disabled={!editable}
                                 onClick={() =>
                                   updateGrants(
-                                    grants.map((item, i) =>
-                                      i === index
-                                        ? {
-                                            ...item,
-                                            directory_scope:
-                                              'current_and_descendants',
-                                          }
-                                        : item,
+                                    withAdministrators(
+                                      grants.filter(item => item !== grant),
+                                      [...localIds, ...grant.subject_ids],
                                     ),
                                   )
                                 }
@@ -447,84 +443,39 @@ export default function NodeManagementModal({
                                 扩展到下级
                               </Button>
                             )}
-                          </Stack>
-                        ) : (
-                          '当前及下级目录'
-                        )}
-                      </TableCell>
-                      <TableCell align='right'>
-                        {!documentOnly && (
                           <Button
                             size='small'
                             color='inherit'
-                            sx={{
-                              minWidth: 0,
-                              p: 0,
-                              color: 'text.secondary',
-                              '&:hover': { color: 'error.main' },
-                            }}
-                            disabled={!canConfigure || loading}
+                            disabled={!editable}
                             onClick={() =>
-                              updateGrants(grants.filter((_, i) => i !== index))
+                              updateGrants(
+                                grants.filter(item => item !== grant),
+                              )
                             }
                           >
                             移除
                           </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
+                        </Stack>
+                      )}
+                    </Stack>
                   ))}
-                  {ready && !inheritedRows.length && !grants.length && (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        <Typography
-                          textAlign='center'
-                          color='text.secondary'
-                          fontSize={13}
-                          py={2}
-                        >
-                          未设置额外管理员
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
+                  {documentOnly && (
+                    <Button
+                      size='small'
+                      color='inherit'
+                      disabled={!editable}
+                      sx={{ alignSelf: 'flex-start' }}
+                      onClick={() => updateGrants([])}
+                    >
+                      清空历史文档授权
+                    </Button>
                   )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            {!documentOnly && canConfigure && (
-              <Button
-                size='small'
-                variant='outlined'
-                disabled={!ready || loading}
-                sx={{ alignSelf: 'flex-start' }}
-                onClick={() =>
-                  updateGrants([
-                    ...grants,
-                    {
-                      subject_type: 'user',
-                      subject_ids: [],
-                      directory_scope: 'current_and_descendants',
-                    },
-                  ])
-                }
-              >
-                添加管理员
-              </Button>
-            )}
-            {documentOnly && grants.length > 0 && (
-              <Button
-                size='small'
-                color='inherit'
-                disabled={!canConfigure || loading}
-                sx={{ alignSelf: 'flex-start' }}
-                onClick={() => updateGrants([])}
-              >
-                清空历史文档授权
-              </Button>
+                </Stack>
+              </Box>
             )}
             {invalid && (
               <Typography fontSize={12} color='error.main'>
-                请补全管理员，或移除不可用的账号。
+                请移除不可用的账号或授权。
               </Typography>
             )}
             {ready && (

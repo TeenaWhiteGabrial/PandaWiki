@@ -14,6 +14,7 @@ import {
   buildDepartmentTree,
   flattenDepartmentTree,
   getAncestorIds,
+  getUserCreationDepartments,
 } from '@/utils/enterprise';
 import { CheckCircle } from '@mui/icons-material';
 import { Select } from 'antd';
@@ -21,13 +22,15 @@ import { Box, Button, Stack, TextField } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { V1CreateUserReq } from '@/request/types';
+import { ConstsUserRole } from '@/request/types';
 
 type Role = 'manager' | 'user';
 
 const MemberAdd = ({ refresh }: { refresh: () => void }) => {
-  const levelsDisabled = useAppSelector(
-    state => state.config.user?.permission_levels_disabled,
-  );
+  const operator = useAppSelector(state => state.config.user);
+  const levelsDisabled = operator?.permission_levels_disabled;
+  const canCreateAdministrator =
+    operator?.role === ConstsUserRole.UserRoleAdmin;
   const [addMember, setAddMember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [createdUserInfo, setCreatedUserInfo] = useState<{
@@ -56,8 +59,9 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
   });
 
   const departmentTree = useMemo(
-    () => buildDepartmentTree(departments),
-    [departments],
+    () =>
+      buildDepartmentTree(getUserCreationDepartments(departments, operator)),
+    [departments, operator],
   );
   const flatDepartments = useMemo(
     () => flattenDepartmentTree(departmentTree),
@@ -150,7 +154,7 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
         ]),
       ],
       password,
-      role: data.role,
+      role: canCreateAdministrator ? data.role : 'user',
       permission_level_id: levelsDisabled
         ? undefined
         : data.permission_level_id || undefined,
@@ -223,7 +227,8 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
         onOk={onSubmit}
         okButtonProps={{
           loading,
-          disabled: loadingOptions || optionsError,
+          disabled:
+            loadingOptions || optionsError || flatDepartments.length === 0,
         }}
       >
         <FormItem label='账号' required>
@@ -274,23 +279,25 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
           />
         </FormItem>
 
-        <FormItem label='角色' required sx={{ mt: 2 }}>
-          <Controller
-            control={control}
-            name='role'
-            render={({ field }) => (
-              <Select
-                value={field.value}
-                onChange={field.onChange}
-                style={{ width: '100%' }}
-                options={[
-                  { value: 'manager', label: '管理员' },
-                  { value: 'user', label: '普通用户' },
-                ]}
-              />
-            )}
-          />
-        </FormItem>
+        {canCreateAdministrator && (
+          <FormItem label='角色' required sx={{ mt: 2 }}>
+            <Controller
+              control={control}
+              name='role'
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onChange={field.onChange}
+                  style={{ width: '100%' }}
+                  options={[
+                    { value: 'manager', label: '管理员' },
+                    { value: 'user', label: '普通用户' },
+                  ]}
+                />
+              )}
+            />
+          </FormItem>
+        )}
         {!levelsDisabled && (
           <FormItem label='权限等级' sx={{ mt: 2 }}>
             <Controller
@@ -323,7 +330,10 @@ const MemberAdd = ({ refresh }: { refresh: () => void }) => {
             control={control}
             name='department_ids'
             rules={{
-              validate: value => (value?.length ? true : '请选择所属部门'),
+              validate: value =>
+                (value?.length === 1 &&
+                  flatDepartments.some(item => item.id === value[0])) ||
+                '请选择可创建用户的部门',
             }}
             render={({ field, fieldState }) => (
               <DepartmentTreeSelect

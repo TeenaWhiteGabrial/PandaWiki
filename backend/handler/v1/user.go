@@ -31,32 +31,6 @@ type UserHandler struct {
 	rateLimiter *ratelimit.RateLimiter
 }
 
-func (h *UserHandler) validateManagerDepartmentScope(ctx context.Context, operator *domain.User, targetDepartmentIDs []string) error {
-	if operator == nil || operator.Role != consts.UserRoleManager {
-		return nil
-	}
-	managerDepartments, err := h.usecase.GetEffectiveDepartmentIDs(ctx, operator.ID)
-	if err != nil {
-		return err
-	}
-	if len(managerDepartments) == 0 {
-		return fmt.Errorf("manager has no department")
-	}
-	targetDepartments, err := h.usecase.ResolveEffectiveDepartmentIDs(ctx, targetDepartmentIDs)
-	if err != nil {
-		return err
-	}
-	if len(targetDepartments) == 0 {
-		return fmt.Errorf("target user has no department")
-	}
-	for _, departmentID := range targetDepartments {
-		if !slices.Contains(managerDepartments, departmentID) {
-			return fmt.Errorf("department out of manager scope")
-		}
-	}
-	return nil
-}
-
 func (h *UserHandler) validateManagerUserScope(ctx context.Context, operator *domain.User, targetUserID string) error {
 	if operator == nil || operator.Role != consts.UserRoleManager {
 		return nil
@@ -132,24 +106,12 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 		return h.NewResponseWithError(c, "账号仅支持英文字母（大小写）、数字和下划线", nil)
 	}
 
-	authInfo := domain.GetAuthInfoFromCtx(c.Request().Context())
-	if authInfo == nil {
-		return h.NewResponseWithError(c, "authInfo not found in context", nil)
-	}
-	operator, err := h.usecase.GetUser(c.Request().Context(), authInfo.UserId)
-	if err != nil {
-		return h.NewResponseWithError(c, "failed to get user", err)
-	}
-	if err := h.validateManagerDepartmentScope(c.Request().Context(), operator, req.DepartmentIDs); err != nil {
-		return h.NewResponseWithError(c, "cannot create user out of your department scope", err)
-	}
-
 	uid := uuid.New().String()
 	var permissionLevelID *string
 	if req.PermissionLevelID != "" {
 		permissionLevelID = &req.PermissionLevelID
 	}
-	err = h.usecase.CreateUser(c.Request().Context(), &domain.User{
+	err := h.usecase.CreateUser(c.Request().Context(), &domain.User{
 		ID:                uid,
 		Account:           req.Account,
 		Name:              req.Name,
@@ -158,6 +120,12 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 		PermissionLevelID: permissionLevelID,
 	}, req.DepartmentIDs, consts.GetLicenseEdition(c))
 	if err != nil {
+		if errors.Is(err, usecase.ErrCreateAdministrator) || errors.Is(err, usecase.ErrCreateUserDepartment) || errors.Is(err, usecase.ErrAdministratorOnly) {
+			return h.NewResponseWithStatusError(c, http.StatusForbidden, err.Error(), err)
+		}
+		if errors.Is(err, usecase.ErrCreateUserDepartmentSelection) {
+			return h.NewResponseWithError(c, err.Error(), err)
+		}
 		if errors.Is(err, domain.ErrPasswordPolicy) {
 			return h.NewResponseWithError(c, domain.PasswordPolicyMessage, err)
 		}
@@ -270,6 +238,13 @@ func (h *UserHandler) GetUserInfo(c echo.Context) error {
 	}
 	if departments, _, err := h.usecase.GetUserDepartments(ctx, user.ID); err == nil {
 		userInfo.DepartmentIDs = departments
+	}
+
+	if user.Role == consts.UserRoleManager {
+		userInfo.EffectiveDepartmentIDs, err = h.usecase.GetEffectiveDepartmentIDs(ctx, user.ID)
+		if err != nil {
+			h.logger.Warn("failed to get effective departments", log.Error(err))
+		}
 	}
 
 	return h.NewResponseWithData(c, userInfo)

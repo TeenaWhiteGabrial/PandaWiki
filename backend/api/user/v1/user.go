@@ -29,6 +29,7 @@ type UserInfoResp struct {
 	Role                     consts.UserRole `json:"role"`
 	PermissionLevelID        *string         `json:"permission_level_id,omitempty"`
 	DepartmentIDs            []string        `json:"department_ids,omitempty"`
+	EffectiveDepartmentIDs   []string        `json:"effective_department_ids,omitempty"`
 	IsToken                  bool            `json:"is_token"`
 	LastAccess               *time.Time      `json:"last_access,omitempty"`
 	CreatedAt                time.Time       `json:"created_at"`

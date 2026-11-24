@@ -1,5 +1,9 @@
 import type { Department } from '@/request/Enterprise';
-import { normalizeSelectedDepartmentIDs } from '@/utils/enterprise';
+import {
+  getAncestorIds,
+  getDepartmentPathLabel,
+  normalizeSelectedDepartmentIDs,
+} from '@/utils/enterprise';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
@@ -20,6 +24,7 @@ export interface DepartmentTreeSelectProps {
   value: string[];
   onChange: (value: string[]) => void;
   multiple?: boolean;
+  showFullPath?: boolean;
   label?: string;
   placeholder?: string;
   disabled?: boolean;
@@ -136,6 +141,7 @@ const DepartmentTreeSelect = forwardRef<
       value,
       onChange,
       multiple = true,
+      showFullPath = false,
       placeholder = '请选择部门',
       disabled = false,
       excludeIds = [],
@@ -164,8 +170,13 @@ const DepartmentTreeSelect = forwardRef<
       [value, departmentMap],
     );
     const selectedNames = useMemo(
-      () => formatSelectedNames(selectedItems, multiple),
-      [selectedItems, multiple],
+      () =>
+        showFullPath
+          ? selectedItems
+              .map(item => getDepartmentPathLabel(item, departmentMap))
+              .join('、')
+          : formatSelectedNames(selectedItems, multiple),
+      [selectedItems, multiple, showFullPath, departmentMap],
     );
     const inheritedSelectedIds = useMemo(() => {
       if (!cascadeDisplay || !value.length) return new Set<string>();
@@ -213,18 +224,10 @@ const DepartmentTreeSelect = forwardRef<
       [value, onChange, multiple, flatDepartments, disabled, excludeIdSet],
     );
 
-    const ancestorExpandedIds = useMemo(() => {
-      const ids = new Set<string>();
-      const collectAncestors = (nodeId: string) => {
-        const dept = departmentMap.get(nodeId);
-        if (dept?.parent_id) {
-          ids.add(dept.parent_id);
-          collectAncestors(dept.parent_id);
-        }
-      };
-      value.forEach(id => collectAncestors(id));
-      return [...ids];
-    }, [value, departmentMap]);
+    const ancestorExpandedIds = useMemo(
+      () => getAncestorIds(value, flatDepartments),
+      [value, flatDepartments],
+    );
 
     useEffect(() => {
       setExpandedItems(prev => [...new Set([...prev, ...ancestorExpandedIds])]);
@@ -296,6 +299,7 @@ const DepartmentTreeSelect = forwardRef<
           }}
           inputProps={{
             readOnly: true,
+            title: showFullPath ? selectedNames : undefined,
             style: { cursor: disabled ? 'not-allowed' : 'pointer' },
           }}
           sx={{

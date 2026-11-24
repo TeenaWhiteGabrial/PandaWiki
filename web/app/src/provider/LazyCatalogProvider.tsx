@@ -87,6 +87,12 @@ export default function LazyCatalogProvider({
 
   const merge = useCallback((next: TreeGroup[], replace = false) => {
     const changed = revision.current !== next[0]?.tree_revision;
+    if (changed) {
+      // Requests for the previous tree must not restore removed entries.
+      epoch.current++;
+      pending.current.clear();
+      setStates({});
+    }
     if (changed || replace) loaded.current.clear();
     revision.current = next[0]?.tree_revision;
     setGroups(prev =>
@@ -241,8 +247,10 @@ export default function LazyCatalogProvider({
 
   useEffect(() => {
     let disposed = false;
+    let refreshing = false;
     const revalidate = async () => {
       if (
+        refreshing ||
         document.visibilityState !== 'visible' ||
         !scopeValid ||
         !outer.authInfo?.id
@@ -250,30 +258,21 @@ export default function LazyCatalogProvider({
         return;
       const version = epoch.current;
       const scope = identity;
+      refreshing = true;
       try {
-        const roots = await getShareNodeTree();
+        const next = await getShareNodeTree({ path_id: docID || undefined });
         if (
           disposed ||
           epoch.current !== version ||
           currentIdentity.current !== scope ||
-          revision.current === roots?.[0]?.tree_revision
-        )
-          return;
-        const updatedVersion = ++epoch.current;
-        pending.current.clear();
-        loaded.current.clear();
-        setGroups([]);
-        setStates({});
-        const next = await getShareNodeTree({ path_id: docID || undefined });
-        if (
-          disposed ||
-          epoch.current !== updatedVersion ||
-          currentIdentity.current !== scope
+          revision.current === next?.[0]?.tree_revision
         )
           return;
         merge(next || [], true);
       } catch {
         /* Authentication failures are handled by the shared client. */
+      } finally {
+        refreshing = false;
       }
     };
     document.addEventListener('visibilitychange', revalidate);
@@ -324,6 +323,7 @@ export default function LazyCatalogProvider({
       value={{
         ...outer,
         tree,
+        catalogRevision: scopeValid ? groups[0]?.tree_revision : undefined,
         navDataMap: scopeValid ? navDataMap : {},
         nodeList: scopeValid ? groups.flatMap(g => g.list) : [],
         navList: scopeValid

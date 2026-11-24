@@ -31,6 +31,7 @@ import {
 
 interface StoreContextType {
   lazyCatalog?: boolean;
+  catalogRevision?: string;
   toggleCatalogFolder?: (item: ITreeItem) => void;
   loadCatalogChildren?: (item: ITreeItem) => Promise<void>;
   searchCatalog?: (search: string) => Promise<ITreeItem[]>;

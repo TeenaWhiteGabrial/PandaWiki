@@ -3,10 +3,8 @@ import Member from '@/components/System/component/Member';
 import MCPAccess from '@/components/System/component/MCPAccess';
 import ModelConfig from '@/components/System/component/ModelConfig';
 import EnterpriseAccess from '@/components/System/component/EnterpriseAccess';
-import CardPermissions from './component/CardPermissions';
 import CardAssistantTemplates from './component/CardAssistantTemplates';
 import CardRuntimeLogs from './component/CardRuntimeLogs';
-import { useURLSearchParams } from '@/hooks';
 import { getApiV1KnowledgeBaseDetail } from '@/request/KnowledgeBase';
 import { getApiV1ModelList } from '@/request/Model';
 import { GithubComChaitinPandaWikiDomainModelListItem } from '@/request/types';
@@ -20,6 +18,7 @@ import {
 } from '@/store/slices/config';
 import { Box, Tab, Tabs } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import CardFeedback from './component/CardFeedback';
 import CardWeb from './component/CardWeb';
 
@@ -30,7 +29,6 @@ const SettingTabs: { label: string; id: string }[] = [
   { label: 'MCP 接入', id: 'mcp-access' },
   { label: '用户管理', id: 'user-management' },
   { label: '组织和权限', id: 'enterprise-access' },
-  { label: '权限功能', id: 'permission-settings' },
   { label: '运行日志', id: 'runtime-logs' },
   { label: '智能助手设置', id: 'assistant-settings' },
 ];
@@ -38,8 +36,8 @@ const SettingTabs: { label: string; id: string }[] = [
 const Setting = () => {
   const dispatch = useAppDispatch();
   const { kb_id, modelList, user } = useAppSelector(state => state.config);
-  const [searchParams, setSearchParams] = useURLSearchParams();
-  const activeTab = searchParams.get('tab') || 'portal-website';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab') ?? 'portal-website';
   const [kb, setKb] = useState<DomainKnowledgeBaseDetail | null>(null);
   const [chatModelData, setChatModelData] =
     useState<GithubComChaitinPandaWikiDomainModelListItem | null>(null);
@@ -60,6 +58,16 @@ const Setting = () => {
       : user?.role === ConstsUserRole.UserRoleUser
         ? SettingTabs.filter(tab => tab.id === 'mcp-access')
         : SettingTabs;
+  const legacyDestination =
+    user?.role === ConstsUserRole.UserRoleManager
+      ? 'user-management'
+      : 'enterprise-access';
+  const activeTab =
+    tabs.find(tab => tab.id === requestedTab)?.id ??
+    (requestedTab === 'permission-settings'
+      ? tabs.find(tab => tab.id === legacyDestination)?.id
+      : undefined) ??
+    tabs[0].id;
 
   const getKb = () => {
     if (!kb_id) return;
@@ -95,16 +103,25 @@ const Setting = () => {
     [dispatch],
   );
 
-  const setActiveTab = (tab: string) => {
-    setSearchParams({ tab });
-  };
+  const setActiveTab = useCallback(
+    (tab: string, replace = false) => {
+      setSearchParams(
+        previous => {
+          const next = new URLSearchParams(previous);
+          next.set('tab', tab);
+          return next;
+        },
+        { replace },
+      );
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
-    if (!tabs.find(tab => tab.id === activeTab)) {
-      setActiveTab(tabs[0]?.id || 'user-management');
+    if (activeTab !== requestedTab) {
+      setActiveTab(activeTab, true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, tabs]);
+  }, [activeTab, requestedTab, setActiveTab]);
 
   useEffect(() => {
     if (kb_id) getKb();
@@ -161,8 +178,6 @@ const Setting = () => {
         {activeTab === 'user-management' && <Member />}
         {activeTab === 'mcp-access' && <MCPAccess />}
         {activeTab === 'enterprise-access' && <EnterpriseAccess />}
-        {activeTab === 'permission-settings' &&
-          user?.role === ConstsUserRole.UserRoleAdmin && <CardPermissions />}
         {activeTab === 'runtime-logs' &&
           user?.role === ConstsUserRole.UserRoleAdmin && <CardRuntimeLogs />}
         {activeTab === 'assistant-settings' &&
