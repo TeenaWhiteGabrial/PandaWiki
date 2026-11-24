@@ -265,13 +265,11 @@ async function appProxy(request: NextRequest) {
     headers[key] = value;
   }
 
-  let sessionId = request.cookies.get('x-pw-session-id')?.value || '';
-  let needSetSessionId = false;
-
-  if (!sessionId) {
-    sessionId = uuidv4();
-    needSetSessionId = true;
-  }
+  const existingSessionId = request.cookies.get('x-pw-session-id')?.value;
+  const sessionId = existingSessionId || uuidv4();
+  // Refresh legacy cookie attributes on full page loads with the same ID.
+  const refreshSessionCookie =
+    !apiRequest && request.headers.get('accept')?.includes('text/html');
 
   let response: NextResponse;
 
@@ -281,10 +279,11 @@ async function appProxy(request: NextRequest) {
     response = await homeProxy(request, headers, sessionId, appPathname);
   }
 
-  if (needSetSessionId) {
+  if (!existingSessionId || refreshSessionCookie) {
     response.cookies.set('x-pw-session-id', sessionId, {
       httpOnly: true,
       maxAge: 60 * 60 * 24 * 365, // 1 年
+      sameSite: 'strict',
     });
   }
   if (!appPathname.startsWith('/share')) {

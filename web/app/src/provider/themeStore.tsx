@@ -32,7 +32,10 @@ export const ThemeStoreProvider = ({
   }, [themeMode]);
 
   useEffect(() => {
-    Cookies.set('theme_mode', themeMode, { expires: 365 * 10 });
+    Cookies.set('theme_mode', themeMode, {
+      expires: 365 * 10,
+      sameSite: 'Strict',
+    });
   }, [themeMode]);
 
   return (
