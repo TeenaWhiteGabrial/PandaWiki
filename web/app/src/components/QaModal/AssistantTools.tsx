@@ -26,10 +26,12 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import SlideshowIcon from '@mui/icons-material/Slideshow';
 import {
   assistantRequest,
+  assistantUploadAccept,
   AssistantOptions,
   AssistantFileFormat,
   AssistantTemplate,
   AssistantUpload,
+  isAssistantUploadFile,
 } from '@/request/Assistant';
 import { useBasePath } from '@/hooks';
 import { usePathname } from 'next/navigation';
@@ -178,16 +180,21 @@ export default function AssistantTools({
     };
   }, [value.attachments.map(a => `${a.id}:${a.status}`).join(',')]);
   const upload = async (files: FileList | null) => {
-    if (!files) return;
+    if (!files?.length) return;
+    const selected = Array.from(files);
     setError('');
-    if (value.attachments.length + files.length > 10) {
+    if (!selected.every(isAssistantUploadFile)) {
+      setError('仅支持上传 Excel（.xlsx）和 PPT（.pptx）文件');
+      return;
+    }
+    if (value.attachments.length + selected.length > 10) {
       setError('每轮最多上传10份文件');
       return;
     }
     if (
-      [...files].some(f => f.size > 20 * 1024 * 1024) ||
+      selected.some(f => f.size > 20 * 1024 * 1024) ||
       value.attachments.reduce((n, f) => n + f.size, 0) +
-        [...files].reduce((n, f) => n + f.size, 0) >
+        selected.reduce((n, f) => n + f.size, 0) >
         100 * 1024 * 1024
     ) {
       setError('单文件最多20 MB，每轮总计100 MB');
@@ -196,7 +203,7 @@ export default function AssistantTools({
     setUploading(true);
     onUploadingChange(true);
     try {
-      for (const file of files) {
+      for (const file of selected) {
         const form = new FormData();
         form.append('file', file);
         const a = await assistantRequest<AssistantUpload>(
@@ -214,7 +221,6 @@ export default function AssistantTools({
     } finally {
       setUploading(false);
       onUploadingChange(false);
-      if (input.current) input.current.value = '';
     }
   };
   useEffect(() => {
@@ -284,8 +290,11 @@ export default function AssistantTools({
           type='file'
           multiple
           hidden
-          accept='.pdf,.docx,.pptx,.xlsx,.txt,.csv,.png,.jpg,.jpeg'
-          onChange={e => void upload(e.target.files)}
+          accept={assistantUploadAccept}
+          onChange={event => {
+            void upload(event.currentTarget.files);
+            event.currentTarget.value = '';
+          }}
         />
         <Button
           size='small'

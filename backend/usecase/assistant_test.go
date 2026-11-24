@@ -15,6 +15,20 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestAssistantUploadAcceptsOnlyWorkbookAndPresentation(t *testing.T) {
+	u := &AssistantUsecase{}
+	for _, ext := range []string{"pdf", "docx", "txt", "csv", "png", "jpg", "jpeg", "xls", "ppt"} {
+		if _, err := u.Upload(context.Background(), "kb", "user", "sample."+ext, []byte("sample")); err == nil || !strings.Contains(err.Error(), "仅支持上传") {
+			t.Errorf("upload %s returned %v, want format rejection", ext, err)
+		}
+	}
+	for _, ext := range []string{"xlsx", "pptx", "XLSX", "PPTX"} {
+		if _, err := u.Upload(context.Background(), "kb", "user", "sample."+ext, nil); err == nil || !strings.Contains(err.Error(), "上传文件不能为空") {
+			t.Errorf("upload %s returned %v, want size validation after format acceptance", ext, err)
+		}
+	}
+}
+
 func TestAssistantDurableRunIsolationPostgres(t *testing.T) {
 	db, logger := chatContextDB(t)
 	ctx := context.Background()

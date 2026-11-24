@@ -77,11 +77,21 @@ func (u *AssistantUsecase) OwnConversation(ctx context.Context, kb, user, id str
 	}
 	return nil
 }
+func AssistantUploadFormats() []string {
+	return []string{"xlsx", "pptx"}
+}
+
 func (u *AssistantUsecase) Upload(ctx context.Context, kb, user, name string, data []byte) (*domain.AssistantUpload, error) {
 	name = filepath.Base(strings.ReplaceAll(name, "\\", "/"))
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(name)), ".")
-	if user == "" || kb == "" || len(data) == 0 || len(data) > assistantMaxFile || !slices.Contains([]string{"pdf", "docx", "pptx", "xlsx", "txt", "csv", "png", "jpg", "jpeg"}, ext) {
-		return nil, fmt.Errorf("支持 PDF、DOCX、PPTX、XLSX、TXT、CSV及PNG/JPEG排版素材，单文件不超过20 MB")
+	if !slices.Contains(AssistantUploadFormats(), ext) {
+		return nil, fmt.Errorf("仅支持上传 Excel（.xlsx）和 PPT（.pptx）文件")
+	}
+	if user == "" || kb == "" {
+		return nil, ErrAssistantAccess
+	}
+	if len(data) == 0 || len(data) > assistantMaxFile {
+		return nil, fmt.Errorf("上传文件不能为空，单文件不得超过20 MB")
 	}
 	id := uuid.NewString()
 	key := kb + "/assistant/uploads/" + id + "/source." + ext

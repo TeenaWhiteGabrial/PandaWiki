@@ -15,6 +15,8 @@ import {
 } from '@mui/material';
 import {
   assistantRequest,
+  assistantUploadAccept,
+  isAssistantUploadFile,
   type AssistantOutlineItem,
   type AssistantRun,
   type AssistantUpload,
@@ -112,14 +114,19 @@ export default function AssistantPlanningCard({
   };
   const uploadFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    if (uploads.length + files.length > 10) {
+    const selected = Array.from(files);
+    if (!selected.every(isAssistantUploadFile)) {
+      setError('仅支持上传 Excel（.xlsx）和 PPT（.pptx）文件');
+      return;
+    }
+    if (uploads.length + selected.length > 10) {
       setError('每轮最多补充10份附件');
       return;
     }
     setUploading(true);
     setError('');
     try {
-      for (const file of Array.from(files)) {
+      for (const file of selected) {
         const body = new FormData();
         body.append('file', file);
         const result = await assistantRequest<AssistantUpload>(
@@ -232,7 +239,7 @@ export default function AssistantPlanningCard({
                 hidden
                 type='file'
                 multiple
-                accept='.pdf,.docx,.pptx,.xlsx,.txt,.csv'
+                accept={assistantUploadAccept}
                 onChange={event => {
                   void uploadFiles(event.target.files);
                   event.target.value = '';

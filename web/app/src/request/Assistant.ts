@@ -1,6 +1,15 @@
 import request, { ContentType } from './httpClient';
 
 export type AssistantFileFormat = 'docx' | 'pptx' | 'xlsx';
+
+const assistantUploadExtensions = ['.xlsx', '.pptx'];
+export const assistantUploadAccept = assistantUploadExtensions.join(',');
+
+export function isAssistantUploadFile(file: File) {
+  const name = file.name.toLowerCase();
+  return assistantUploadExtensions.some(extension => name.endsWith(extension));
+}
+
 export interface AssistantUpload {
   id: string;
   name: string;
