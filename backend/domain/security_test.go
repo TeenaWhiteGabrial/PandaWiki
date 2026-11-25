@@ -22,17 +22,3 @@ func TestPasswordPolicyRejectsWeakAndTruncatedPasswords(t *testing.T) {
 		}
 	}
 }
-
-func TestAPITokenHashesCannotBeUsedAsCredentials(t *testing.T) {
-	raw := strings.Repeat("a1", 24)
-	hash := HashAPIToken(raw)
-	if hash == raw || len(hash) != 71 || strings.Contains(hash, raw) {
-		t.Fatal("token hash exposes credential or has invalid format")
-	}
-	if HashAPIToken(hash) == hash {
-		t.Fatal("stored hash must not work as a bearer token")
-	}
-	if APITokenHint(raw) != raw[:6]+"…"+raw[len(raw)-4:] {
-		t.Fatal("unexpected token hint")
-	}
-}

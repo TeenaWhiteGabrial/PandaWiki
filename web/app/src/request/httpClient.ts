@@ -19,6 +19,10 @@ import {
 import { handleReaderAuthFailure } from '@/utils/sessionRecovery';
 import { message as alert } from '@ctzhian/ui';
 import { redirect } from 'next/navigation';
+import {
+  credentialEncryptionMessage,
+  encryptCredentialRequest,
+} from '../../../credentialTransport.mjs';
 export type QueryParamsType = Record<string | number, any>;
 export type ResponseFormat = keyof Omit<Body, 'body' | 'bodyUsed'>;
 
@@ -260,8 +264,28 @@ export class HttpClient<SecurityDataType = unknown> {
       customHeaders = getBrowserSessionHeaders();
     }
 
+
+    const requestURL = `${baseUrl || this.baseUrl || (typeof window !== 'undefined' ? window._BASE_PATH_ : '')}${path}${queryString ? `?${queryString}` : ''}`;
+    if (typeof window !== 'undefined') {
+      const encrypted = encryptCredentialRequest(
+        path,
+        requestURL,
+        requestParams.method,
+        body,
+        requestParams.signal,
+      );
+      if (encrypted) {
+        try {
+          body = await encrypted;
+        } catch {
+          if (isAlert) alert.error(credentialEncryptionMessage);
+          throw new Error(credentialEncryptionMessage);
+        }
+      }
+    }
+
     return this.customFetch(
-      `${baseUrl || this.baseUrl || (typeof window !== 'undefined' ? window._BASE_PATH_ : '')}${path}${queryString ? `?${queryString}` : ''}`,
+      requestURL,
       {
         ...requestParams,
         headers: {

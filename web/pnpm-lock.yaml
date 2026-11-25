@@ -46,6 +46,9 @@ importers:
       dayjs:
         specifier: ^1.11.18
         version: 1.11.19
+      node-forge:
+        specifier: 1.4.1
+        version: 1.4.1
       react:
         specifier: ^19.2.3
         version: 19.2.3
@@ -5605,6 +5608,10 @@ packages:
     peerDependenciesMeta:
       encoding:
         optional: true
+
+  node-forge@1.4.1:
+    resolution: {integrity: sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==}
+    engines: {node: '>= 6.13.0'}
 
   node-readfiles@0.2.0:
     resolution: {integrity: sha512-SU00ZarexNlE4Rjdm83vglt5Y9yiQ+XI1XpflWlb7q7UTN1JUItm69xMeiQCTxtTfnzt+83T8Cx+vI2ED++VDA==}
@@ -13183,6 +13190,8 @@ snapshots:
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
+
+  node-forge@1.4.1: {}
 
   node-readfiles@0.2.0:
     dependencies:

@@ -10,6 +10,11 @@
  * ---------------------------------------------------------------
  */
 
+import {
+  credentialEncryptionMessage,
+  encryptCredentialRequest,
+} from '../../../credentialTransport.mjs';
+import { message } from '@/components/ui';
 import { installResponseInterceptors } from './responseInterceptors';
 import type {
   AxiosInstance,
@@ -154,6 +159,21 @@ export class HttpClient<SecurityDataType = unknown> {
       {};
     const requestParams = this.mergeRequestParams(params, secureParams);
     const responseFormat = format || this.format || undefined;
+    const encrypted = encryptCredentialRequest(
+      path,
+      this.instance.getUri({ ...requestParams, url: path }),
+      requestParams.method,
+      body,
+      requestParams.signal,
+    );
+    if (encrypted) {
+      try {
+        body = await encrypted;
+      } catch {
+        if (params.isAlert !== false) message.error(credentialEncryptionMessage);
+        throw new Error(credentialEncryptionMessage);
+      }
+    }
 
     if (
       type === ContentType.FormData &&

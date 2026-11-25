@@ -549,28 +549,6 @@ export type GithubComChaitinPandaWikiProApiShareV1WecomCallbackResp = Record<
   any
 >;
 
-export interface GithubComChaitinPandaWikiProApiTokenV1APITokenListItem {
-  created_at?: string;
-  id?: string;
-  name?: string;
-  permission?: ConstsUserKBPermission;
-  token?: string;
-  updated_at?: string;
-}
-
-export interface GithubComChaitinPandaWikiProApiTokenV1CreateAPITokenReq {
-  kb_id: string;
-  name: string;
-  permission: "full_control" | "doc_manage" | "data_operate";
-}
-
-export interface GithubComChaitinPandaWikiProApiTokenV1UpdateAPITokenReq {
-  id: string;
-  kb_id: string;
-  name?: string;
-  permission?: "full_control" | "doc_manage" | "data_operate";
-}
-
 export interface GithubComChaitinPandaWikiProDomainBlockWords {
   words?: string[];
 }

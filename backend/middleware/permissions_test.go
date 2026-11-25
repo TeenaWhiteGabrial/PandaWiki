@@ -15,7 +15,7 @@ import (
 func TestDisabledPermissionsStillRequireAuthentication(t *testing.T) {
 	t.Setenv("DISABLE_PERMISSION_LEVELS", "true")
 	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "test-only"}}}
-	m := NewJWTMiddleware(cfg, log.NewLogger(cfg), nil, nil)
+	m := NewJWTMiddleware(cfg, log.NewLogger(cfg), nil)
 	for _, token := range []string{"", "Bearer invalid.jwt.value", "Bearer invalid-token"} {
 		r := httptest.NewRequest(http.MethodGet, "/api/v1/node/list?kb_id=a", nil)
 		r.Header.Set("Authorization", token)
@@ -33,7 +33,7 @@ func TestDisabledPermissionsStillRequireAuthentication(t *testing.T) {
 func TestDisabledPermissionsPreserveTokenScope(t *testing.T) {
 	t.Setenv("DISABLE_PERMISSION_LEVELS", "true")
 	cfg := &config.Config{}
-	m := NewJWTMiddleware(cfg, log.NewLogger(cfg), nil, nil)
+	m := NewJWTMiddleware(cfg, log.NewLogger(cfg), nil)
 	for _, tc := range []struct {
 		kb         string
 		permission consts.UserKBPermission

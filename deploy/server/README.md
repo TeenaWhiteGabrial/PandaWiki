@@ -160,9 +160,17 @@ docker compose --env-file .env -f docker-compose.yml down
 本次涉及会话、密钥不可逆哈希迁移及 Redis/NATS 认证，首次需 `upgrade all`。部署前配置独立的 `REDIS_PASSWORD`、`NATS_PASSWORD` 并备份数据库；不能只回滚旧镜像。[安全问题核实、修复、验证与部署合并说明](../../docs/security-review-20261022/安全问题核实与修复部署合并说明.md)。
 
 
+### 密码请求加密与 API Token 下线
+
+管理端和用户端发送密码请求前，会获取有效期为两分钟的一次性挑战和 API 公钥。请求体用 AES-GCM 加密，AES 密钥用 RSA-OAEP 封装。API 拒绝明文密码、失效挑战和重复提交。账号登录继续使用 HttpOnly 会话 Cookie。
+
+当前 HTTP 部署可沿用原端口。此次只保护被动监听场景下的密码请求体。HTTP 下的网页、公钥和会话仍缺乏传输层保护，能篡改流量的攻击者仍可修改客户端或替换公钥。
+
+本次请在同一维护窗口升级 `backend`、`admin` 和 `app`，升级后刷新两个前端。旧版页面会发送明文格式，升级后的 API 会拒绝，部署时应先备份并核对原有数据卷。API Token 创建、列表和删除接口及管理端「MCP 接入」入口已下线，历史 API Token 失效。已签发的账号会话与历史数据库表保留。
+
 ### 2026-10-26 安全升级：请整套发布
 
-两端登录改为服务端 HttpOnly Cookie，原有 localStorage 登录令牌不再使用；升级后需重新登录。账号登录接口不再在 JSON 返回 JWT，程序化账号接入应使用 Cookie Jar 和 `X-PW-CSRF: 1`。显式 API 密钥接入保留。
+两端登录改为服务端 HttpOnly Cookie，原有 localStorage 登录令牌不再使用；升级后需重新登录。账号登录接口不再在 JSON 返回 JWT，程序化账号接入应使用 Cookie Jar 和 `X-PW-CSRF: 1`。API 密钥的当前状态见上方下线说明。
 
 本次必须使用 `bash deploy/server/deploy.sh upgrade all`，同步 API、Consumer、两端、NATS/监控代理及 Gotenberg；不要只更新一个前端或后端。脚本自动生成并保存缺失的 `PREVIEW_PASSWORD`、`NATS_MONITOR_PASSWORD`，不需要发送密码。正式 HTTPS 入口需覆盖转发协议头，可设置 `AUTH_COOKIE_SECURE=true` 强制 Secure。
 

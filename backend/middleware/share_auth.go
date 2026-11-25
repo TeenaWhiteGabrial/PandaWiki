@@ -18,18 +18,18 @@ import (
 )
 
 type ShareAuthMiddleware struct {
-	config       *config.Config
-	logger       *log.Logger
-	kbUsecase    *usecase.KnowledgeBaseUsecase
-	apiTokenRepo *pg.APITokenRepo
+	config         *config.Config
+	logger         *log.Logger
+	kbUsecase      *usecase.KnowledgeBaseUsecase
+	userAccessRepo *pg.UserAccessRepository
 }
 
-func NewShareAuthMiddleware(config *config.Config, logger *log.Logger, kbUsecase *usecase.KnowledgeBaseUsecase, apiTokenRepo *pg.APITokenRepo) *ShareAuthMiddleware {
+func NewShareAuthMiddleware(config *config.Config, logger *log.Logger, kbUsecase *usecase.KnowledgeBaseUsecase, userAccessRepo *pg.UserAccessRepository) *ShareAuthMiddleware {
 	return &ShareAuthMiddleware{
-		config:       config,
-		logger:       logger.WithModule("middleware.share_auth"),
-		kbUsecase:    kbUsecase,
-		apiTokenRepo: apiTokenRepo,
+		config:         config,
+		logger:         logger.WithModule("middleware.share_auth"),
+		kbUsecase:      kbUsecase,
+		userAccessRepo: userAccessRepo,
 	}
 }
 
@@ -61,10 +61,10 @@ func (h *ShareAuthMiddleware) applyJWTAuth(c echo.Context, kbID string) bool {
 		return false
 	}
 
-	if h.apiTokenRepo == nil {
+	if h.userAccessRepo == nil {
 		return false
 	}
-	sessionID, state, sessionErr := checkAccountSession(c, claims, h.apiTokenRepo.AccountSessions(), h.config)
+	sessionID, state, sessionErr := checkAccountSession(c, claims, h.userAccessRepo.AccountSessions(), h.config)
 	if sessionErr != nil {
 		return false
 	}
@@ -144,7 +144,7 @@ func (h *ShareAuthMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc 
 		// visitors. Reject missing credentials before resolving any KB data.
 		c.Response().Header().Set("Cache-Control", "private, no-store")
 		authHeader := strings.TrimSpace(c.Request().Header.Get("Authorization"))
-		if !strings.HasPrefix(authHeader, "Bearer ") || strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer ")) == "" {
+		if !strings.HasPrefix(authHeader, "Bearer ") || !strings.Contains(strings.TrimPrefix(authHeader, "Bearer "), ".") {
 			return c.JSON(http.StatusUnauthorized, domain.PWResponse{
 				Success: false, Code: domain.SessionInvalidCode, Message: "请先登录后访问知识库",
 			})
@@ -177,35 +177,13 @@ func (h *ShareAuthMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc 
 			})
 		}
 
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			token := strings.TrimPrefix(authHeader, "Bearer ")
-			if token != "" {
-				if strings.Contains(token, ".") {
-					if !h.applyJWTAuth(c, kb.ID) {
-						return invalidAccountSession(c)
-					}
-					info := domain.GetAuthInfoFromCtx(c.Request().Context())
-					if requiresPasswordChange(c, info.PasswordChangeRequired) {
-						return passwordChangeRequired(c)
-					}
-					return next(c)
-				} else if h.apiTokenRepo != nil {
-					apiToken, tokenErr := h.apiTokenRepo.GetByTokenWithCache(c.Request().Context(), token)
-					if tokenErr == nil && apiToken != nil && apiToken.KbId == kb.ID {
-						ctx := context.WithValue(c.Request().Context(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{
-							IsToken:    true,
-							Permission: apiToken.Permission,
-							UserId:     apiToken.UserID,
-							KBId:       apiToken.KbId,
-						})
-						c.SetRequest(c.Request().WithContext(ctx))
-						return next(c)
-					}
-				}
-				return invalidAccountSession(c)
-			}
+		if !h.applyJWTAuth(c, kb.ID) {
+			return invalidAccountSession(c)
 		}
-
-		return invalidAccountSession(c)
+		info := domain.GetAuthInfoFromCtx(c.Request().Context())
+		if requiresPasswordChange(c, info.PasswordChangeRequired) {
+			return passwordChangeRequired(c)
+		}
+		return next(c)
 	}
 }

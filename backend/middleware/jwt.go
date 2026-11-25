@@ -25,10 +25,9 @@ type JWTMiddleware struct {
 	jwtMiddleware  echo.MiddlewareFunc
 	logger         *log.Logger
 	userAccessRepo *pg.UserAccessRepository
-	apiTokenRepo   *pg.APITokenRepo
 }
 
-func NewJWTMiddleware(config *config.Config, logger *log.Logger, userAccessRepo *pg.UserAccessRepository, apiTokenRepo *pg.APITokenRepo) *JWTMiddleware {
+func NewJWTMiddleware(config *config.Config, logger *log.Logger, userAccessRepo *pg.UserAccessRepository) *JWTMiddleware {
 	jwtMiddleware := echoMiddleware.WithConfig(echoMiddleware.Config{
 		SigningKey: []byte(config.Auth.JWT.Secret),
 		ErrorHandler: func(c echo.Context, err error) error {
@@ -46,22 +45,12 @@ func NewJWTMiddleware(config *config.Config, logger *log.Logger, userAccessRepo 
 		jwtMiddleware:  jwtMiddleware,
 		logger:         logger.WithModule("middleware.jwt"),
 		userAccessRepo: userAccessRepo,
-		apiTokenRepo:   apiTokenRepo,
 	}
 }
 
 func (m *JWTMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc {
 	next = suspendPermissionWrites(next)
 	return func(c echo.Context) error {
-		authHeader := c.Request().Header.Get("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			token := strings.TrimPrefix(authHeader, "Bearer ")
-
-			if !strings.Contains(token, ".") {
-				return m.validateAPIToken(c, token, next)
-			}
-		}
-
 		return m.jwtMiddleware(func(c echo.Context) error {
 			userID, ok := m.MustGetUserID(c)
 			if !ok {
@@ -90,42 +79,6 @@ func (m *JWTMiddleware) Authorize(next echo.HandlerFunc) echo.HandlerFunc {
 			return next(c)
 		})(c)
 	}
-}
-
-// validateAPIToken validates API token and sets user context
-func (m *JWTMiddleware) validateAPIToken(c echo.Context, token string, next echo.HandlerFunc) error {
-	if m.apiTokenRepo == nil {
-		m.logger.Debug("API token repository not available")
-		return c.JSON(http.StatusUnauthorized, domain.PWResponse{
-			Success: false,
-			Message: "Unauthorized",
-		})
-	}
-
-	apiToken, err := m.apiTokenRepo.GetByTokenWithCache(c.Request().Context(), token)
-	if err != nil || apiToken == nil {
-		m.logger.Error("failed to get API token", log.Error(err))
-		return c.JSON(http.StatusUnauthorized, domain.PWResponse{
-			Success: false,
-			Message: "Unauthorized",
-		})
-	}
-	// Token ownership cannot bypass the administrator-only management policy.
-	if !m.isAdministrator(apiToken.UserID) {
-		return administratorAccessDenied(c)
-	}
-
-	ctx := context.WithValue(c.Request().Context(), domain.CtxAuthInfoKey, &domain.CtxAuthInfo{
-		IsToken:    true,
-		Permission: apiToken.Permission,
-		UserId:     apiToken.UserID,
-		KBId:       apiToken.KbId,
-	})
-
-	req := c.Request().WithContext(ctx)
-	c.SetRequest(req)
-
-	return next(c)
 }
 
 func (m *JWTMiddleware) isAdministrator(userID string) bool {

@@ -34,7 +34,7 @@ func TestShareContentRequiresCredentialsBeforeResolvingKnowledgeBase(t *testing.
 		"/share/v1/chat/search", "/share/v1/chat/widget",
 		"/share/v1/conversation/detail", "/share/v1/conversation/history",
 	} {
-		for _, header := range []string{"", " ", "Bearer ", "Bearer   ", "Basic legacy-password"} {
+		for _, header := range []string{"", " ", "Bearer ", "Bearer   ", "Basic legacy-password", "Bearer retired-api-token"} {
 			t.Run(path+"/"+header, func(t *testing.T) {
 				r := httptest.NewRequest(http.MethodGet, path, nil)
 				r.Header.Set("Authorization", header)
@@ -118,8 +118,8 @@ func TestShareReaderSessionsPostgres(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Auth.JWT.Secret = "reader-session-regression-only"
 	logger := log.NewLogger(cfg)
-	tokens := pg.NewAPITokenRepo(&store.DB{DB: tx}, logger, nil)
-	m := NewShareAuthMiddleware(cfg, logger, nil, tokens)
+	access := pg.NewUserAccessRepository(&store.DB{DB: tx}, logger)
+	m := NewShareAuthMiddleware(cfg, logger, nil, access)
 	userID := uuid.NewString()
 	if err := tx.Create(&domain.User{ID: userID, Account: "reader_test_" + uuid.NewString(), Role: consts.UserRoleUser, Password: "unused"}).Error; err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestShareReaderSessionsPostgres(t *testing.T) {
 	newToken := func() (string, string) {
 		t.Helper()
 		sessionID := uuid.NewString()
-		if err := tokens.AccountSessions().Create(ctx, sessionID, userID, time.Now().Add(time.Hour)); err != nil {
+		if err := access.AccountSessions().Create(ctx, sessionID, userID, time.Now().Add(time.Hour)); err != nil {
 			t.Fatal(err)
 		}
 		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -153,7 +153,7 @@ func TestShareReaderSessionsPostgres(t *testing.T) {
 	}
 	id, token := newToken()
 	check(token, true)
-	if err := tokens.AccountSessions().Revoke(ctx, id, userID); err != nil {
+	if err := access.AccountSessions().Revoke(ctx, id, userID); err != nil {
 		t.Fatal(err)
 	}
 	check(token, false)

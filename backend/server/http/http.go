@@ -20,6 +20,7 @@ import (
 	"github.com/chaitin/panda-wiki/config"
 	"github.com/chaitin/panda-wiki/log"
 	PWMiddleware "github.com/chaitin/panda-wiki/middleware"
+	"github.com/chaitin/panda-wiki/store/cache"
 )
 
 type HTTPServer struct {
@@ -42,6 +43,7 @@ func NewEcho(
 	config *config.Config,
 	pwMiddleware *PWMiddleware.ReadOnlyMiddleware,
 	sessionMiddleware *PWMiddleware.SessionMiddleware,
+	cache *cache.Cache,
 ) *echo.Echo {
 
 	// Initialize Sentry if enabled
@@ -63,6 +65,7 @@ func NewEcho(
 	e.HidePort = true
 	e.Use(PWMiddleware.BrowserSessions())
 	e.Use(PWMiddleware.HTTPSecurity())
+	PWMiddleware.RegisterEncryptedCredentials(e, cache)
 
 	e.Binder = &MyBinder{}
 

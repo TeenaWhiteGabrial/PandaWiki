@@ -183,6 +183,10 @@ for (const client of [
         '@/utils/sessionRecovery': env.recoveryURL,
         '@ctzhian/ui': uiURL,
         'next/navigation': navigationURL,
+        '../../../credentialTransport.mjs': new URL(
+          '../../../credentialTransport.mjs',
+          import.meta.url,
+        ).href,
       });
       const { HttpClient } = await import(clientURL);
       let attempts = 0;

@@ -34,6 +34,7 @@
     "@panda-wiki/themes": "workspace:*",
     "@panda-wiki/ui": "workspace:*",
     "dayjs": "^1.11.18",
+    "node-forge": "1.4.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-hook-form": "^7.62.0"

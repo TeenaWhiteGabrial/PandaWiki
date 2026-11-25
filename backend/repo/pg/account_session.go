@@ -16,10 +16,6 @@ func (r *UserRepository) AccountSessions() *AccountSessionRepository {
 func (r *UserAccessRepository) AccountSessions() *AccountSessionRepository {
 	return &AccountSessionRepository{db: r.db}
 }
-func (r *APITokenRepo) AccountSessions() *AccountSessionRepository {
-	return &AccountSessionRepository{db: r.db}
-}
-
 func (r *AccountSessionRepository) Create(ctx context.Context, id, userID string, expiresAt time.Time) error {
 	return r.db.WithContext(ctx).Create(&domain.AccountSession{ID: id, UserID: userID, ExpiresAt: expiresAt, LastSeenAt: time.Now()}).Error
 }

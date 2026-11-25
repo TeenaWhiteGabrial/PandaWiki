@@ -46,7 +46,7 @@ func createApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	echo := http.NewEcho(logger, configConfig, readOnlyMiddleware, sessionMiddleware)
+	echo := http.NewEcho(logger, configConfig, readOnlyMiddleware, sessionMiddleware, cacheCache)
 	httpServer := &http.HTTPServer{
 		Echo: echo,
 	}
@@ -55,8 +55,7 @@ func createApp() (*App, error) {
 		return nil, err
 	}
 	userAccessRepository := pg2.NewUserAccessRepository(db, logger)
-	apiTokenRepo := pg2.NewAPITokenRepo(db, logger, cacheCache)
-	authMiddleware, err := middleware.NewAuthMiddleware(configConfig, logger, userAccessRepository, apiTokenRepo)
+	authMiddleware, err := middleware.NewAuthMiddleware(configConfig, logger, userAccessRepository)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +77,7 @@ func createApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	shareAuthMiddleware := middleware.NewShareAuthMiddleware(configConfig, logger, knowledgeBaseUsecase, apiTokenRepo)
+	shareAuthMiddleware := middleware.NewShareAuthMiddleware(configConfig, logger, knowledgeBaseUsecase, userAccessRepository)
 	captchaCaptcha := captcha.NewCaptcha()
 	baseHandler := handler.NewBaseHandler(echo, logger, configConfig, authMiddleware, shareAuthMiddleware, captchaCaptcha)
 	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
@@ -138,8 +137,6 @@ func createApp() (*App, error) {
 	}
 	mcpUsecase := usecase.NewMCPUsecase(nodeRepository, navRepository, mcpRepository, userUsecase, nodeUsecase, knowledgeBaseUsecase, enterpriseUsecase, fileUsecase, crawlerUsecase, logger)
 	mcpHandler := v1.NewMCPHandler(baseHandler, echo, mcpUsecase, authMiddleware, logger)
-	apiTokenUsecase := usecase.NewAPITokenUsecase(apiTokenRepo, knowledgeBaseUsecase, logger)
-	apiTokenHandler := v1.NewAPITokenHandler(baseHandler, echo, apiTokenUsecase, authMiddleware, logger)
 	batchImportUsecase := usecase.NewBatchImportUsecase(logger, fileUsecase, crawlerUsecase, nodeRepository)
 	folderDownloadRepository := pg2.NewFolderDownloadRepository(db, logger)
 	folderDownloadUsecase := usecase.NewFolderDownloadUsecase(folderDownloadRepository, nodeRepository, navRepository, minioClient, logger)
@@ -176,7 +173,6 @@ func createApp() (*App, error) {
 		NodeHandler:               nodeHandler,
 		AppHandler:                appHandler,
 		MCPHandler:                mcpHandler,
-		APITokenHandler:           apiTokenHandler,
 		FileHandler:               fileHandler,
 		ModelHandler:              modelHandler,
 		ConversationHandler:       conversationHandler,
@@ -200,7 +196,7 @@ func createApp() (*App, error) {
 	shareStatHandler := share.NewShareStatHandler(baseHandler, echo, statUseCase, logger)
 	shareCommentHandler := share.NewShareCommentHandler(echo, baseHandler, logger, commentUsecase, appUsecase, fileUsecase, nodeUsecase, cacheCache)
 	shareContributeHandler := share.NewShareContributeHandler(echo, baseHandler, logger, contributeUsecase, appUsecase)
-	shareAuthHandler := share.NewShareAuthHandler(echo, baseHandler, configConfig, logger, knowledgeBaseUsecase, apiTokenRepo)
+	shareAuthHandler := share.NewShareAuthHandler(echo, baseHandler, configConfig, logger, knowledgeBaseUsecase, userAccessRepository)
 	shareConversationHandler := share.NewShareConversationHandler(baseHandler, echo, conversationUsecase, logger)
 	wechatRepository := pg2.NewWechatRepository(db, logger)
 	wechatServiceUsecase := usecase.NewWechatUsecase(logger, appUsecase, chatUsecase, wechatRepository, authRepo)

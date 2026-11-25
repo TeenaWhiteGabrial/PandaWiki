@@ -21,7 +21,6 @@ var ProviderSet = wire.NewSet(
 	NewNodeUsecase,
 	NewAppUsecase,
 	NewMCPUsecase,
-	NewAPITokenUsecase,
 	NewConversationUsecase,
 	NewUserUsecase,
 	NewModelUsecase,

@@ -27,7 +27,7 @@ func NewShareAuthHandler(
 	config *config.Config,
 	logger *log.Logger,
 	kbUsecase *usecase.KnowledgeBaseUsecase,
-	apiTokenRepo *pg.APITokenRepo,
+	userAccessRepo *pg.UserAccessRepository,
 ) *ShareAuthHandler {
 	h := &ShareAuthHandler{
 		BaseHandler: baseHandler,
@@ -35,7 +35,7 @@ func NewShareAuthHandler(
 		kbUsecase:   kbUsecase,
 	}
 
-	shareAuthMiddleware := middleware.NewShareAuthMiddleware(config, logger, kbUsecase, apiTokenRepo)
+	shareAuthMiddleware := middleware.NewShareAuthMiddleware(config, logger, kbUsecase, userAccessRepo)
 
 	share := e.Group("share/v1/auth", shareAuthMiddleware.CheckForbidden)
 	share.GET("/get", h.AuthGet)

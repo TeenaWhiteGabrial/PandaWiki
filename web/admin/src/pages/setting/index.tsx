@@ -1,6 +1,5 @@
 import Card from '@/components/Card';
 import Member from '@/components/System/component/Member';
-import MCPAccess from '@/components/System/component/MCPAccess';
 import ModelConfig from '@/components/System/component/ModelConfig';
 import EnterpriseAccess from '@/components/System/component/EnterpriseAccess';
 import CardAssistantTemplates from './component/CardAssistantTemplates';
@@ -26,7 +25,6 @@ const SettingTabs: { label: string; id: string }[] = [
   { label: '门户网站', id: 'portal-website' },
   { label: '反馈设置', id: 'feedback' },
   { label: '模型配置', id: 'model-config' },
-  { label: 'MCP 接入', id: 'mcp-access' },
   { label: '用户管理', id: 'user-management' },
   { label: '组织和权限', id: 'enterprise-access' },
   { label: '运行日志', id: 'runtime-logs' },
@@ -52,11 +50,9 @@ const Setting = () => {
 
   const tabs =
     user?.role === ConstsUserRole.UserRoleManager
-      ? SettingTabs.filter(tab =>
-          ['user-management', 'mcp-access'].includes(tab.id),
-        )
+      ? SettingTabs.filter(tab => tab.id === 'user-management')
       : user?.role === ConstsUserRole.UserRoleUser
-        ? SettingTabs.filter(tab => tab.id === 'mcp-access')
+        ? []
         : SettingTabs;
   const legacyDestination =
     user?.role === ConstsUserRole.UserRoleManager
@@ -67,7 +63,8 @@ const Setting = () => {
     (requestedTab === 'permission-settings'
       ? tabs.find(tab => tab.id === legacyDestination)?.id
       : undefined) ??
-    tabs[0].id;
+    tabs[0]?.id ??
+    '';
 
   const getKb = () => {
     if (!kb_id) return;
@@ -118,7 +115,7 @@ const Setting = () => {
   );
 
   useEffect(() => {
-    if (activeTab !== requestedTab) {
+    if (activeTab && activeTab !== requestedTab) {
       setActiveTab(activeTab, true);
     }
   }, [activeTab, requestedTab, setActiveTab]);
@@ -141,11 +138,7 @@ const Setting = () => {
     }
   }, [modelList, handleModelList]);
 
-  if (
-    user?.role !== ConstsUserRole.UserRoleManager &&
-    user?.role !== ConstsUserRole.UserRoleUser &&
-    !kb
-  )
+  if (!activeTab || (user?.role !== ConstsUserRole.UserRoleManager && !kb))
     return <></>;
 
   return (
@@ -176,7 +169,6 @@ const Setting = () => {
           <CardWeb kb={kb} refresh={getKb} />
         )}
         {activeTab === 'user-management' && <Member />}
-        {activeTab === 'mcp-access' && <MCPAccess />}
         {activeTab === 'enterprise-access' && <EnterpriseAccess />}
         {activeTab === 'runtime-logs' &&
           user?.role === ConstsUserRole.UserRoleAdmin && <CardRuntimeLogs />}

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -108,6 +109,34 @@ func (s *AuthUserInfo) Scan(value any) error {
 
 func (s *AuthUserInfo) Value() (driver.Value, error) {
 	return json.Marshal(s)
+}
+
+type CtxAuthInfo struct {
+	SessionExpiresAt       int64
+	SessionID              string
+	PasswordChangeRequired bool
+	IsToken                bool
+	Permission             consts.UserKBPermission
+	UserId                 string
+	KBId                   string
+}
+
+type contextKey string
+
+const (
+	CtxAuthInfoKey contextKey = "ctx_auth_info"
+)
+
+func GetAuthInfoFromCtx(c context.Context) *CtxAuthInfo {
+	v := c.Value(CtxAuthInfoKey)
+	if v == nil {
+		return nil
+	}
+	ctxAuthInfo, ok := v.(*CtxAuthInfo)
+	if !ok {
+		return nil
+	}
+	return ctxAuthInfo
 }
 
 func GetShareUserID(c echo.Context) string {

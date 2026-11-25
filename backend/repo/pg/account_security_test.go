@@ -101,46 +101,6 @@ func TestAccountSessionAndPasswordRevocation(t *testing.T) {
 		t.Fatal("reset must force a new password")
 	}
 }
-func TestAPITokenDatabaseHashMigrationAndDeletion(t *testing.T) {
-	db := securityTestDB(t)
-	ctx := context.Background()
-	r := &APITokenRepo{db: db}
-	raw := "dedicated_security_test_key_7e2a9bc55841"
-	item := &domain.APIToken{ID: uuid.NewString(), UserID: uuid.NewString(), KbId: uuid.NewString(), Name: "test", Token: raw, Permission: consts.UserKBPermissionFullControl}
-	if err := r.Create(ctx, item); err != nil {
-		t.Fatal(err)
-	}
-	if item.Token != domain.HashAPIToken(raw) || item.TokenHint == "" {
-		t.Fatal("plaintext stored")
-	}
-	got, err := r.GetByTokenWithCache(ctx, raw)
-	if err != nil || got == nil {
-		t.Fatal("raw key cannot authenticate", err)
-	}
-	got, err = r.GetByTokenWithCache(ctx, item.Token)
-	if err != nil || got != nil {
-		t.Fatal("stored hash is reusable", err)
-	}
-	if err := r.DeleteByID(ctx, item.ID, item.UserID, item.KbId); err != nil {
-		t.Fatal(err)
-	}
-	got, err = r.GetByTokenWithCache(ctx, raw)
-	if err != nil || got != nil {
-		t.Fatal("deleted key still accepted", err)
-	}
-	old := domain.APIToken{ID: uuid.NewString(), UserID: uuid.NewString(), KbId: uuid.NewString(), Name: "legacy", Token: raw + "old", Permission: consts.UserKBPermissionFullControl}
-	if err := db.Create(&old).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`UPDATE api_tokens SET token_hint=left(token,6)||'…'||right(token,4),token='sha256:'||encode(sha256(convert_to(token,'UTF8')),'hex') WHERE id=?`, old.ID).Error; err != nil {
-		t.Fatal(err)
-	}
-	got, err = r.GetByTokenWithCache(ctx, old.Token)
-	if err != nil || got == nil || got.Token != domain.HashAPIToken(old.Token) {
-		t.Fatal("legacy migration invalidates key", err)
-	}
-}
-
 func TestBootstrapPasswordDoesNotOverwriteChangedPassword(t *testing.T) {
 	db := securityTestDB(t)
 	r := &UserRepository{db: db}

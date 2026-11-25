@@ -14,12 +14,10 @@ import (
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/repo/pg"
-	"github.com/chaitin/panda-wiki/store/cache"
 	store "github.com/chaitin/panda-wiki/store/pg"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -46,16 +44,7 @@ func TestAdministratorAccessPostgres(t *testing.T) {
 	storeDB := &store.DB{DB: tx}
 	logger := log.NewLogger(cfg)
 	access := pg.NewUserAccessRepository(storeDB, logger)
-	m := NewJWTMiddleware(cfg, logger, access, nil)
-	var tokenCache *cache.Cache
-	if addr := os.Getenv("PANDA_WIKI_TEST_REDIS_ADDR"); addr != "" {
-		tokenCache = &cache.Cache{Client: redis.NewClient(&redis.Options{Addr: addr, Password: os.Getenv("PANDA_WIKI_TEST_REDIS_PASSWORD")})}
-		defer tokenCache.Close()
-		if err := tokenCache.Ping(context.Background()).Err(); err != nil {
-			t.Fatal(err)
-		}
-		m.apiTokenRepo = pg.NewAPITokenRepo(storeDB, logger, tokenCache)
-	}
+	m := NewJWTMiddleware(cfg, logger, access)
 	check := func(token string, status int) {
 		t.Helper()
 		called := false
@@ -107,21 +96,12 @@ func TestAdministratorAccessPostgres(t *testing.T) {
 			}
 			jwtToken := sign(id)
 			check(jwtToken, status)
-			if tokenCache != nil {
-				apiToken := &domain.APIToken{ID: uuid.NewString(), Name: "temporary API test", Token: "test-" + uuid.NewString(), UserID: id, KbId: uuid.NewString(), Permission: consts.UserKBPermissionFullControl}
-				rawKey := apiToken.Token
-				if err := m.apiTokenRepo.Create(context.Background(), apiToken); err != nil {
+			check("retired-api-token", http.StatusUnauthorized)
+			if consts.IsAdministrator(role) {
+				if err := tx.Model(user).Update("role", consts.UserRoleUser).Error; err != nil {
 					t.Fatal(err)
 				}
-
-				check(rawKey, status)
-				if consts.IsAdministrator(role) {
-					if err := tx.Model(user).Update("role", consts.UserRoleUser).Error; err != nil {
-						t.Fatal(err)
-					}
-					check(jwtToken, http.StatusForbidden)
-					check(rawKey, http.StatusForbidden)
-				}
+				check(jwtToken, http.StatusForbidden)
 			}
 		})
 	}
